@@ -14,4 +14,4 @@ jobs:
           fetch-depth: "0"
       
       - name: Run unit tests and system tessts on Linux
-        run: ./buildconfig/Jenkins/Conda/conda-buildscript . linux-64-ci --enable-systemtests
+        run: ${GITHUB_WORKSPACE}/buildconfig/Jenkins/Conda/conda-buildscript ${GITHUB_WORKSPACE} linux-64-ci --enable-systemtests
