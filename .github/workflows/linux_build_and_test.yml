@@ -24,6 +24,11 @@ jobs:
             ${GITHUB_WORKSPACE}/build/**/*-mismatch.nxs
             ${GITHUB_WORKSPACE}/build/test_logs/*.log
 
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.10
+        
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
