@@ -13,5 +13,12 @@ jobs:
           # Needed to fetch tags for versioningit
           fetch-depth: "0"
       
-      - name: Run unit tests and system tessts on Linux
+      - name: Run unit tests and system tests on Linux
         run: ${GITHUB_WORKSPACE}/buildconfig/Jenkins/Conda/conda-buildscript ${GITHUB_WORKSPACE} linux-64-ci --enable-systemtests
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2.18.0
+        with:
+          files: |
+            ${GITHUB_WORKSPACE}/build/Testing/**/*.xml
+            ${GITHUB_WORKSPACE}/build/Testing/SystemTests/**/TEST-systemtests*.xml
