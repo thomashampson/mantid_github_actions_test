@@ -16,6 +16,13 @@ jobs:
       - name: Run unit tests and system tests on Linux
         run: ${GITHUB_WORKSPACE}/buildconfig/Jenkins/Conda/conda-buildscript ${GITHUB_WORKSPACE} linux-64-ci --enable-systemtests
 
+      - name: Upload build and test log artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: |
+            build/**/*-mismatch.nxs
+            build/test_logs/*.log
+
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.18.0
         with:
