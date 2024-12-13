@@ -24,8 +24,10 @@ jobs:
             ${GITHUB_WORKSPACE}/build/**/*-mismatch.nxs
             ${GITHUB_WORKSPACE}/build/test_logs/*.log
 
-      - name: Install Python
-        uses: actions/setup-python@v5
+      # We need to install Python for the next step, and the actions/setup-python one doesn't appear to work
+      # maybe because this is a Rocky8 machine.
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3.1.0
         if: always()
         
       - name: Publish Test Results
