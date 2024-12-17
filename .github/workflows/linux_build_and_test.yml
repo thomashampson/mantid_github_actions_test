@@ -9,6 +9,25 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Needed to fetch tags for versioningit
+          fetch-depth: "0"
       
-      - name: Run unit tests and system tessts on Linux
-        run: ./buildconfig/Jenkins/Conda/conda-buildscript . linux-64-ci --enable-systemtests
+      - name: Run unit tests and system tests on Linux
+        run: ${GITHUB_WORKSPACE}/buildconfig/Jenkins/Conda/conda-buildscript ${GITHUB_WORKSPACE} linux-64-ci
+
+      - name: Upload build and test log artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          path: |
+            ${GITHUB_WORKSPACE}/build/**/*-mismatch.nxs
+            ${GITHUB_WORKSPACE}/build/test_logs/*.log
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          files: |
+            ${GITHUB_WORKSPACE}/build/Testing/**/*.xml
+            ${GITHUB_WORKSPACE}/build/Testing/SystemTests/**/TEST-systemtests*.xml
