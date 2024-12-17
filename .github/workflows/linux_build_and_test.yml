@@ -29,6 +29,8 @@ jobs:
       - name: Setup Miniconda
         uses: conda-incubator/setup-miniconda@v3.1.0
         if: always()
+        with:
+          activate-environment: base
         
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
