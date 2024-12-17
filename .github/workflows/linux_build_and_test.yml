@@ -24,14 +24,6 @@ jobs:
             ${GITHUB_WORKSPACE}/build/**/*-mismatch.nxs
             ${GITHUB_WORKSPACE}/build/test_logs/*.log
 
-      # We need to install Python for the next step, and the actions/setup-python one doesn't appear to work
-      # maybe because this is a Rocky8 machine.
-      - name: Setup Miniconda
-        uses: conda-incubator/setup-miniconda@v3.1.0
-        if: always()
-        with:
-          activate-environment: base
-        
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
