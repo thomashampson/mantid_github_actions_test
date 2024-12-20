@@ -9,6 +9,6 @@ shift 1
 
 cd $WORKSPACE
 rm -rf $WORKSPACE/testdir
-mkdir $WORKSPACE/tester
+mkdir $WORKSPACE/testdir
 
-touch testfile.log
+touch testdir/testfile.log

@@ -20,7 +20,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          path: ${{ github.workspace }}/build/test_logs/*.log
+          path: ${{ github.workspace }}/testdir/*.log
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
