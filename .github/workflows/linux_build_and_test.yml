@@ -20,9 +20,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          path: |
-            ${GITHUB_WORKSPACE}/build/**/*-mismatch.nxs
-            ${GITHUB_WORKSPACE}/build/test_logs/*.log
+          path: ${GITHUB_WORKSPACE}/build/test_logs/*.log
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
