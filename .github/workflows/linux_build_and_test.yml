@@ -16,14 +16,11 @@ jobs:
       - name: Run unit tests and system tests on Linux
         run: ${GITHUB_WORKSPACE}/buildconfig/Jenkins/Conda/create-test-file ${GITHUB_WORKSPACE}
 
-      - name: Print GITHUB_WORKSPACE environment variable
-        run: echo ${GITHUB_WORKSPACE}
-
       - name: Upload build and test log artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          path: ${GITHUB_WORKSPACE}/build/test_logs/*.log
+          path: ${{ github.workspace }}/build/test_logs/*.log
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
