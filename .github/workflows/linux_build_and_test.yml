@@ -27,5 +27,5 @@ jobs:
         if: always()
         with:
           files: |
-            ${GITHUB_WORKSPACE}/build/Testing/**/*.xml
-            ${GITHUB_WORKSPACE}/build/Testing/SystemTests/**/TEST-systemtests*.xml
+            ${{ github.workspace }}/build/Testing/**/*.xml
+            ${{ github.workspace }}/build/Testing/SystemTests/**/TEST-systemtests*.xml
