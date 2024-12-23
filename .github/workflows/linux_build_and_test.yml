@@ -32,7 +32,9 @@ jobs:
           use-mamba: true
 
       - name: test conda env
-        run: conda list
+        run: |
+          conda activate test-env
+          conda list
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
