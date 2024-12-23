@@ -22,6 +22,15 @@ jobs:
         with:
           path: ${{ github.workspace }}/testdir/*.log
 
+      - name: Install Python via Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: 3.10
+          miniforge-version: latest
+          activate-environment: test-env
+          auto-activate-base: false
+          use-mamba: true
+
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
