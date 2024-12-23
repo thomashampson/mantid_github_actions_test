@@ -31,6 +31,9 @@ jobs:
           auto-activate-base: false
           use-mamba: true
 
+      - name: test conda env
+        run: conda list
+
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
