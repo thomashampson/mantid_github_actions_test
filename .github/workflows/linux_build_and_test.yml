@@ -30,11 +30,6 @@ jobs:
       - name: install python
         run: conda install python=3.10
 
-      - name: test conda env
-        run: |
-          conda activate test-env
-          conda list
-
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: always()
