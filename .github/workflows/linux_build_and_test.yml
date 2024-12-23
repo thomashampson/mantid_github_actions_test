@@ -28,7 +28,7 @@ jobs:
           miniforge-version: latest
 
       - name: install python
-        run: conda install python=3.10
+        run: conda install python=3.10 --yes
 
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
