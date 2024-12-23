@@ -25,7 +25,7 @@ jobs:
       - name: Install Python via Miniforge
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: 3.10
+          python-version: '3.10'
           miniforge-version: latest
           activate-environment: test-env
           auto-activate-base: false
