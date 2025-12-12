@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Needed to fetch tags for versioningit
+          # Needed to fetch the tags for versioningit
           fetch-depth: "0"
       
       - name: Run unit tests and system tests on Linux
