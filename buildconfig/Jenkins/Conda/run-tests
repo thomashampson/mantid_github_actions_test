@@ -34,7 +34,7 @@ fi
 # This is useful to prevent test timeouts for machines with limited RAM.
 if [[ -z "$UNIT_TEST_THREADS" ]]; then
     # Default is number of build threads.
-    UNIT_TEST_THREADS=$BUILD_THREADS-2
+    UNIT_TEST_THREADS=$BUILD_THREADS
 fi
 
 function run_with_xvfb {
