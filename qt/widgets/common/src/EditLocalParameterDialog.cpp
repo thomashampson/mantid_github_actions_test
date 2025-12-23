@@ -163,7 +163,7 @@ void EditLocalParameterDialog::fixParameter(int index, bool fix) {
 }
 
 /// Set a new tie for a parameter
-/// @param index :: Index of a paramter to tie.
+/// @param index :: Index of a parameter to tie.
 /// @param tie :: A tie string.
 void EditLocalParameterDialog::setTie(int index, QString tie) {
   m_ties[index] = std::move(tie);
