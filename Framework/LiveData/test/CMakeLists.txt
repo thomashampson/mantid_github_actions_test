@@ -26,4 +26,7 @@ if(CXXTEST_FOUND)
 
   # Add to the 'FrameworkTests' group in VS
   set_property(TARGET LiveDataTest PROPERTY FOLDER "UnitTests")
+
+  # Run MonitorLiveDataTest in serial mode to avoid CPU oversubcrption problems when allowing ctest to use all cores.
+  set_tests_properties(LiveDataTest_MonitorLiveDataTest PROPERTIES RUN_SERIAL TRUE)
 endif()
