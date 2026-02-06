@@ -67,8 +67,17 @@ repos:
           ^docs/source/techniques/.*
           )$
 
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+        - mdformat-gfm # github flavored markdown
+        - mdformat-myst # myst-parser
+        - mdformat-ruff # ruff format code snippets
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+    rev: v0.14.14
     # ruff must appear before black in the list of hooks
     hooks:
       - id: ruff-check
@@ -86,7 +95,8 @@ repos:
           (?x)^(
           ^conda/recipes/mantid-developer/recipe.yaml$|
           ^conda/recipes/conda_build_config.yaml$|
-          ^pixi.toml$
+          ^pixi.toml$|
+          ^pixi.lock$
           )$
         additional_dependencies:
           - pyyaml

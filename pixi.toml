@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Pete Peterson <petersonpf@ornl.gov>"]
-channels = ["conda-forge", "neutrons"]
+channels = ["conda-forge", "neutrons", "mantid"]
 name = "mantid"
 # when editing local copy of mantid-developer, will need to temporarily remove
 # the platforms that you aren't working on
@@ -44,6 +44,7 @@ jq = "*"
 
 [feature.devsite.target.linux-64.dependencies]
 sphinx = "*"
+myst-parser = "*"
 sphinx_bootstrap_theme = "*"
 
 [feature.publish-gh.target.linux-64.dependencies]
@@ -94,7 +95,7 @@ pyqt5-sip = "<12.13"
 pystog = ">=0.5.0"
 python-dateutil = ">=2.8.1"
 python = "3.11.*"
-pyvista = ">=0.45"
+pyvista = ">=0.46"
 pyyaml = ">=5.4.1"
 qscintilla2 = "2.13.*"
 qt-main = "5.15.*"
@@ -104,7 +105,7 @@ quasielasticbayes = "==0.3.0"
 quickbayes = "==1.0.2"
 rattler-build = "==0.51.0"
 requests = ">=2.32.4"
-scipy = ">=1.10.0"
+scipy = ">=1.16.0,<1.17"
 sphinx = ">=9.0,<10"
 sphinx_bootstrap_theme = "==0.8.1"
 tbb-devel = "2021.*"
@@ -123,6 +124,8 @@ superqt = ">=0.7.6,<0.8"
 setuptools = ">=80.9.0,<81"
 zlib = ">=1.3.1,<2"
 joblib = ">=1.5.2,<2"
+myst-parser = ">=5.0.0,<6"
+pyparsing = "<3.3.0"
 
 [target.linux-64.dependencies]
 jemalloc = "==5.2.0"
@@ -137,12 +140,12 @@ gcovr = ">=4.2"
 lz4 = ">=4.4.5,<5"
 pystack = ">=1.5.1,<2"
 qt-gtk-platformtheme = ">=5.15.15,<6"
-texlive-core = ">=20180414"
 libgl-devel = ">=1.7.0,<2"
 libglu = ">=9.0"
 libopenblas = "==0.3.27"
 libboost-devel = "1.88.*"
 libboost-python-devel = "1.88.*"
+mantidprofiler = ">=1.4,<2"
 
 [target.win-64.dependencies]
 gdk-pixbuf = { version = "==2.42.12", build = "hed59a49_0" }
