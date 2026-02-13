@@ -24,9 +24,10 @@ jobs:
             ${{ github.workspace }}/build/test_logs/*.log
             ${{ github.workspace }}/build/**/*-mismatch.nxs
 
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+      - name: Test report
+        uses: dorny/test-reporter@v2
         if: always()
         with:
-          files: |
-            ${{ github.workspace }}/build/test_logs/junit.xml
+          name: Linux test report
+          path: build/Testing/**/*.xml
+          reporter: java-junit
