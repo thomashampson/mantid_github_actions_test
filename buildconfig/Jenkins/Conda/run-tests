@@ -20,6 +20,9 @@ BUILD_THREADS=$6
 
 XVFB_SERVER_NUM=101
 
+# Speed up for now.
+BUILD_THREADS_SYSTEM_TESTS=12
+
 # If this isn't specified for a machine, revert to default value
 if [[ -z "$BUILD_THREADS_SYSTEM_TESTS" ]]; then
     # Default to a 3/16 fraction of the build threads, e.g. 8 for a 32-core machine,
