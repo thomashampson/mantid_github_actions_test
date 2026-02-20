@@ -30,7 +30,7 @@ jobs:
         with:
           name: Linux Unit Tests
           path: |
-            build/Testing/*/*unittest.xml
+            build/Testing/*unittest.xml
           reporter: java-junit
           fail-on-error: false
 
