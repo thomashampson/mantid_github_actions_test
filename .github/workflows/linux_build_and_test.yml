@@ -29,8 +29,7 @@ jobs:
         if: always()
         with:
           name: Linux Unit Tests
-          path: |
-            build/Testing/*unittest.xml
+          path: build/Testing/*unittest.xml
           reporter: java-junit
           fail-on-error: false
 
