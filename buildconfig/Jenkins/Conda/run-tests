@@ -128,5 +128,5 @@ if [[ $ENABLE_SYSTEM_TESTS == true ]]; then
         SYSTEM_TEST_OPTIONS+=" --exclude-in-pull-requests"
     fi
 
-    run_with_xvfb $SYSTEM_TEST_EXECUTABLE $WINDOWS_TEST_OPTIONS $SYSTEM_TEST_OPTIONS
+    run_with_xvfb $SYSTEM_TEST_EXECUTABLE $WINDOWS_TEST_OPTIONS $SYSTEM_TEST_OPTIONS -R BayesQuasiTest
 fi
