@@ -23,7 +23,7 @@ class CRISPLoadingTest(LoadAndCheckBase):
         return "CSP85423.nxs"
 
     def get_expected_number_of_periods(self):
-        return 2
+        return 3
 
     def get_integrated_reference_workspace_filename(self):
         return "CSP85423_1Integrated.nxs"
