@@ -25,19 +25,8 @@ jobs:
             ${{ github.workspace }}/build/**/*-mismatch.nxs
 
       - name: Unit Test Report
-        uses: dorny/test-reporter@v2
-        if: always()
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: (!cancelled())
         with:
           name: Linux Unit Tests
-          path: build/Testing/*unittest.xml
-          reporter: java-junit
-          fail-on-error: false
-
-      - name: System Test Report
-        uses: dorny/test-reporter@v2
-        if: always()
-        with:
-          name: Linux System Tests
-          path: build/Testing/SystemTests/**/TEST-systemtests*.xml
-          reporter: java-junit
-          fail-on-error: false
+          files: build/Testing/*unittest.xml
