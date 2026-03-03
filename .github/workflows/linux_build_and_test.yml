@@ -28,10 +28,12 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: (!cancelled())
         with:
+          check_name: "Unit test results"
           files: build/Testing/*unittest.xml
 
       - name: System test report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: (!cancelled())
         with:
+          check_name: "System test results"
           files: build/Testing/SystemTests/**/TEST-systemtests*.xml
