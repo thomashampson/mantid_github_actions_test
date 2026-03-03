@@ -44,9 +44,8 @@ class BayesQuasiTest(MantidSystemTest):
         )
 
     def validate(self):
-        if platform == "linux":
-            return self._validate_linux()
-
+        # if platform == "linux":
+        #     return self._validate_linux()
         self.tolerance = 1e-10
 
         return (
