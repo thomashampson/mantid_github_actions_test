@@ -24,9 +24,14 @@ jobs:
             ${{ github.workspace }}/build/test_logs/*.log
             ${{ github.workspace }}/build/**/*-mismatch.nxs
 
-      - name: Unit Test Report
+      - name: Unit test report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
         if: (!cancelled())
         with:
-          name: Linux Unit Tests
           files: build/Testing/*unittest.xml
+
+      - name: System test report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: (!cancelled())
+        with:
+          files: build/Testing/SystemTests/**/TEST-systemtests*.xml
