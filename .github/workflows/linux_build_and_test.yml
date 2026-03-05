@@ -17,12 +17,18 @@ jobs:
         run: ${GITHUB_WORKSPACE}/buildconfig/Jenkins/Conda/conda-buildscript ${GITHUB_WORKSPACE} linux-64-ci --enable-systemtests
 
       - name: Upload build and test log artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
-          path: |
-            ${{ github.workspace }}/build/test_logs/*.log
-            ${{ github.workspace }}/build/**/*-mismatch.nxs
+          name: test_logs
+          path: ${{ github.workspace }}/build/test_logs/*.log
+
+      - name: Upload system test mismatch files
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: system_test_mismatches
+          path: ${{ github.workspace }}/build/**/*-mismatch.nxs
 
       - name: Unit test report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2
@@ -36,4 +42,5 @@ jobs:
         if: (!cancelled())
         with:
           check_name: "System test results"
+          if-no-files-found: ignore
           files: build/Testing/SystemTests/**/TEST-systemtests*.xml
