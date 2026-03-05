@@ -28,6 +28,7 @@ jobs:
         if: always()
         with:
           name: system_test_mismatches
+          if-no-files-found: ignore
           path: ${{ github.workspace }}/build/**/*-mismatch.nxs
 
       - name: Unit test report
@@ -42,5 +43,4 @@ jobs:
         if: (!cancelled())
         with:
           check_name: "System test results"
-          if-no-files-found: ignore
           files: build/Testing/SystemTests/**/TEST-systemtests*.xml
