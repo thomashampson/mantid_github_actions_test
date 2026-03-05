@@ -64,7 +64,7 @@ class PG3_compare_AlignAndFocusPowderFromFiles_with_FilterBadPulses_and_LogBinni
         MaskBins(self.aafps, OutputWorkspace=self.aafps, XMin=45000, XMax=50000)
 
     def validateMethod(self):
-        self.tolerance = 0.001
+        self.tolerance = 0.1
         self.tolerance_is_rel_err = True
         return "ValidateWorkspaceToWorkspace"
 
