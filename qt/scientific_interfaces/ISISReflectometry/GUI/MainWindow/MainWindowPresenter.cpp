@@ -18,6 +18,7 @@
 #include "MantidKernel/ConfigService.h"
 #include "MantidQtWidgets/Common/HelpWindow.h"
 #include "MantidQtWidgets/Common/ISlitCalculator.h"
+#include "MantidQtWidgets/Common/QtJSONUtils.h"
 #include "Reduction/Batch.h"
 
 #include <algorithm>
@@ -120,16 +121,7 @@ void MainWindowPresenter::notifyAnyBatchReductionPaused() {
 // Top level function to handle when user has requested to change the
 // instrument
 void MainWindowPresenter::notifyChangeInstrumentRequested(std::string const &newInstrumentName) {
-  // Cache changed state before calling updateInstrument
-  auto const hasChanged = (newInstrumentName != instrumentName());
-  // Re-load instrument regardless of whether it has changed, e.g. if we are
-  // creating a new batch the instrument may not have changed but we still want
-  // the most up to date settings
-  updateInstrument(newInstrumentName);
-  // However, only perform updates if the instrument has changed, otherwise we
-  // may trigger overriding of user-specified settings
-  if (hasChanged)
-    onInstrumentChanged();
+  processInstrumentSelection(newInstrumentName);
 }
 
 void MainWindowPresenter::notifyCloseEvent() {
@@ -180,10 +172,10 @@ int &MainWindowPresenter::getRoundPrecision() const {
   return m_optionsDialogPresenter->getIntOption(std::string("RoundPrecision"));
 }
 
-boost::optional<int> MainWindowPresenter::roundPrecision() const {
+std::optional<int> MainWindowPresenter::roundPrecision() const {
   if (isRoundChecked())
     return getRoundPrecision();
-  return boost::none;
+  return std::nullopt;
 }
 
 bool MainWindowPresenter::discardChanges(std::string const &message) const {
@@ -259,8 +251,8 @@ void MainWindowPresenter::optionsChanged() const {
 }
 
 void MainWindowPresenter::addNewBatch(IBatchView *batchView) {
-  // Remember the instrument name so we can re-set it (it will otherwise
-  // get overridden by the instrument list default in the new batch)
+  // Remember the instrument name, if we have one, so that we can re-set it
+  // (it will otherwise get overridden by the instrument list default in the new batch).
   auto const instrument = instrumentName();
   m_batchPresenters.emplace_back(m_batchPresenterFactory->make(batchView));
   m_batchPresenters.back()->acceptMainPresenter(this);
@@ -268,12 +260,13 @@ void MainWindowPresenter::addNewBatch(IBatchView *batchView) {
 }
 
 void MainWindowPresenter::initNewBatch(IBatchPresenter *batchPresenter, std::string const &instrument,
-                                       boost::optional<int> precision) {
+                                       std::optional<int> precision) {
+  // For the very first batch, the selected instrument will be the default from the instrument list
+  auto const selectedInstrument = batchPresenter->initInstrumentList(instrument);
+  processInstrumentSelection(selectedInstrument, batchPresenter);
 
-  batchPresenter->initInstrumentList(instrument);
-  batchPresenter->notifyInstrumentChanged(instrument);
-  if (precision.is_initialized())
-    batchPresenter->notifySetRoundPrecision(precision.get());
+  if (precision.has_value())
+    batchPresenter->notifySetRoundPrecision(precision.value());
 
   // starts in the paused state
   batchPresenter->notifyReductionPaused();
@@ -287,6 +280,13 @@ void MainWindowPresenter::initNewBatch(IBatchPresenter *batchPresenter, std::str
 
 void MainWindowPresenter::showHelp() {
   MantidQt::API::HelpWindow::showCustomInterface(std::string("ISIS Reflectometry"), std::string("reflectometry"));
+}
+
+std::string MainWindowPresenter::encodeBatchToStr(const std::vector<std::string> &jsonKey) const {
+  auto tabIndex = m_view->getTabIndex();
+  QVariant vMap = m_encoder->encodeBatch(m_view, tabIndex, false);
+  QVariant extract = m_encoder->extractFromEncoding(vMap, jsonKey);
+  return MantidQt::API::outputJsonToString(extract);
 }
 
 void MainWindowPresenter::notifySaveBatchRequested(int tabIndex) {
@@ -382,5 +382,24 @@ void MainWindowPresenter::onInstrumentChanged() {
   // Notify the slit calculator
   m_slitCalculator->setCurrentInstrumentName(instrumentName());
   m_slitCalculator->processInstrumentHasBeenChanged();
+}
+
+void MainWindowPresenter::processInstrumentSelection(std::string const &selectedInstrument,
+                                                     IBatchPresenter *batchPresenter) {
+  // Cache changed state before calling updateInstrument
+  auto const hasChanged = (selectedInstrument != instrumentName());
+  // Re-load instrument regardless of whether it has changed, e.g. if we are
+  // creating a new batch the instrument may not have changed but we still want
+  // the most up to date settings
+  updateInstrument(selectedInstrument);
+
+  if (hasChanged) {
+    // Perform updates for all batches. Only do this if the instrument has changed to avoid
+    // overriding any user-specified settings
+    onInstrumentChanged();
+  } else if (batchPresenter) {
+    // Perform updates on the specified batch
+    batchPresenter->notifyInstrumentChanged(selectedInstrument);
+  }
 }
 } // namespace MantidQt::CustomInterfaces::ISISReflectometry

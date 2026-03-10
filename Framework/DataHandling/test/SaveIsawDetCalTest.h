@@ -10,10 +10,9 @@
 #include "MantidDataHandling/SaveIsawDetCal.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidFrameworkTestHelpers/WorkspaceCreationHelper.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
-#include <Poco/File.h>
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 
 using namespace Mantid;
 using namespace Mantid::DataObjects;
@@ -45,8 +44,8 @@ public:
     TS_ASSERT(alg.isExecuted());
 
     std::string filename = alg.getPropertyValue("Filename");
-    TS_ASSERT(Poco::File(filename).exists());
-    if (Poco::File(filename).exists())
-      Poco::File(filename).remove();
+    TS_ASSERT(std::filesystem::exists(filename));
+    if (std::filesystem::exists(filename))
+      std::filesystem::remove(filename);
   }
 };

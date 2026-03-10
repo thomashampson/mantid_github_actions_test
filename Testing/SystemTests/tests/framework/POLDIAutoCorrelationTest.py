@@ -30,7 +30,7 @@ class POLDIAutoCorrelationTest(systemtesting.MantidSystemTest):
             LoadSINQFile(Instrument="POLDI", Filename=dataFile + ".hdf", OutputWorkspace=dataFile)
             LoadInstrument(Workspace=dataFile, InstrumentName="POLDI", RewriteSpectraMap=True)
             PoldiTruncateData(InputWorkspace=dataFile, OutputWorkspace=dataFile)
-            PoldiAutoCorrelation(InputWorkspace=dataFile, wlenmin=1.1, wlenmax=5.0, OutputWorkspace=dataFile + "Corr")
+            PoldiAutoCorrelation(InputWorkspace=dataFile, wlenmin=1.1, wlenmax=5.0, OutputWorkspace=dataFile + "Corr", Version=5)
 
     def analyseResults(self, filenames):
         for dataFile in filenames:
@@ -64,7 +64,7 @@ class POLDIAutoCorrelationTest(systemtesting.MantidSystemTest):
 
             relativeSlopeError = fitResult.cell(1, 2) / slope
             self.assertLessThan(
-                relativeSlopeError, 5e-4, "Relative error of slope is too large " "for %s (is: %d)" % (dataFile, relativeSlopeError)
+                relativeSlopeError, 5e-4, "Relative error of slope is too large for %s (is: %d)" % (dataFile, relativeSlopeError)
             )
 
             intercept = fitResult.cell(0, 1)
@@ -74,11 +74,11 @@ class POLDIAutoCorrelationTest(systemtesting.MantidSystemTest):
             self.assertLessThan(
                 relativeInterceptError,
                 1,
-                "Relative error of intercept is too large " "for %s (is: %d)" % (dataFile, relativeInterceptError),
+                "Relative error of intercept is too large for %s (is: %d)" % (dataFile, relativeInterceptError),
             )
 
             residuals = mtd[fitNameTemplate + "_Workspace"].dataY(2)
             maxAbsoluteResidual = np.max(np.abs(residuals))
             self.assertLessThan(
-                maxAbsoluteResidual, 1.0, "Maximum absolute residual is too large " "for %s (is: %d)" % (dataFile, maxAbsoluteResidual)
+                maxAbsoluteResidual, 1.0, "Maximum absolute residual is too large for %s (is: %d)" % (dataFile, maxAbsoluteResidual)
             )

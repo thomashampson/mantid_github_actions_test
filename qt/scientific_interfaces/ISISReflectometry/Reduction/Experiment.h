@@ -16,8 +16,8 @@
 #include "ReductionType.h"
 #include "SummationType.h"
 #include "TransmissionStitchOptions.h"
-#include <boost/optional.hpp>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -40,29 +40,30 @@ public:
              bool includePartialBins, bool debug, BackgroundSubtraction backgroundSubtraction,
              PolarizationCorrections polarizationCorrections, FloodCorrections floodCorrections,
              TransmissionStitchOptions transmissionStitchOptions, std::map<std::string, std::string> stitchParameters,
-             LookupTable lookupTable);
+             LookupTable lookupTable, bool diagnostics);
 
   AnalysisMode analysisMode() const;
   ReductionType reductionType() const;
   SummationType summationType() const;
   bool includePartialBins() const;
   bool debug() const;
+  bool diagnostics() const;
   BackgroundSubtraction const &backgroundSubtraction() const;
   PolarizationCorrections const &polarizationCorrections() const;
   FloodCorrections const &floodCorrections() const;
   TransmissionStitchOptions transmissionStitchOptions() const;
-  std::map<std::string, std::string> stitchParameters() const;
+  const std::map<std::string, std::string> &stitchParameters() const;
   std::string stitchParametersString() const;
   std::vector<LookupRow> const &lookupTableRows() const;
   std::vector<LookupRow::ValueArray> lookupTableToArray() const;
 
-  boost::optional<LookupRow> findLookupRow(Row const &row, double tolerance) const;
-  boost::optional<LookupRow> findLookupRow(PreviewRow const &previewRow, double tolerance) const;
-  boost::optional<LookupRow> findWildcardLookupRow() const;
+  std::optional<LookupRow> findLookupRow(Row const &row, double tolerance) const;
+  std::optional<LookupRow> findLookupRow(PreviewRow const &previewRow, double tolerance) const;
+  std::optional<LookupRow> findWildcardLookupRow() const;
 
   void updateLookupRow(LookupRow lookupRow, double tolerance);
 
-  boost::optional<size_t> getLookupRowIndexFromRow(Row const &row, double tolerance) const;
+  std::optional<size_t> getLookupRowIndexFromRow(Row const &row, double tolerance) const;
 
 private:
   AnalysisMode m_analysisMode;
@@ -78,6 +79,7 @@ private:
 
   std::map<std::string, std::string> m_stitchParameters;
   LookupTable m_lookupTable;
+  bool m_diagnostics;
 
   friend bool operator==(Experiment const &lhs, Experiment const &rhs);
   friend bool operator!=(Experiment const &lhs, Experiment const &rhs);

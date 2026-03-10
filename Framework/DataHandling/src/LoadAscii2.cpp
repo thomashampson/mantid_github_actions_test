@@ -208,7 +208,7 @@ API::Workspace_sptr LoadAscii2::readTable(std::ifstream &file) {
         }
 
         size_t colData = this->splitIntoColumns(data, line);
-        if (colNames > 0 && colNames == colTypes && colTypes == colData) {
+        if (colNames > 0 && colTypes == colData) {
           // we seem to have a table workspace
           // if we have not already created a workspace
           if (!ws) {
@@ -784,14 +784,14 @@ void LoadAscii2::init() {
                   "Data Service]].");
 
   const int numSpacers = 7;
-  std::string spacers[numSpacers][2] = {
+  std::string const spacers[numSpacers][2] = {
       {"Automatic", ",\t:; "},       {"CSV", ","}, {"Tab", "\t"}, {"Space", " "}, {"Colon", ":"}, {"SemiColon", ";"},
       {"UserDefined", "UserDefined"}};
   // For the ListValidator
   std::array<std::string, numSpacers> sepOptions;
   int sepOptionsIndex = 0;
 
-  for (const auto &spacer : spacers) {
+  for (std::string const *spacer : spacers) {
     const auto &option = spacer[0];
     m_separatorIndex.insert(std::pair<std::string, std::string>(option, spacer[1]));
     sepOptions[sepOptionsIndex++] = option;
@@ -839,7 +839,7 @@ void LoadAscii2::exec() {
   std::ifstream file(filename.c_str());
   if (!file) {
     g_log.error("Unable to open file: " + filename);
-    throw Exception::FileError("Unable to open file: ", filename);
+    throw Exception::FileError("Unable to open file: ", std::move(filename));
   }
 
   std::string sepOption = getProperty("Separator");

@@ -41,6 +41,7 @@ set(SRC_FILES
     src/FitMW.cpp
     src/EigenComplexMatrix.cpp
     src/EigenComplexVector.cpp
+    src/EigenFunctions.cpp
     src/EigenMatrix.cpp
     src/EigenMatrixView.cpp
     src/EigenVector.cpp
@@ -347,6 +348,7 @@ set(INC_FILES
     inc/MantidCurveFitting/Functions/VesuvioResolution.h
     inc/MantidCurveFitting/Functions/Voigt.h
     inc/MantidCurveFitting/Functions/ConvTempCorrection.h
+    inc/MantidCurveFitting/EigenFunctions.h
     inc/MantidCurveFitting/GSLFunctions.h
     inc/MantidCurveFitting/GeneralDomainCreator.h
     inc/MantidCurveFitting/HalfComplex.h
@@ -409,9 +411,9 @@ set(TEST_FILES
     EigenComplexVectorTest.h
     EigenFortranMatrixTest.h
     EigenFortranVectorTest.h
+    EigenFunctionsTest.h
     EigenJacobianTest.h
     EigenMatrixTest.h
-    EigenToGSLTest.h
     EigenVectorTest.h
     EigenViewTest.h
     FitMWTest.h
@@ -544,11 +546,12 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Add a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidCurveFitting/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(CurveFitting ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::CurveFitting ALIAS CurveFitting)
+
+# Add a precompiled header
+target_precompile_headers(CurveFitting PRIVATE <MantidAPI/IFunction1D.h>)
 
 target_include_directories(
   CurveFitting PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

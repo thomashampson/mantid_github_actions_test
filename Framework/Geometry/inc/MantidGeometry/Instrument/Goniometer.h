@@ -9,7 +9,7 @@
 #include "MantidGeometry/Crystal/AngleUnits.h"
 #include "MantidKernel/Matrix.h"
 #include "MantidKernel/V3D.h"
-#include <nexus/NeXusFile.hpp>
+#include "MantidNexus/NexusFile.h"
 #include <string>
 #include <utility>
 
@@ -48,8 +48,8 @@ struct GoniometerAxis {
         angleunit(initangleunit) {}
   GoniometerAxis() : name(""), rotationaxis(), angle(0.), sense(0), angleunit(0) {}
 
-  void saveNexus(::NeXus::File *file, const std::string &group) const;
-  void loadNexus(::NeXus::File *file, const std::string &group);
+  void saveNexus(Nexus::File *file, const std::string &group) const;
+  void loadNexus(Nexus::File *file, const std::string &group);
 };
 
 class MANTID_GEOMETRY_DLL Goniometer {
@@ -58,6 +58,14 @@ public:
   Goniometer();
   // Constructor from a rotation matrix
   Goniometer(const Kernel::DblMatrix &rot);
+  // Copy Constructor
+  Goniometer(const Goniometer &other);
+  // Copy assignment Constructor
+  Goniometer &operator=(const Goniometer &other);
+  // Move constructor
+  Goniometer(Goniometer &&other) noexcept;
+  // Move assignment Constructor
+  Goniometer &operator=(Goniometer &&other) noexcept;
   // Default destructor
   virtual ~Goniometer() = default;
   // Return rotation matrix
@@ -90,8 +98,11 @@ public:
   // Return Euler angles acording to a convention
   std::vector<double> getEulerAngles(const std::string &convention = "YZX");
 
-  void saveNexus(::NeXus::File *file, const std::string &group) const;
-  void loadNexus(::NeXus::File *file, const std::string &group);
+  // determine the convention from the motor axes
+  std::string getConventionFromMotorAxes() const;
+
+  void saveNexus(Nexus::File *file, const std::string &group) const;
+  void loadNexus(Nexus::File *file, const std::string &group);
   /// the method reports if the goniometer was defined with some parameters
   bool isDefined() const;
   bool operator==(const Goniometer &other) const;
@@ -99,12 +110,12 @@ public:
 
 private:
   /// Global rotation matrix of the goniometer
-  Kernel::DblMatrix R;
+  Kernel::DblMatrix m_R;
   /// Motors vector contains GoniometerAxis objects, the last one is the closest
   /// to the sample
-  std::vector<GoniometerAxis> motors;
+  std::vector<GoniometerAxis> m_motors;
   /// Flag to specify if the goniometer is initialized from a rotation matrix
-  bool initFromR;
+  bool m_initFromR;
   /// Private function to recalculate R when setRotationAngle is called
   void recalculateR();
 };

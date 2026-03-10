@@ -1,3 +1,5 @@
+include(GenerateExportHeader)
+
 set(SRC_FILES
     src/InvertMDDim.cpp
     src/LoadFlexiNexus.cpp
@@ -36,12 +38,10 @@ set(SRC_FILES
     src/PoldiUtilities/UncertainValue.cpp
     src/ProjectMD.cpp
     src/SINQHMListener.cpp
-    src/SINQTranspose3D.cpp
     src/SliceMDHisto.cpp
 )
 
 set(INC_FILES
-    inc/MantidSINQ/DllConfig.h
     inc/MantidSINQ/InvertMDDim.h
     inc/MantidSINQ/LoadFlexiNexus.h
     inc/MantidSINQ/MDHistoToWorkspace2D.h
@@ -85,7 +85,6 @@ set(INC_FILES
     inc/MantidSINQ/PoldiUtilities/UncertainValueIO.h
     inc/MantidSINQ/ProjectMD.h
     inc/MantidSINQ/SINQHMListener.h
-    inc/MantidSINQ/SINQTranspose3D.h
     inc/MantidSINQ/SliceMDHisto.h
 )
 
@@ -136,11 +135,12 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Add a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidSINQ/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(SINQ ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::SINQ ALIAS SINQ)
+
+# Add a precompiled header where they are supported
+target_precompile_headers(SINQ PRIVATE <MantidAPI/Algorithm.h> <MantidKernel/Exception.h> <memory>)
 
 target_include_directories(
   SINQ PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>
@@ -153,6 +153,12 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   set_target_properties(SINQ PROPERTIES INSTALL_RPATH "\$ORIGIN/../${LIB_DIR}")
 endif()
+
+# Auto-generate exports header
+target_include_directories(
+  SINQ PUBLIC $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/Framework/SINQ> $<INSTALL_INTERFACE:include/Mantid>
+)
+generate_mantid_export_header(SINQ False)
 
 # Add to the 'Framework' group in VS
 set_property(TARGET SINQ PROPERTY FOLDER "MantidFramework")

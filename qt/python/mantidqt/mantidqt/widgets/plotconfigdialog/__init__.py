@@ -34,7 +34,7 @@ def get_axes_names_dict(fig, curves_only=False, images_only=False):
     :param images_only: Bool. If True only add axes to dict if it contains an image
     """
     if curves_only and images_only:
-        return ValueError("Only one of 'curves_only' and 'images_only' may be " "True.")
+        return ValueError("Only one of 'curves_only' and 'images_only' may be True.")
     axes_names = {}
     for ax in fig.get_axes():
         if ax not in [img.axes for img in get_colorbars_from_fig(fig)]:
@@ -86,8 +86,15 @@ def curve_in_ax(ax):
 
 
 def line_in_ax(ax):
-    """Return True if there are any lines in the Axes object"""
-    return len(ax.get_lines()) > 0
+    """Return True if there are any lines in the Axes object, ignoring any lines with the _nolegend_ label (e.g. the crosshair)."""
+
+    def safe_get_label(line):
+        if hasattr(line, "get_label"):
+            return line.get_label()
+        return ""
+
+    filtered_lines = [line for line in ax.get_lines() if not safe_get_label(line) == "_nolegend_"]
+    return len(filtered_lines) > 0
 
 
 def errorbars_in_ax(ax):

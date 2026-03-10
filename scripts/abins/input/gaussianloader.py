@@ -4,8 +4,8 @@
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
-import io
 from io import BufferedReader
+from pathlib import Path
 import re
 from typing import Iterable, List
 
@@ -13,6 +13,7 @@ import numpy as np
 
 from .abinitioloader import AbInitioLoader
 from .textparser import TextParser
+from abins.abinsdata import AbinsData
 from abins.constants import COMPLEX_TYPE, FLOAT_TYPE, ROTATIONS_AND_TRANSLATIONS
 from mantid.kernel import Atom
 
@@ -22,11 +23,11 @@ class GAUSSIANLoader(AbInitioLoader):
     Class for loading GAUSSIAN ab initio vibrational data.
     """
 
-    def __init__(self, input_ab_initio_filename) -> None:
+    def __init__(self, input_ab_initio_filename: str, cache_directory: Path | None = None) -> None:
         """
         :param input_ab_initio_filename: name of file with vibrational data (foo.log or foo.LOG)
         """
-        super().__init__(input_ab_initio_filename=input_ab_initio_filename)
+        super().__init__(input_ab_initio_filename=input_ab_initio_filename, cache_directory=cache_directory)
         self._active_atoms = None
         self._num_atoms = None
         self._num_read_freq = 0
@@ -35,16 +36,15 @@ class GAUSSIANLoader(AbInitioLoader):
     def _ab_initio_program(self) -> str:
         return "GAUSSIAN"
 
-    def read_vibrational_or_phonon_data(self):
+    @AbInitioLoader.abinsdata_saver
+    def read_vibrational_or_phonon_data(self) -> AbinsData:
         """
-        Reads vibrational data from GAUSSIAN output files. Saves frequencies and atomic displacements (only molecular
-        calculations), hash of file with vibrational data to <>.hdf5.
-        :returns: structure, frequency and displacement data from file
+        Read vibrational data from GAUSSIAN output files.
         """
 
         data = {}  # container to store read data
 
-        with io.open(
+        with open(
             self._clerk.get_input_filename(),
             "rb",
         ) as gaussian_file:
@@ -64,10 +64,6 @@ class GAUSSIANLoader(AbInitioLoader):
             # Check if atoms were frozen and remove from structure if so
             self._remove_frozen_atoms(active_atoms=self._active_atoms, data=data)
 
-            # save data to hdf file
-            self.save_ab_initio_data(data=data)
-
-            # return AbinsData object
             return self._rearrange_data(data=data)
 
     def _read_atomic_coordinates(self, *, file_obj: BufferedReader, data: dict, masses_from_file: List[float]) -> None:

@@ -25,6 +25,7 @@ set(SRC_FILES
     src/DirectoryValidator.cpp
     src/DiskBuffer.cpp
     src/DllOpen.cpp
+    src/DynamicFactory.cpp
     src/EnabledWhenProperty.cpp
     src/EnvironmentHistory.cpp
     src/EqualBinsChecker.cpp
@@ -74,12 +75,14 @@ set(SRC_FILES
     src/MultiFileValidator.cpp
     src/NDRandomNumberGenerator.cpp
     src/NeutronAtom.cpp
-    src/NexusDescriptor.cpp
-    src/NexusHDF5Descriptor.cpp
+    src/LegacyNexusDescriptor.cpp
     src/NullValidator.cpp
     src/OptionalBool.cpp
+    src/SpinStateHelpers.cpp
+    src/ParallelMinMax.cpp
     src/ProgressBase.cpp
     src/Property.cpp
+    src/PropertyHelper.cpp
     src/PropertyHistory.cpp
     src/PropertyManager.cpp
     src/PropertyManagerDataService.cpp
@@ -95,8 +98,12 @@ set(SRC_FILES
     src/RebinParamsValidator.cpp
     src/RegexStrings.cpp
     src/SetValueWhenProperty.cpp
+    src/SetDefaultWhenProperty.cpp
     src/SingletonHolder.cpp
+    src/Smoothing.cpp
     src/SobolSequence.cpp
+    src/SpinStateValidator.cpp
+    src/Spline.cpp
     src/SplittingInterval.cpp
     src/StartsWithValidator.cpp
     src/Statistics.cpp
@@ -186,6 +193,7 @@ set(INC_FILES
     inc/MantidKernel/FunctionTask.h
     inc/MantidKernel/GitHubApiHelper.h
     inc/MantidKernel/Glob.h
+    inc/MantidKernel/GSL_Helpers.h
     inc/MantidKernel/ICatalogInfo.h
     inc/MantidKernel/IPropertyManager.h
     inc/MantidKernel/IPropertySettings.h
@@ -199,6 +207,7 @@ set(INC_FILES
     inc/MantidKernel/Interpolation.h
     inc/MantidKernel/InvisibleProperty.h
     inc/MantidKernel/LambdaValidator.h
+    inc/MantidKernel/LegacyNexusDescriptor.h
     inc/MantidKernel/LibraryManager.h
     inc/MantidKernel/LibraryWrapper.h
     inc/MantidKernel/ListValidator.h
@@ -232,10 +241,9 @@ set(INC_FILES
     inc/MantidKernel/NearestNeighbours.h
     inc/MantidKernel/NetworkProxy.h
     inc/MantidKernel/NeutronAtom.h
-    inc/MantidKernel/NexusDescriptor.h
-    inc/MantidKernel/NexusHDF5Descriptor.h
     inc/MantidKernel/NullValidator.h
     inc/MantidKernel/OptionalBool.h
+    inc/MantidKernel/ParallelMinMax.h
     inc/MantidKernel/PhysicalConstants.h
     inc/MantidKernel/PocoVersion.h
     inc/MantidKernel/ProgressBase.h
@@ -259,9 +267,14 @@ set(INC_FILES
     inc/MantidKernel/RegexStrings.h
     inc/MantidKernel/RegistrationHelper.h
     inc/MantidKernel/SetValueWhenProperty.h
+    inc/MantidKernel/SetDefaultWhenProperty.h
     inc/MantidKernel/SingletonHolder.h
+    inc/MantidKernel/Smoothing.h
     inc/MantidKernel/SobolSequence.h
     inc/MantidKernel/SpecialCoordinateSystem.h
+    inc/MantidKernel/SpinStateHelpers.h
+    inc/MantidKernel/SpinStateValidator.h
+    inc/MantidKernel/Spline.h
     inc/MantidKernel/SplittingInterval.h
     inc/MantidKernel/StartsWithValidator.h
     inc/MantidKernel/Statistics.h
@@ -354,8 +367,6 @@ set(TEST_FILES
     FreeBlockTest.h
     FunctionTaskTest.h
     GlobTest.h
-    IPropertySettingsTest.h
-    ISaveableTest.h
     IValidatorTest.h
     IndexSetTest.h
     InstrumentInfoTest.h
@@ -363,6 +374,7 @@ set(TEST_FILES
     InterpolationTest.h
     InvisiblePropertyTest.h
     LambdaValidatorTest.h
+    LegacyNexusDescriptorTest.h
     ListValidatorTest.h
     LiveListenerInfoTest.h
     LogFilterTest.h
@@ -391,8 +403,6 @@ set(TEST_FILES
     NDRandomNumberGeneratorTest.h
     NearestNeighboursTest.h
     NeutronAtomTest.h
-    NexusDescriptorTest.h
-    NexusHDF5DescriptorTest.h
     NullValidatorTest.h
     OptionalBoolTest.h
     ProgressBaseTest.h
@@ -412,8 +422,12 @@ set(TEST_FILES
     RegexStringsTest.h
     SLSQPMinimizerTest.h
     ShrinkToFitTest.h
+    SmoothingTest.h
     SobolSequenceTest.h
     SpecialCoordinateSystemTest.h
+    SpinStateHelpersTest.h
+    SpinStateValidatorTest.h
+    SplineTest.h
     SplittingIntervalTest.h
     StartsWithValidatorTest.h
     StatisticsTest.h
@@ -464,13 +478,38 @@ else()
   list(APPEND SRC_FILES src/NetworkProxyLinux.cpp)
 endif()
 
-# Enable precompiled headers where supported (must be done before target is added)
-enable_precompiled_headers(inc/MantidKernel/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(Kernel ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::Kernel ALIAS Kernel)
 # Set the name of the generated library
 set_target_properties(Kernel PROPERTIES OUTPUT_NAME MantidKernel COMPILE_DEFINITIONS "IN_MANTID_KERNEL;PSAPI_VERSION=1")
+
+# Enable precompiled headers
+target_precompile_headers(
+  Kernel
+  PRIVATE
+  inc/MantidKernel/System.h
+  <cstddef>
+  <cstdint>
+  <cstdio>
+  <cstdlib>
+  <iomanip>
+  <istream>
+  <limits.h>
+  <map>
+  <string>
+  <vector>
+  <boost/algorithm/string.hpp>
+  <boost/date_time/posix_time/posix_time.hpp>
+  <boost/regex.hpp>
+  <memory>
+  <Poco/File.h>
+  <Poco/Message.h>
+  <Poco/Notification.h>
+  <Poco/Path.h>
+  <MantidNexus/NexusException.h>
+  <MantidNexus/NexusFile.h>
+)
 
 target_include_directories(
   Kernel PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>
@@ -490,7 +529,8 @@ target_link_libraries(
   Kernel
   PUBLIC Mantid::Types
          Mantid::Json
-         Nexus::nexuscpp
+         Mantid::Nexus
+         Mantid::LegacyNexus
          Eigen3::Eigen
          TBB::tbb
          Poco::Foundation
@@ -501,7 +541,6 @@ target_link_libraries(
          GSL::gsl
          OpenSSL::SSL
          ${HDF5_LIBRARIES}
-         ${HDF5_HL_LIBRARIES}
   PRIVATE ${NETWORK_LIBRARIES}
 )
 if(WIN32)
@@ -574,7 +613,6 @@ set(DATADIRS
 )
 set(COLORMAPS_FOLDER ${MANTID_ROOT}/installers/colormaps/)
 set(MANTIDPUBLISHER "https://upload.mantidproject.org/scriptrepository?debug=1")
-set(HTML_ROOT ${DOCS_BUILDDIR}/html)
 
 set(CONSOLEPATTERN "%s-[%p] %t")
 set(CONSOLECHANNELCLASS "ConsoleChannel")
@@ -611,7 +649,6 @@ set(CHECK_FOR_NEW_MANTID_VERSION "${ENABLE_NETWORK_ACCESS}")
 set(ENABLE_USAGE_REPORTS "${ENABLE_NETWORK_ACCESS}")
 set(DATADIRS "")
 set(MANTIDPUBLISHER "https://upload.mantidproject.org/scriptrepository")
-set(HTML_ROOT ../share/doc/html)
 
 # For a framework-only (e.g. MPI) build some of these are not relevant and should be left empty to avoid warnings on
 # starting Mantid
@@ -641,3 +678,8 @@ mtd_install_files(
 # Installation settings
 set(TARGET_EXPORT_NAME "MantidKernelTargets")
 mtd_install_framework_lib(TARGETS Kernel INSTALL_EXPORT_FILE EXPORT_NAME ${TARGET_EXPORT_NAME})
+
+# location of the properties file
+if(NOT DEFINED PROPERTIES_FILE_LOCATION)
+  set(PROPERTIES_FILE_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/Mantid.properties.config)
+endif()

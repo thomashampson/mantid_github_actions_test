@@ -7,10 +7,16 @@
 
 # Supporting functions for the Abins Algorithm that don't belong in
 # another part of AbinsModules.
+from collections import defaultdict
+from math import isnan
+import multiprocessing
+import numbers
 import os
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from tempfile import NamedTemporaryFile
+import textwrap
+from typing import Dict, Iterable, List, Optional, Literal, Tuple, Union
 
 import yaml
 
@@ -19,42 +25,31 @@ try:
 except ImportError:
     from yaml import SafeLoader
 
+from euphonic import Quantity
+from euphonic.spectra import Spectrum, Spectrum1DCollection, Spectrum2DCollection
 import numpy as np
 from mantid.api import mtd, FileAction, FileProperty, WorkspaceGroup, WorkspaceProperty
-from mantid.kernel import Atom, Direction, StringListValidator, StringArrayProperty, logger
+from mantid.kernel import ConfigService, Direction, StringListValidator, StringArrayProperty, logger
 from mantid.simpleapi import CloneWorkspace, SaveAscii, Scale
 
-import abins
-from abins.constants import AB_INITIO_FILE_EXTENSIONS, ALL_INSTRUMENTS, ATOM_PREFIX
+from abins.atominfo import AtomInfo
+from abins.constants import (
+    AB_INITIO_FILE_EXTENSIONS,
+    ALL_INSTRUMENTS,
+    ATOM_PREFIX,
+    FLOAT_TYPE,
+    MASS_EPS,
+    MILLI_EV_TO_WAVENUMBER,
+    ONE_DIMENSIONAL_INSTRUMENTS,
+    TWO_DIMENSIONAL_INSTRUMENTS,
+)
 from abins.input.jsonloader import abins_supported_json_formats, JSONLoader
 from abins.instruments import get_instrument, Instrument
+import abins.parameters
 
 
 class AbinsAlgorithm:
     """Class providing shared utility for multiple inheritence by 1D, 2D implementations"""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)  # i.e. forward everything to PythonAlgorithm
-
-        # User input private properties
-        self._instrument_name = None
-
-        self._vibrational_or_phonon_data_file = None
-        self._ab_initio_program = None
-        self._out_ws_name = None
-        self._temperature = None
-        self._atoms = None
-        self._sum_contributions = None
-        self._save_ascii = None
-        self._scale_by_cross_section = None
-
-        self._num_quantum_order_events = None
-        self._autoconvolution = None
-        self._energy_units = None
-
-        # Interally-used private properties
-        self._max_event_order = None
-        self._bin_width = None
 
     def get_common_properties(self) -> None:
         """From user input, set properties common to Abins 1D and 2D versions"""
@@ -70,6 +65,8 @@ class AbinsAlgorithm:
         self._scale_by_cross_section = self.getPropertyValue("ScaleByCrossSection")
 
         self._energy_units = self.getProperty("EnergyUnits").value
+
+        self._cache_directory = Path(self.getProperty("CacheDirectory").value)
 
         # conversion from str to int
         self._num_quantum_order_events = int(self.getProperty("QuantumOrderEventsNumber").value)
@@ -100,11 +97,22 @@ class AbinsAlgorithm:
             name="AbInitioProgram",
             direction=Direction.Input,
             defaultValue="CASTEP",
-            validator=StringListValidator(["CASTEP", "CRYSTAL", "DMOL3", "FORCECONSTANTS", "GAUSSIAN", "JSON", "VASP"]),
+            validator=StringListValidator(["CASTEP", "CRYSTAL", "DMOL3", "FORCECONSTANTS", "GAUSSIAN", "JSON", "Molden", "VASP"]),
             doc="An ab initio program which was used for vibrational or phonon calculation.",
         )
 
         self.declareProperty(WorkspaceProperty("OutputWorkspace", "", Direction.Output), doc="Name to give the output workspace.")
+
+        self.declareProperty(
+            FileProperty(
+                "CacheDirectory",
+                defaultValue=ConfigService.getString("defaultsave.directory"),
+                action=FileAction.Directory,
+                direction=Direction.Input,
+                extensions=[""],
+            ),
+            doc="Directory in which Abins reads/writes cache files",
+        )
 
         self.declareProperty(
             name="TemperatureInKelvin",
@@ -115,11 +123,16 @@ class AbinsAlgorithm:
 
         self.declareProperty(
             StringArrayProperty("Atoms", Direction.Input),
-            doc="List of atoms to use to calculate partial S."
-            "If left blank, workspaces with S for all types of atoms will be calculated. "
-            "Element symbols will be interpreted as a sum of all atoms of that element in the "
-            "cell. 'atomN' or 'atom_N' (where N is a positive integer) will be interpreted as "
-            "individual atoms, indexing from 1 following the order of the input data.",
+            doc=textwrap.dedent("""
+            List of atoms to use to calculate partial S.  If left blank, workspaces with S for all
+            types of atoms will be calculated.  Element symbols will be interpreted as a sum of all
+            atoms of that element in the cell. 'N', 'atomN' or 'atom_N' (where N is a positive
+            integer) will be interpreted as individual atoms, indexing from 1 following the order of
+            the input data.  A range of atoms can be indicated as e.g. '1-3' or '1..3'; this is
+            equivalent to individually selecting atoms 1, 2, 3. Selections are joined with commas
+            and selection styles can be used simultaneously, e.g. 'C,1-4,7' will select atoms
+            1,2,3,4,7 and all C atoms.
+            """).replace("\n", " "),
         )
 
         self.declareProperty(
@@ -143,7 +156,7 @@ class AbinsAlgorithm:
                 defaultValue="1",
                 validator=StringListValidator(["1", "2"]),
                 doc="Number of quantum order effects included in the calculation "
-                "(1 -> FUNDAMENTALS, 2-> first overtone + FUNDAMENTALS + 2nd order combinations",
+                "(1 -> Fundamentals, 2-> first overtone + Fundamentals + 2nd order combinations",
             )
 
             self.declareProperty(
@@ -237,6 +250,7 @@ class AbinsAlgorithm:
             "FORCECONSTANTS": self._validate_euphonic_input_file,
             "GAUSSIAN": self._validate_gaussian_input_file,
             "JSON": self._validate_json_input_file,
+            "Molden": self._validate_molden_input_file,
             "VASP": self._validate_vasp_input_file,
         }
         ab_initio_program = self.getProperty("AbInitioProgram").value
@@ -253,7 +267,7 @@ class AbinsAlgorithm:
         }
         if workspace_name in mtd:
             issues["OutputWorkspace"] = (
-                "Workspace with name " + workspace_name + " already in use; please give " "a different name for workspace."
+                "Workspace with name " + workspace_name + " already in use; please give a different name for workspace."
             )
         elif workspace_name == "":
             issues["OutputWorkspace"] = "Please specify name of workspace."
@@ -261,6 +275,13 @@ class AbinsAlgorithm:
             if word in workspace_name:
                 issues["OutputWorkspace"] = "Keyword: " + word + " cannot be used in the name of workspace."
                 break
+
+        cache_directory = Path(self.getProperty("CacheDirectory").value)
+        try:
+            with NamedTemporaryFile(mode="w", dir=cache_directory) as fd:
+                print("check this directory is writeable", file=fd)
+        except IOError:
+            issues["CacheDirectory"] = "Cache directory is not writeable"
 
         temperature = self.getProperty("TemperatureInKelvin").value
         if temperature < 0:
@@ -304,268 +325,289 @@ class AbinsAlgorithm:
     def get_atom_selection(*, atoms_data: abins.AtomsData, selection: list) -> Tuple[list, list]:
         """Interpret the user 'Atoms' input as a set of elements and atom indices
 
-        (These atom indices match the user-facing convention and begin at 1.)"""
+        (These atom indices match the user-facing convention and begin at 1.)
+
+        Acceptable items in selection are:
+
+          - element symbol, e.g. "Si"
+          - atom index prefixed by "atom" or "atom_", e.g. "atom1", "atom_2"
+          - bare atom index e.g. "1"
+          - atom index range separated by hyphen, e.g. "1-2"
+
+        A range will be expanded to individual workspaces (currently) so the user
+        will still need to find some elegant way of summing/combining them.
+
+        """
 
         num_atoms = len(atoms_data)
         all_atms_smbls = list(set([atoms_data[atom_index]["symbol"] for atom_index in range(num_atoms)]))
         all_atms_smbls.sort()
 
+        # Exit early if nothing was selected: default is to return no numbers, all symbols
         if len(selection) == 0:  # case: all atoms
-            atom_symbols = all_atms_smbls
-            atom_numbers = []
-        else:  # case selected atoms
-            # Specific atoms are identified with prefix and integer index, e.g 'atom_5'. Other items are element symbols
-            # A regular expression match is used to make the underscore separator optional and check the index format
-            atom_symbols = [item for item in selection if item[: len(ATOM_PREFIX)] != ATOM_PREFIX]
-            if len(atom_symbols) != len(set(atom_symbols)):  # only different types
+            return [], all_atms_smbls
+
+        # Specific atoms are identified with prefix and integer index, e.g 'atom_5'. Other items are element symbols
+        # A regular expression match is used to make the underscore separator optional and check the index format
+
+        # Acceptable formats for index: atom_1 atom1 1
+        numbered_atom_test = re.compile(
+            f"""^                  # No arbitrary prefixes
+                ({ATOM_PREFIX})?   # optional ATOM_PREFIX (i.e. "atom")
+                _?                 # optional underscore
+                (?P<index>[0-9]+)  # capture digits as "index"
+                $                  # No suffix
+             """,
+            re.VERBOSE,
+        )
+        atom_numbers = [int(match.group("index")) for item in selection if (match := numbered_atom_test.match(item))]
+
+        # Acceptable formats for range: 1-2
+        atom_range_test = re.compile(
+            """^                  # No prefix
+               (?P<start>\\d+)  # Capture starting index
+               (-|\\.\\.)
+            # range indicated with "-" or ".."
+               (?P<end>\\d+)    # Capture ending index
+               $                  # No suffix
+            """,
+            re.VERBOSE,
+        )
+        atom_ranges = [(int(match.group("start")), int(match.group("end"))) for item in selection if (match := atom_range_test.match(item))]
+
+        # Acceptable formats for symbol: Ca
+        element_symbol_test = re.compile(
+            f"""^(?!{ATOM_PREFIX})  # Must not start with ATOM_PREFIX (i.e. "atom")
+                [a-zA-Z]+$           # Must contain only letters
+             """,
+            re.VERBOSE,
+        )
+        atom_symbols = [item for item in selection if element_symbol_test.match(item)]
+
+        if len(atom_numbers) != len(set(atom_numbers)):
+            raise ValueError(
+                "User atom selection (by number) contains repeated atom. This is not permitted as Abins"
+                " cannot create multiple workspaces with the same name."
+            )
+
+        for atom_number in atom_numbers:
+            if atom_number < 1 or atom_number > num_atoms:
                 raise ValueError(
-                    "User atom selection (by symbol) contains repeated species. This is not permitted as "
-                    "Abins cannot create multiple workspaces with the same name."
+                    "Invalid user atom selection (by number) '%s%s': out of range (%s - %s)" % (ATOM_PREFIX, atom_number, 1, num_atoms)
                 )
 
-            numbered_atom_test = re.compile("^" + ATOM_PREFIX + r"_?(\d+)$")
-            atom_numbers = [numbered_atom_test.findall(item) for item in selection]  # Matches will be lists of str
-            atom_numbers = [int(match[0]) for match in atom_numbers if match]  # Remove empty matches, cast rest to int
+        for atom_symbol in atom_symbols:
+            if atom_symbol not in all_atms_smbls:
+                raise ValueError("User defined atom selection (by element) '%s': not present in the system." % atom_symbol)
 
-            if len(atom_numbers) != len(set(atom_numbers)):
-                raise ValueError(
-                    "User atom selection (by number) contains repeated atom. This is not permitted as Abins"
-                    " cannot create multiple workspaces with the same name."
-                )
+        if len(atom_symbols) != len(set(atom_symbols)):  # only different types
+            raise ValueError(
+                "User atom selection (by symbol) contains repeated species. This is not permitted as "
+                "Abins cannot create multiple workspaces with the same name."
+            )
 
-            for atom_symbol in atom_symbols:
-                if atom_symbol not in all_atms_smbls:
-                    raise ValueError("User defined atom selection (by element) '%s': not present in the system." % atom_symbol)
+        # Final sanity check that everything in "atoms" field was understood
+        if len(atom_symbols) + len(atom_numbers) + len(atom_ranges) < len(selection):
+            elements_report = " Symbols: " + ", ".join(atom_symbols) if atom_symbols else ""
+            numbers_report = " Numbers: " + ", ".join(atom_numbers) if atom_numbers else ""
+            ranges_report = " Ranges: " + ", ".join(f"{start}-{end}" for start, end in atom_ranges) if atom_ranges else ""
+            raise ValueError(
+                "Not all user atom selections ('atoms' option) were understood." + elements_report + numbers_report + ranges_report
+            )
 
-            for atom_number in atom_numbers:
-                if atom_number < 1 or atom_number > num_atoms:
-                    raise ValueError(
-                        "Invalid user atom selection (by number) '%s%s': out of range (%s - %s)" % (ATOM_PREFIX, atom_number, 1, num_atoms)
-                    )
+        for start, end in atom_ranges:
+            if start > end:
+                start, end = end, start
+            atom_numbers = atom_numbers + list(range(start, end + 1))
 
-            # Final sanity check that everything in "atoms" field was understood
-            if len(atom_symbols) + len(atom_numbers) < len(selection):
-                elements_report = " Symbols: " + ", ".join(atom_symbols) if len(atom_symbols) else ""
-                numbers_report = " Numbers: " + ", ".join(atom_numbers) if len(atom_numbers) else ""
-                raise ValueError("Not all user atom selections ('atoms' option) were understood." + elements_report + numbers_report)
+        return sorted(atom_numbers), atom_symbols
 
-        return atom_numbers, atom_symbols
-
-    @staticmethod
-    def get_masses_table(atoms_data):
+    @classmethod
+    def get_masses_table(cls, spectra: Spectrum1DCollection | Spectrum2DCollection) -> Dict[str, List[float]]:
         """
-        Collect masses associated with each element in atoms_data
+        Collect masses associated with each element in SpectrumNDCollection
 
-        :param num_atoms: Number of atoms in the system. (Saves time working out iteration.)
-        :type num_atoms: int
+        Requires metadata keys "mass" and "symbol"
 
         :returns: Mass data in form ``{el1: [m1, ...], ... }``
         """
-        masses = {}
-        for atom in atoms_data:
-            symbol = atom["symbol"]
-            mass = atom["mass"]
-            if symbol not in masses:
-                masses[symbol] = set()
-            masses[symbol].add(mass)
+        if "line_data" not in spectra.metadata:
+            # Only one kind of atom
+            return {spectra.metadata["symbol"]: [float(spectra.metadata["mass"])]}
 
-        # convert set to list to fix order
-        for s in masses:
-            masses[s] = sorted(list(set(masses[s])))
+        masses_table = defaultdict(set)
+        for row in spectra.iter_metadata():
+            masses_table[row["symbol"]].add(row["mass"])
 
-        return masses
+        # convert sets to sorted lists to fix order
+        for symbol, masses in masses_table.items():
+            masses_table[symbol] = sorted(list(map(float, masses)))
 
-    def create_workspaces(self, atoms_symbols=None, atom_numbers=None, *, s_data, atoms_data, max_quantum_order):
+        return masses_table
+
+    def create_workspaces(
+        self,
+        atoms_symbols: Optional[Iterable[str]] = None,
+        atom_numbers: Optional[Iterable[int]] = None,
+        *,
+        spectra: Spectrum1DCollection | Spectrum2DCollection,
+        max_quantum_order: int,
+    ):
         """
         Creates workspaces for all types of atoms. Creates both partial and total workspaces for given types of atoms.
 
         :param atoms_symbols: atom types (i.e. element symbols) for which S should be created.
-        :type iterable of str:
-
         :param atom_numbers:
             indices of individual atoms for which S should be created. (One-based numbering; 1 <= I <= NUM_ATOMS)
-        :type iterable of int:
-
-        :param s_data: dynamical factor data
-        :type abins.SData
-
-        :param atoms_data: atom positions/masses
-        :type abins.AtomsData:
-
+        :param spectra: Collection of S as spectra with metadata
         :param max_quantum_order: maximum quantum order to include
-        :type int:
 
         :returns: workspaces for list of atoms types, S for the particular type of atom
         """
-        from abins.constants import FLOAT_TYPE, MASS_EPS, ONLY_ONE_MASS
-
         # Create appropriately-shaped arrays to be used in-place by _atom_type_s - avoid repeated slow instantiation
-        shape = [max_quantum_order]
-        shape.extend(list(s_data[0]["order_1"].shape))
-        s_atom_data = np.zeros(shape=tuple(shape), dtype=FLOAT_TYPE)
-        temp_s_atom_data = np.copy(s_atom_data)
+        shape = [max_quantum_order] + list(self.get_s(spectra[0]).shape)
 
-        num_atoms = len(s_data)
-        masses = self.get_masses_table(atoms_data)
+        s_atom_data = np.zeros(shape=tuple(shape), dtype=FLOAT_TYPE)
+        masses = self.get_masses_table(spectra)
 
         result = []
 
         if atoms_symbols is not None:
             for symbol in atoms_symbols:
-                sub = len(masses[symbol]) > ONLY_ONE_MASS or abs(Atom(symbol=symbol).mass - masses[symbol][0]) > MASS_EPS
                 for m in masses[symbol]:
                     result.extend(
                         self._atom_type_s(
-                            num_atoms=num_atoms,
                             mass=m,
-                            s_data=s_data,
-                            atoms_data=atoms_data,
+                            spectra=spectra,
                             element_symbol=symbol,
-                            temp_s_atom_data=temp_s_atom_data,
                             s_atom_data=s_atom_data,
-                            substitution=sub,
                         )
                     )
         if atom_numbers is not None:
             for atom_number in atom_numbers:
-                result.extend(self._atom_number_s(atom_number=atom_number, s_data=s_data, s_atom_data=s_atom_data, atoms_data=atoms_data))
+                result.extend(self._atom_number_s(atom_number=atom_number, spectra=spectra, s_atom_data=s_atom_data))
         return result
 
-    def _create_workspace(self, atom_name=None, s_points=None, optional_name="", protons_number=None, nucleons_number=None):
+    def _create_workspace(self, *, species: AtomInfo, s_points: np.ndarray, label: str | None = None):
         """
         Creates workspace for the given frequencies and s_points with S data. After workspace is created it is rebined,
         scaled by cross-section factor and optionally multiplied by the user defined scaling factor.
 
 
-        :param atom_name: symbol of atom for which workspace should be created
+        :param species: Object identifying isotope (or mixture)
         :param s_points: S(Q, omega)
-        :param optional_name: optional part of workspace name
+        :param label: species-specific part of workspace name. If None, take from species object.
         :returns: workspace for the given frequency and S data
-        :param protons_number: number of protons in the given type fo atom
-        :param nucleons_number: number of nucleons in the given type of atom
         """
 
-        ws_name = self._out_ws_name + "_" + atom_name + optional_name
-        self._fill_s_workspace(s_points=s_points, workspace=ws_name, protons_number=protons_number, nucleons_number=nucleons_number)
+        label = species.name if label is None else label
+
+        ws_name = self._out_ws_name + "_" + label
+        self._fill_s_workspace(
+            species=species,
+            s_points=s_points,
+            workspace=ws_name,
+        )
         return ws_name
 
-    def _atom_number_s(self, *, atom_number, s_data, s_atom_data, atoms_data):
+    def get_s(self, spectrum: Spectrum) -> Quantity:
+        """Get spectral quantity array, from y or z axis of Spectrum as appropriate"""
+        if self._instrument.get_name() in ONE_DIMENSIONAL_INSTRUMENTS:
+            return spectrum.y_data
+        else:
+            return spectrum.z_data
+
+    def _atom_number_s(
+        self, *, atom_number: int, spectra: Spectrum1DCollection | Spectrum2DCollection, s_atom_data: np.ndarray
+    ) -> List[str]:
         """
         Helper function for calculating S for the given atomic index
 
-        :param atom_number: One-based index of atom in s_data e.g. 1 to select first element 'atom_1'
-        :type atom_number: int
-
-        :param s_data: Precalculated S for all atoms and quantum orders
-        :type s_data: abins.SData
-
+        :param atom_number: One-based index of atom in spectra e.g. 1 to select 'atom_1' (atom_index=0)
+        :param spectra: Precalculated S for all atoms and quantum orders
         :param s_atom_data: helper array to accumulate S (outer loop over atoms); does not transport
             information but is used in-place to save on time instantiating large arrays. First dimension is quantum
             order; following dimensions should match arrays in s_data.
-        :type s_atom_data: numpy.ndarray
-
-        :param
 
         :returns: mantid workspaces of S for atom (total) and individual quantum orders
-        :returntype: list of Workspace2D
         """
-        from abins.constants import ATOM_PREFIX, FUNDAMENTALS
-
-        atom_workspaces = []
         s_atom_data.fill(0.0)
         output_atom_label = "%s_%d" % (ATOM_PREFIX, atom_number)
-        symbol = atoms_data[atom_number - 1]["symbol"]
-        z_number = Atom(symbol=symbol).z_number
 
-        for i, order in enumerate(range(FUNDAMENTALS, self._max_event_order + 1)):
-            s_atom_data[i] = s_data[atom_number - 1]["order_%s" % order]
+        filtered_spectra = spectra.select(atom_index=(atom_number - 1), quantum_order=list(range(1, self._max_event_order + 1)))
+        for spectrum in filtered_spectra:
+            s_atom_data[spectrum.metadata["quantum_order"] - 1] = self.get_s(spectrum).to("barn / (1/cm)").magnitude
+        total_s_atom_data = self.get_s(filtered_spectra.sum()).to("barn / (1/cm)").magnitude
 
-        total_s_atom_data = np.sum(s_atom_data, axis=0)
+        species = AtomInfo(spectrum.metadata["symbol"], float(spectrum.metadata["mass"]))
 
-        atom_workspaces = []
-        atom_workspaces.append(
+        atom_workspaces = [
             self._create_workspace(
-                atom_name=output_atom_label, s_points=np.copy(total_s_atom_data), optional_name="_total", protons_number=z_number
-            )
-        )
-        atom_workspaces.append(self._create_workspace(atom_name=output_atom_label, s_points=np.copy(s_atom_data), protons_number=z_number))
+                species=species,
+                s_points=np.copy(total_s_atom_data),
+                label=output_atom_label + "_total",
+            ),
+            self._create_workspace(species=species, s_points=np.copy(s_atom_data), label=output_atom_label),
+        ]
+
         return atom_workspaces
 
     def _atom_type_s(
         self,
-        num_atoms=None,
-        mass=None,
-        s_data=None,
-        atoms_data=None,
-        element_symbol=None,
-        temp_s_atom_data=None,
-        s_atom_data=None,
-        substitution=None,
+        *,
+        spectra: Spectrum1DCollection | Spectrum2DCollection,
+        mass: float,
+        element_symbol: str,
+        s_atom_data: np.ndarray,
     ):
         """
         Helper function for calculating S for the given type of atom
 
-        :param num_atoms: number of atoms in the system
-        :param s_data: Precalculated S for all atoms and quantum orders
-        :type s_data: abins.SData
-        :param atoms_data: Atomic position/mass data
-        :type atoms_data: abins.AtomsData
+        :spectra: collection of simulated intensity contributions
+        :param mass: mass for the type of atom
         :param element_symbol: label for the type of atom
-        :param temp_s_atom_data: helper array to accumulate S (inner loop over quantum order); does not transport
-            information but is used in-place to save on time instantiating large arrays.
         :param s_atom_data: helper array to accumulate S (outer loop over atoms); does not transport
             information but is used in-place to save on time instantiating large arrays.
-        :param substitution: True if isotope substitution and False otherwise
         """
-        from abins.constants import MASS_EPS
-
         atom_workspaces = []
         s_atom_data.fill(0.0)
 
-        element = Atom(symbol=element_symbol)
+        species = AtomInfo(symbol=element_symbol, mass=mass)
 
-        for atom_index in range(num_atoms):
-            if atoms_data[atom_index]["symbol"] == element_symbol and abs(atoms_data[atom_index]["mass"] - mass) < MASS_EPS:
-                temp_s_atom_data.fill(0.0)
+        spectrum_collection_constructor = spectra.from_spectra
 
-                for order in range(1, self._max_event_order + 1):
-                    order_indx = order - 1
-                    temp_s_order = s_data[atom_index]["order_%s" % order]
-                    temp_s_atom_data[order_indx] = temp_s_order
+        filters = [
+            lambda spectrum: spectrum.metadata["symbol"] == element_symbol,
+            lambda spectrum: (spectrum.metadata["quantum_order"] is None) or (spectrum.metadata["quantum_order"] <= self._max_event_order),
+        ]
+        if mass is not None:
+            filters.append(lambda spectrum: abs(float(spectrum.metadata["mass"]) - mass) < MASS_EPS)
 
-                s_atom_data += temp_s_atom_data  # sum S over the atoms of the same type
+        for key in filters:
+            spectra = filter(key, spectra)
 
-        total_s_atom_data = np.sum(s_atom_data, axis=0)
+        spectra = spectrum_collection_constructor(list(spectra))
+        order_spectra = spectra.group_by("quantum_order")
 
-        nucleons_number = int(round(mass))
+        for order_spectrum in order_spectra:
+            s_atom_data[order_spectrum.metadata["quantum_order"] - 1] = self.get_s(order_spectrum).to("barn / (1/cm)").magnitude
 
-        if substitution:
-            atom_workspaces.append(
-                self._create_workspace(
-                    atom_name=str(nucleons_number) + element_symbol,
-                    s_points=np.copy(total_s_atom_data),
-                    optional_name="_total",
-                    protons_number=element.z_number,
-                    nucleons_number=nucleons_number,
-                )
+        total_s_atom_data = self.get_s(spectra.sum()).to("barn / (1/cm)").magnitude
+
+        atom_workspaces.append(
+            self._create_workspace(
+                species=species,
+                s_points=np.copy(total_s_atom_data),
+                label=f"{species.name}_total",
             )
-            atom_workspaces.append(
-                self._create_workspace(
-                    atom_name=str(nucleons_number) + element_symbol,
-                    s_points=np.copy(s_atom_data),
-                    protons_number=element.z_number,
-                    nucleons_number=nucleons_number,
-                )
+        )
+
+        atom_workspaces.append(
+            self._create_workspace(
+                species=species,
+                s_points=np.copy(s_atom_data),
             )
-        else:
-            atom_workspaces.append(
-                self._create_workspace(
-                    atom_name=element_symbol, s_points=np.copy(total_s_atom_data), optional_name="_total", protons_number=element.z_number
-                )
-            )
-            atom_workspaces.append(
-                self._create_workspace(atom_name=element_symbol, s_points=np.copy(s_atom_data), protons_number=element.z_number)
-            )
+        )
 
         return atom_workspaces
 
@@ -584,8 +626,6 @@ class AbinsAlgorithm:
         :param partial_workspaces: list of workspaces which should be summed up to obtain total workspace
         :returns: workspace with total S from partial_workspaces
         """
-        from abins.constants import ONE_DIMENSIONAL_INSTRUMENTS, TWO_DIMENSIONAL_INSTRUMENTS
-
         total_workspace = self._out_ws_name + "_total"
 
         if isinstance(mtd[partial_workspaces[0]], WorkspaceGroup):
@@ -616,7 +656,7 @@ class AbinsAlgorithm:
                         s_atoms[:, i] += mtd[partial_ws].dataY(i)
 
             # create workspace with S
-            self._fill_s_workspace(s_atoms, total_workspace)
+            self._fill_s_workspace(s_points=s_atoms, workspace=total_workspace)
 
         # # Otherwise just repackage the workspace we have as the total
         else:
@@ -642,26 +682,20 @@ class AbinsAlgorithm:
             )
 
     @staticmethod
-    def get_cross_section(scattering: str = "Total", nucleons_number: Optional[int] = None, *, protons_number: int) -> float:
+    def get_cross_section(scattering: Literal["Total", "Incoherent", "Coherent"], species: AtomInfo) -> float:
         """
         Calculates cross section for the given element.
         :param scattering: Type of cross-section: 'Incoherent', 'Coherent' or 'Total'
-        :param protons_number: number of protons in the given type fo atom
-        :param nucleons_number: number of nucleons in the given type of atom
+        :param species: Data for atom/isotope type
         :returns: cross section for that element
         """
-        if nucleons_number is not None:
-            try:
-                atom = Atom(a_number=nucleons_number, z_number=protons_number)
-            # isotopes are not implemented for all elements so use different constructor in that cases
-            except RuntimeError:
-                logger.warning(f"Could not find data for isotope {nucleons_number}, " f"using default values for {protons_number} protons.")
-                atom = Atom(z_number=protons_number)
-        else:
-            atom = Atom(z_number=protons_number)
-
         scattering_keys = {"Incoherent": "inc_scatt_xs", "Coherent": "coh_scatt_xs", "Total": "tot_scatt_xs"}
-        return atom.neutron()[scattering_keys[scattering]]
+        cross_section = species.neutron_data[scattering_keys[scattering]]
+
+        if isnan(cross_section):
+            raise ValueError(f"Found NaN cross-section for {species.symbol} with {species.nucleons_number} nucleons.")
+
+        return cross_section
 
     @staticmethod
     def set_workspace_units(wrk, layout="1D", energy_units="cm-1"):
@@ -714,7 +748,7 @@ class AbinsAlgorithm:
         # check  extension of a file
         found_filename_ext = os.path.splitext(filename_full_path)[1]
         if found_filename_ext.lower() != expected_file_extension:
-            comment = "{}Output from ab initio program {} is expected." " The expected extension of file is {}. Found: {}. {}".format(
+            comment = "{}Output from ab initio program {} is expected. The expected extension of file is {}. Found: {}. {}".format(
                 msg_err, ab_initio_program, expected_file_extension, found_filename_ext, msg_rename
             )
             return dict(Invalid=True, Comment=comment)
@@ -808,27 +842,45 @@ class AbinsAlgorithm:
 
         if (suffix := path.suffix) == ".castep_bin":
             # Assume any .castep_bin file is valid choice
-            pass
+            return dict(Invalid=False, Comment="")
 
-        elif suffix == ".yaml":
-            # Check .yaml files have expected keys for Phonopy force constants
-            with open(filename_full_path, "r") as yaml_file:
-                phonon_data = yaml.load(yaml_file, Loader=SafeLoader)
+        if suffix not in (".yaml", ".yml"):
+            return dict(Invalid=True, Comment="Invalid extension: FORCECONSTANTS requires .castep_bin, .yaml or .yml")
 
-            if {"phonopy", "force_constants"}.issubset(phonon_data):
-                pass
+        # Check .yaml files have expected keys for Phonopy force constants
+        with open(filename_full_path, "r") as yaml_file:
+            phonon_data = yaml.load(yaml_file, Loader=SafeLoader)
 
-            elif "phonopy" in phonon_data:
-                # Phonon file without force constants included: they could be in
-                # a FORCE_CONSTANTS or force_constants.hdf5 file so check if one exists
-                fc_filenames = ("FORCE_CONSTANTS", "force_constants.hdf5")
-                if not any(map(lambda fc_filename: (path.parent / fc_filename).is_file(), fc_filenames)):
-                    return dict(
-                        Invalid=True,
-                        Comment=f"Could not find force constants in {filename_full_path}, or find data file {' or '.join(fc_filenames)}",
-                    )
+        if {"phonopy", "force_constants"}.issubset(phonon_data):
+            # Force constants are in the yaml file: good
+            return dict(Invalid=False, Comment="")
 
-        # Did not return already: No problems found
+        if "phonopy" not in phonon_data:
+            # Not a Phonopy file: can't use this
+            return dict(Invalid=True, Comment=f"No 'phonopy' section found in {filename_full_path}")
+
+        # Phonopy file without force constants: they must be in another file
+
+        # Check if following janus conventions:
+        # /parent/seedname-phonopy.yml -> /parent/seedname-force_constants.hdf5
+        janus_phonopy_re = "(?P<seedname>.+)-phonopy.yml"
+        fc_filenames = ("FORCE_CONSTANTS", "force_constants.hdf5")
+        if re_match := re.match(janus_phonopy_re, path.name):
+            fc_file = path.parent / f"{re_match['seedname']}-force_constants.hdf5"
+            if not fc_file.is_file():
+                return dict(
+                    Invalid=True,
+                    Comment=f"Could not find force constants in {filename_full_path}, or find data file {fc_file}",
+                )
+
+        # Otherwise FC could be in a FORCE_CONSTANTS or force_constants.hdf5 file
+        elif not any(map(lambda fc_filename: (path.parent / fc_filename).is_file(), fc_filenames)):
+            return dict(
+                Invalid=True,
+                Comment=f"Could not find force constants in {filename_full_path}, or find data file {' or '.join(fc_filenames)}",
+            )
+
+        # Phonopy YAML with available force constants
         return dict(Invalid=False, Comment="")
 
     @classmethod
@@ -862,6 +914,23 @@ class AbinsAlgorithm:
                     "Invalid filename {}. Expected OUTCAR, *.OUTCAR or"
                     " *.xml for VASP calculation output. Please rename your file and try again. ".format(filename_full_path)
                 )
+        return output
+
+    @classmethod
+    def _validate_molden_input_file(cls, filename_full_path: str) -> dict:
+        logger.information("Validate .mol file with vibrational or phonon data.")
+        output = cls._validate_ab_initio_file_extension(
+            ab_initio_program="Molden", filename_full_path=filename_full_path, expected_file_extension=".mol"
+        )
+        if output["Invalid"]:
+            output["Comment"] = ".mol extension is expected for a Molden file"
+        else:
+            with open(filename_full_path) as fd:
+                first_line = fd.readline()
+            if first_line.strip() != "[Molden Format]":
+                output["Invalid"] = True
+                output["Comment"] = ".mol file does not have expected header"
+
         return output
 
     @staticmethod
@@ -962,7 +1031,7 @@ class AbinsAlgorithm:
         Checks threshold for frequencies.
         :param message_end: closing part of the error message.
         """
-        from abins.parameters import sampling
+        sampling = abins.parameters.sampling
 
         freq_threshold = sampling["frequencies_threshold"]
         if not (isinstance(freq_threshold, float) and freq_threshold >= 0.0):
@@ -993,12 +1062,51 @@ class AbinsAlgorithm:
         Checks number of threads
         :param message_end: closing part of the error message.
         """
-        try:
-            import pathos.multiprocessing as mp
+        threads = abins.parameters.performance["threads"]
+        if threads is None:
+            return  # Pool() will set a sensible default
+        if not (1 <= threads <= multiprocessing.cpu_count()):
+            raise RuntimeError("Invalid number of threads for parallelisation over atoms" + message_end)
 
-            threads = abins.parameters.performance["threads"]
-            if not (isinstance(threads, int) and 1 <= threads <= mp.cpu_count()):
-                raise RuntimeError("Invalid number of threads for parallelisation over atoms" + message_end)
 
-        except ImportError:
-            pass
+def validate_e_init(*, e_init: str, energy_units: str, instrument_name: str) -> dict[str, str]:
+    """Validator for direct-geometry incident energy parameters
+
+    Check that algorithm inputs specify a valid energy for the given instrument
+    and return appropriate issues dict for .validateInputs() method.
+
+    Note that parameters are strings; this is the form they are received from
+    algorithm parameters.
+
+    Args:
+        e_init: IncidentEnergy for Abins2D
+        energy_units: 'meV' or 'cm-1'
+        instrument_name:
+            A valid Abins2D instrument. This must be validated elsewhere,
+            with a corresponding entry in abins.parameters.instruments.
+    """
+
+    issues = {}
+
+    if not isinstance(float(e_init), numbers.Real):
+        issues["IncidentEnergy"] = "Incident energy must be a real number"
+        return issues
+
+    if "max_wavenumber" in abins.parameters.instruments[instrument_name]:
+        max_energy = abins.parameters.instruments[instrument_name]["max_wavenumber"]
+    else:
+        max_energy = abins.parameters.sampling["max_wavenumber"]
+
+    match energy_units:
+        case "meV":
+            max_energy = max_energy / MILLI_EV_TO_WAVENUMBER
+        case "cm-1":
+            max_energy = max_energy
+        case _:
+            issues["EnergyUnits"] = f"Invalid energy unit: {energy_units}"
+            return issues
+
+    if float(e_init) > max_energy:
+        issues["IncidentEnergy"] = f"Incident energy cannot be greater than {max_energy:.3f} {energy_units} for this instrument."
+
+    return issues

@@ -4,12 +4,14 @@
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
-import io
+from pathlib import Path
+
 import numpy as np
 
 from .textparser import TextParser
 from .abinitioloader import AbInitioLoader
 from abins.constants import CRYSTAL, FLOAT_TYPE
+from abins.abinsdata import AbinsData
 from mantid.kernel import Atom, logger
 
 
@@ -19,11 +21,11 @@ class CRYSTALLoader(AbInitioLoader):
     contributing to this module.
     """
 
-    def __init__(self, input_ab_initio_filename=None):
+    def __init__(self, input_ab_initio_filename=None, cache_directory: Path | None = None):
         """
         :param input_ab_initio_filename: name of a file with vibrational or phonon data (foo.out)
         """
-        super().__init__(input_ab_initio_filename=input_ab_initio_filename)
+        super().__init__(input_ab_initio_filename=input_ab_initio_filename, cache_directory=cache_directory)
 
         self._num_k = None
         self._num_modes = None
@@ -39,11 +41,10 @@ class CRYSTALLoader(AbInitioLoader):
     def _ab_initio_program(self) -> str:
         return "CRYSTAL"
 
-    def read_vibrational_or_phonon_data(self):
+    @AbInitioLoader.abinsdata_saver
+    def read_vibrational_or_phonon_data(self) -> AbinsData:
         """
-        Reads vibrational or phonon data from CRYSTAL output files. Saves frequencies, weights of k-point vectors,
-        k-point vectors, amplitudes of atomic displacements, hash of the vibrational or phonon data file (hash) to
-        <>.hdf5.
+        Read vibrational or phonon data from CRYSTAL output files.
         :return  object of type AbinsData.
         """
 
@@ -55,7 +56,7 @@ class CRYSTALLoader(AbInitioLoader):
 
         # read data from output CRYSTAL file
         filename = self._clerk.get_input_filename()
-        with io.open(filename, "rb") as crystal_file:
+        with open(filename, "rb") as crystal_file:
             logger.notice("Reading from " + filename)
 
             if system is CRYSTAL:
@@ -81,10 +82,6 @@ class CRYSTALLoader(AbInitioLoader):
             unit_cell=lattice_vectors,
         )
 
-        # save data to hdf file
-        self.save_ab_initio_data(data=data)
-
-        # return AbinsData object
         return self._rearrange_data(data=data)
 
     def _determine_system(self):
@@ -92,7 +89,7 @@ class CRYSTALLoader(AbInitioLoader):
         Determines whether the system is a molecule or a crystal.
         :returns: True if calculation for molecule otherwise False
         """
-        with io.open(self._clerk.get_input_filename(), "rb") as crystal_file:
+        with open(self._clerk.get_input_filename(), "rb") as crystal_file:
             lines = crystal_file.read()
 
         if b"MOLECULAR CALCULATION" in lines or b"0D - MOLECULE" in lines:
@@ -115,7 +112,7 @@ class CRYSTALLoader(AbInitioLoader):
         transformation matrix to primitive unit cell from super cell.
         :returns: True if many k-points included in calculations otherwise False
         """
-        with io.open(self._clerk.get_input_filename(), "rb") as crystal_file:
+        with open(self._clerk.get_input_filename(), "rb") as crystal_file:
             lines = crystal_file.read()
 
         phonon_dispersion = lines.count(b"DISPERSION K ") > 1
@@ -123,7 +120,7 @@ class CRYSTALLoader(AbInitioLoader):
         if phonon_dispersion:
             # In case there is more than one k-point super-cell is constructed. In order to obtain metric tensor we
             # need to find expansion transformation.
-            with io.open(self._clerk.get_input_filename(), "rb") as crystal_file:
+            with open(self._clerk.get_input_filename(), "rb") as crystal_file:
                 self._parser.find_first(file_obj=crystal_file, msg="EXPANSION MATRIX OF PRIMITIVE CELL")
                 dim = 3
                 vectors = []

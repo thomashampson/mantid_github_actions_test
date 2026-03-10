@@ -7,11 +7,10 @@
 #pragma once
 
 #include "MantidAPI/DllConfig.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <string>
 #include <vector>
-
-#include <nexus/NeXusFile.hpp>
 
 namespace Mantid {
 namespace API {
@@ -22,7 +21,7 @@ public:
    * This constructor will load the data from the given file using the given
    * group as the NeXus Group in which the NXCite is contained.
    */
-  Citation(::NeXus::File *file, const std::string &group);
+  Citation(Nexus::File *file, const std::string &group);
 
   /**
    * There are some strict parameters that the function arguments must adhere
@@ -57,10 +56,10 @@ public:
   const std::string &bibtex() const;
   const std::string &endnote() const;
 
-  void saveNexus(::NeXus::File *file, const std::string &group);
+  void saveNexus(Nexus::File *file, const std::string &group);
 
 private:
-  void loadNexus(::NeXus::File *file, const std::string &group);
+  void loadNexus(Nexus::File *file, const std::string &group);
 
   std::string m_doi;
   std::string m_bibtex;

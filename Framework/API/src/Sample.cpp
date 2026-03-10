@@ -12,8 +12,7 @@
 #include "MantidGeometry/Objects/ShapeFactory.h"
 #include "MantidKernel/Material.h"
 #include "MantidKernel/Strings.h"
-
-#include <nexus/NeXusException.hpp>
+#include "MantidNexus/NexusException.h"
 #include <utility>
 
 namespace Mantid::API {
@@ -114,10 +113,10 @@ const IObject_sptr Sample::getShapePtr() const { return m_shape; }
  * @param shape :: The object describing the shape
  */
 void Sample::setShape(const IObject_sptr &shape) {
-  if (shape) {
-    m_shape = shape;
-  } else {
+  if (!shape) {
     m_shape = ShapeFactory().createShape("");
+  } else if (shape != m_shape) {
+    m_shape = shape; // share ownership safely
   }
 }
 
@@ -283,7 +282,7 @@ void Sample::addSample(const std::shared_ptr<Sample> &childSample) { m_samples.e
  * @param file :: open NeXus file
  * @param group :: name of the group to create
  */
-void Sample::saveNexus(::NeXus::File *file, const std::string &group) const {
+void Sample::saveNexus(Nexus::File *file, const std::string &group) const {
   file->makeGroup(group, "NXsample", true);
   file->putAttr("name", m_name);
   if (m_name.empty()) {
@@ -324,22 +323,22 @@ void Sample::saveNexus(::NeXus::File *file, const std::string &group) const {
  * @param group :: name of the group to open
  * @return the version tag of the sample group
  */
-int Sample::loadNexus(::NeXus::File *file, const std::string &group) {
+int Sample::loadNexus(Nexus::File *file, const std::string &group) {
   file->openGroup(group, "NXsample");
 
   // Version 0 = saveNexusProcessed before Sep 8, 2011
   int version = 0;
-  try {
+  if (file->hasAttr("version")) {
     file->getAttr("version", version);
-  } catch (::NeXus::Exception &) {
+  } else {
     version = 0;
   }
 
   if (version == 0) {
     // Sample NAME field may/may not be present
-    try {
+    if (file->hasData("name")) {
       file->readData("name", m_name);
-    } catch (::NeXus::Exception &) {
+    } else {
       m_name = "";
     }
   }
@@ -361,7 +360,7 @@ int Sample::loadNexus(::NeXus::File *file, const std::string &group) {
     shape_xml = Strings::strip(shape_xml);
     if (!shape_xml.empty()) {
       ShapeFactory shapeMaker;
-      m_shape = shapeMaker.createShape(shape_xml, false /*Don't wrap with <type> tag*/);
+      m_shape = shapeMaker.createShape(std::move(shape_xml), false /*Don't wrap with <type> tag*/);
     }
     Kernel::Material material;
     material.loadNexus(file, "material");

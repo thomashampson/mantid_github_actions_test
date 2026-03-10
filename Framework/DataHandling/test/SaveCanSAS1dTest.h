@@ -22,10 +22,9 @@
 #include <Poco/DOM/Node.h>
 #include <Poco/DOM/NodeFilter.h>
 #include <Poco/DOM/NodeIterator.h>
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <Poco/SAX/InputSource.h>
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -100,8 +99,8 @@ public:
   }
 
   void tearDown() override {
-    if (Poco::File(m_filename).exists())
-      Poco::File(m_filename).remove();
+    if (std::filesystem::exists(m_filename))
+      std::filesystem::remove(m_filename);
   }
 
   void testCanSAS1dXML() {
@@ -159,9 +158,9 @@ public:
 
     std::getline(testFile, fileLine);
     std::string idataline = "\t\t\t<Idata><Q unit=\"1/A\">3543.75</Q><I "
-                            "unit=\"Counts\">111430</I><Idev "
+                            "unit=\"Counts\">111430.0</I><Idev "
                             "unit=\"Counts\">333.811</Idev><Qdev "
-                            "unit=\"1/A\">0</Qdev></Idata>";
+                            "unit=\"1/A\">0.0</Qdev></Idata>";
     TS_ASSERT_EQUALS(fileLine, idataline);
 
     testFile.close();
@@ -170,8 +169,8 @@ public:
     doTestProcessNote();
 
     // no more tests on the file are possible after this
-    if (Poco::File(m_filename).exists())
-      Poco::File(m_filename).remove();
+    if (std::filesystem::exists(m_filename))
+      std::filesystem::remove(m_filename);
   }
 
   void testGroup() {

@@ -11,9 +11,8 @@
 #include "MantidAPI/FileFinder.h"
 #include "MantidAPI/Run.h"
 #include "MantidAPI/Sample.h"
+#include "MantidNexus/NexusFile.h"
 #include <cxxtest/TestSuite.h>
-
-#include <nexus/NeXusFile.hpp>
 
 using Mantid::API::FileBackedExperimentInfo;
 
@@ -28,13 +27,13 @@ public:
     using Mantid::API::ExperimentInfo;
     using Mantid::API::FileFinder;
     // Cache in-memory experiment info for comparison
-    m_filename = FileFinder::Instance().getFullPath("HRP38692a.nxs");
+    m_filename = FileFinder::Instance().getFullPath("HRP38692a.nxs").string();
     if (m_filename.empty()) {
       throw std::runtime_error("Cannot find test file HRP38692a.nxs");
     }
 
     m_inMemoryExptInfo = std::make_shared<ExperimentInfo>();
-    ::NeXus::File nxFile(m_filename, NXACC_READ);
+    Mantid::Nexus::File nxFile(m_filename, NXaccess::READ);
     nxFile.openGroup("mantid_workspace_1", "NXentry");
     std::string paramString;
     m_inMemoryExptInfo->loadExperimentInfoNexus(m_filename, &nxFile, paramString);

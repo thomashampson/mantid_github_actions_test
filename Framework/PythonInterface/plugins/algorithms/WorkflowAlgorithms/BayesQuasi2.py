@@ -8,7 +8,6 @@
 
 from mantid.api import AlgorithmFactory, MatrixWorkspaceProperty, PropertyMode, Progress
 from mantid.kernel import StringListValidator, Direction
-from mantid.utils.pip import package_installed
 from mantid import logger
 from IndirectCommon import get_two_theta_and_q
 
@@ -68,8 +67,8 @@ class BayesQuasi2(QuickBayesTemplate):
             y += list(fit) + list(diff_fit)
             x += list(x_data) + list(x_data)
             errors += list(e) + list(diff_e)
-            axis_names.append(f"fit {j+1}")
-            axis_names.append(f"diff {j+1}")
+            axis_names.append(f"fit {j + 1}")
+            axis_names.append(f"diff {j + 1}")
         ws = self.create_ws(
             OutputWorkspace=name,
             DataX=np.array(x),
@@ -169,6 +168,7 @@ class BayesQuasi2(QuickBayesTemplate):
         # calculation
         for spec in range(N):
             report_progress.report(f"spectrum {spec}")
+            self.log().notice(f"Fitting spectrum {spec + 1} of {N}")
             sx = sample_ws.readX(spec)
             sy = sample_ws.readY(spec)
             se = sample_ws.readE(spec)
@@ -207,7 +207,7 @@ class BayesQuasi2(QuickBayesTemplate):
 
     # Cannot make static as it prevents it being mocked later
     def QLData(self):
-        from quickBayes.workflow.QlData import QLData
+        from quickBayes.workflow.model_selection.QlData import QLData
 
         return QLData
 
@@ -222,7 +222,7 @@ class BayesQuasi2(QuickBayesTemplate):
         return QSEFunction
 
     def QlStretchedExp(self):
-        from quickBayes.workflow.QSE import QlStretchedExp
+        from quickBayes.workflow.model_selection.QSE import QlStretchedExp
 
         return QlStretchedExp
 
@@ -232,9 +232,6 @@ class BayesQuasi2(QuickBayesTemplate):
         return get_background_function(bg_str)
 
     def PyExec(self):
-        if not package_installed("quickBayes", show_warning=True):
-            raise RuntimeError("Please install 'quickBayes' missing dependency")
-
         self.log().information("BayesQuasi input")
         program = self.getPropertyValue("Program")
 

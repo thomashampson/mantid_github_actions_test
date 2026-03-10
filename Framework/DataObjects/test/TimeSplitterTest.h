@@ -903,4 +903,73 @@ public:
     TS_ASSERT_EQUALS(splitter3.getNameTargetMap(), splitter1.getNameTargetMap())
     TS_ASSERT_EQUALS(splitter3.getTargetNameMap(), splitter1.getTargetNameMap())
   }
+
+  void test_calculate_target_indices() {
+    TimeSplitter splitter;
+    splitter.addROI(ONE, TWO, 1);
+    splitter.addROI(TWO, THREE, 2);
+    splitter.addROI(FOUR, FIVE, 3); // a gap with the previous ROI
+
+    std::vector<DateAndTime> times{ONE - 100.0,  ONE + 100.0,  TWO + 100.0, THREE + 100.0,
+                                   FOUR - 100.0, FOUR + 100.0, FIVE + 100.0};
+    const auto target_to_pulse_indices = splitter.calculate_target_indices(times);
+    TS_ASSERT_EQUALS(target_to_pulse_indices.size(), 3);
+
+    {
+      auto [target, pulse_indices] = target_to_pulse_indices.at(0);
+      TS_ASSERT_EQUALS(target, 1);
+      auto [start, stop] = pulse_indices;
+      TS_ASSERT_EQUALS(start, 1);
+      TS_ASSERT_EQUALS(stop, 2);
+    }
+    {
+      auto [target, pulse_indices] = target_to_pulse_indices.at(1);
+      TS_ASSERT_EQUALS(target, 2);
+      auto [start, stop] = pulse_indices;
+      TS_ASSERT_EQUALS(start, 2);
+      TS_ASSERT_EQUALS(stop, 3);
+    }
+    {
+      auto [target, pulse_indices] = target_to_pulse_indices.at(2);
+      TS_ASSERT_EQUALS(target, 3);
+      auto [start, stop] = pulse_indices;
+      TS_ASSERT_EQUALS(start, 5);
+      TS_ASSERT_EQUALS(stop, 6);
+    }
+  }
+
+  void test_combinedTimeROI() {
+    TimeSplitter splitter;
+    splitter.addROI(TWO, THREE, 0);
+    splitter.addROI(FOUR, FIVE, 1);
+    splitter.addROI(FIVE, SIX, 2);
+    TS_ASSERT_EQUALS(splitter.numRawValues(), 5);
+
+    {
+      // offset = 0
+      const auto roi = splitter.combinedTimeROI();
+      TS_ASSERT_EQUALS(roi.numberOfRegions(), 2);
+
+      // the second and third ROIs should be merged
+      auto times = roi.getAllTimes();
+      TS_ASSERT_EQUALS(times.size(), 4);
+      TS_ASSERT_EQUALS(times[0], TWO);
+      TS_ASSERT_EQUALS(times[1], THREE);
+      TS_ASSERT_EQUALS(times[2], FOUR);
+      TS_ASSERT_EQUALS(times[3], SIX);
+    }
+
+    {
+      // offset = 1 hour, all merged
+      int64_t offset_ns = int64_t(1000000000) * 60 * 60; // 1 hour in nanoseconds
+      const auto roi = splitter.combinedTimeROI(offset_ns);
+      TS_ASSERT_EQUALS(roi.numberOfRegions(), 1);
+
+      // all ROIs merged into one
+      auto times = roi.getAllTimes();
+      TS_ASSERT_EQUALS(times.size(), 2);
+      TS_ASSERT_EQUALS(times[0], ONE);
+      TS_ASSERT_EQUALS(times[1], SIX);
+    }
+  }
 };

@@ -1,6 +1,8 @@
 set(SRC_FILES
     src/ADSValidator.cpp
+    src/AlgoTimeRegister.cpp
     src/Algorithm.cpp
+    src/AlgorithmExecuteProfile.cpp
     src/AlgorithmFactory.cpp
     src/AlgorithmFactoryObserver.cpp
     src/AlgorithmHasProperty.cpp
@@ -60,6 +62,8 @@ set(SRC_FILES
     src/HistogramValidator.cpp
     src/HistoryItem.cpp
     src/HistoryView.cpp
+    src/IBackgroundFunction.cpp
+    src/ICatalogInfoService.cpp
     src/IDomainCreator.cpp
     src/IEventList.cpp
     src/IEventWorkspace.cpp
@@ -81,6 +85,7 @@ set(SRC_FILES
     src/IPeaksWorkspace.cpp
     src/IPowderDiffPeakFunction.cpp
     src/ISISInstrumentDataCache.cpp
+    src/ISISRunLogs.cpp
     src/ISpectrum.cpp
     src/ITableWorkspace.cpp
     src/ImmutableCompositeFunction.cpp
@@ -117,10 +122,12 @@ set(SRC_FILES
     src/NumericAxis.cpp
     src/NumericAxisValidator.cpp
     src/OrientedLatticeValidator.cpp
+    src/PanelsSurfaceCalculator.cpp
     src/ParamFunction.cpp
     src/ParameterReference.cpp
     src/ParameterTie.cpp
     src/PeakFunctionIntegrator.cpp
+    src/PolSANSWorkspaceValidator.cpp
     src/PreviewManager.cpp
     src/Progress.cpp
     src/Projection.cpp
@@ -143,6 +150,9 @@ set(SRC_FILES
     src/SpectrumDetectorMapping.cpp
     src/SpectrumInfo.cpp
     src/TableRow.cpp
+    src/TimeAtSampleStrategyDirect.cpp
+    src/TimeAtSampleStrategyElastic.cpp
+    src/TimeAtSampleStrategyIndirect.cpp
     src/TextAxis.cpp
     src/TransformScaleFactory.cpp
     src/Workspace.cpp
@@ -161,7 +171,7 @@ set(SRC_FILES
 set(INC_FILES
     inc/MantidAPI/ADSValidator.h
     inc/MantidAPI/Algorithm.h
-    inc/MantidAPI/Algorithm.tcc
+    inc/MantidAPI/Algorithm.hxx
     inc/MantidAPI/AlgorithmFactory.h
     inc/MantidAPI/AlgorithmFactoryObserver.h
     inc/MantidAPI/AlgorithmHasProperty.h
@@ -226,8 +236,8 @@ set(INC_FILES
     inc/MantidAPI/HistoryItem.h
     inc/MantidAPI/HistoryView.h
     inc/MantidAPI/IAlgorithm.h
-    inc/MantidAPI/IAlgorithm_fwd.h
     inc/MantidAPI/IAlgorithmRuntimeProps.h
+    inc/MantidAPI/IAlgorithm_fwd.h
     inc/MantidAPI/IArchiveSearch.h
     inc/MantidAPI/IBackgroundFunction.h
     inc/MantidAPI/IBoxControllerIO.h
@@ -264,8 +274,9 @@ set(INC_FILES
     inc/MantidAPI/IPeaksWorkspace.h
     inc/MantidAPI/IPeaksWorkspace_fwd.h
     inc/MantidAPI/IPowderDiffPeakFunction.h
-    inc/MantidAPI/ISISInstrumentDataCache.h
     inc/MantidAPI/IPreview.h
+    inc/MantidAPI/ISISInstrumentDataCache.h
+    inc/MantidAPI/ISISRunLogs.h
     inc/MantidAPI/ISpectrum.h
     inc/MantidAPI/ISplittersWorkspace.h
     inc/MantidAPI/ITableWorkspace.h
@@ -313,10 +324,12 @@ set(INC_FILES
     inc/MantidAPI/NumericAxis.h
     inc/MantidAPI/NumericAxisValidator.h
     inc/MantidAPI/OrientedLatticeValidator.h
+    inc/MantidAPI/PanelsSurfaceCalculator.h
     inc/MantidAPI/ParamFunction.h
     inc/MantidAPI/ParameterReference.h
     inc/MantidAPI/ParameterTie.h
     inc/MantidAPI/PeakFunctionIntegrator.h
+    inc/MantidAPI/PolSANSWorkspaceValidator.h
     inc/MantidAPI/PreviewManager.h
     inc/MantidAPI/Progress.h
     inc/MantidAPI/Projection.h
@@ -344,6 +357,10 @@ set(INC_FILES
     inc/MantidAPI/SpectrumInfoIterator.h
     inc/MantidAPI/TableRow.h
     inc/MantidAPI/TextAxis.h
+    inc/MantidAPI/TimeAtSampleStrategy.h
+    inc/MantidAPI/TimeAtSampleStrategyDirect.h
+    inc/MantidAPI/TimeAtSampleStrategyElastic.h
+    inc/MantidAPI/TimeAtSampleStrategyIndirect.h
     inc/MantidAPI/TransformScaleFactory.h
     inc/MantidAPI/VectorParameter.h
     inc/MantidAPI/VectorParameterParser.h
@@ -357,7 +374,7 @@ set(INC_FILES
     inc/MantidAPI/WorkspaceNearestNeighbours.h
     inc/MantidAPI/WorkspaceOpOverloads.h
     inc/MantidAPI/WorkspaceProperty.h
-    inc/MantidAPI/WorkspaceProperty.tcc
+    inc/MantidAPI/WorkspaceProperty.hxx
     inc/MantidAPI/WorkspacePropertyUtils.h
     inc/MantidAPI/WorkspaceUnitValidator.h
     inc/MantidAPI/Workspace_fwd.h
@@ -365,6 +382,7 @@ set(INC_FILES
 
 set(TEST_FILES
     ADSValidatorTest.h
+    AlgoTimeRegisterTest.h
     AlgorithmFactoryObserverTest.h
     AlgorithmFactoryTest.h
     AlgorithmHasPropertyTest.h
@@ -393,6 +411,7 @@ set(TEST_FILES
     ExpressionTest.h
     FileBackedExperimentInfoTest.h
     FileFinderTest.h
+    FileLoaderRegistryTest.h
     FilePropertyTest.h
     FrameworkManagerTest.h
     FuncMinimizerFactoryTest.h
@@ -409,7 +428,6 @@ set(TEST_FILES
     HistogramValidatorTest.h
     HistoryItemTest.h
     HistoryViewTest.h
-    IEventListTest.h
     IFunction1DSpectrumTest.h
     IFunction1DTest.h
     IFunctionMDTest.h
@@ -445,10 +463,12 @@ set(TEST_FILES
     NumericAxisTest.h
     NumericAxisValidatorTest.h
     OrientedLatticeValidatorTest.h
+    PanelsSurfaceCalculatorTest.h
     ParamFunctionAttributeHolderTest.h
     ParameterReferenceTest.h
     ParameterTieTest.h
     PeakFunctionIntegratorTest.h
+    PolSANSWorkspaceValidatorTest.h
     PreviewManagerTest.h
     ProgressTest.h
     ProjectionTest.h
@@ -467,6 +487,9 @@ set(TEST_FILES
     SpectrumDetectorMappingTest.h
     SpectrumInfoTest.h
     TextAxisTest.h
+    TimeAtSampleStrategyDirectTest.h
+    TimeAtSampleStrategyElasticTest.h
+    TimeAtSampleStrategyIndirectTest.h
     VectorParameterParserTest.h
     VectorParameterTest.h
     WorkspaceFactoryTest.h
@@ -482,15 +505,6 @@ set(TEST_FILES
     WorkspaceUnitValidatorTest.h
 )
 
-option(PROFILE_ALGORITHM_LINUX "Profile algorithm execution on Linux" OFF)
-if(PROFILE_ALGORITHM_LINUX)
-  set(SRC_FILES "${SRC_FILES}" "src/AlgorithmExecuteProfile.cpp" "src/AlgoTimeRegister.cpp")
-  set(INC_FILES "${INC_FILES}" "inc/MantidAPI/AlgoTimeRegister.h")
-  set(TEST_FILES "${TEST_FILES}" "AlgoTimeRegisterTest.h")
-else()
-  set(SRC_FILES "${SRC_FILES}" "src/AlgorithmExecute.cpp")
-endif()
-
 set(GMOCK_TEST_FILES ImplicitFunctionFactoryTest.h ImplicitFunctionParameterParserFactoryTest.h MatrixWorkspaceTest.h)
 
 if(COVERAGE)
@@ -505,11 +519,20 @@ if(WIN32)
   set(BCRYPT bcrypt)
 endif()
 
-# Add a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidAPI/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(API ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::API ALIAS API)
+
+# Add a precompiled header where they are supported
+target_precompile_headers(
+  API
+  PRIVATE
+  <MantidGeometry/IComponent.h>
+  <MantidGeometry/IDetector.h>
+  <MantidGeometry/Instrument.h>
+  <boost/variant.hpp>
+  <Poco/DOM/DOMParser.h>
+)
 
 target_include_directories(
   API PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>
@@ -528,13 +551,7 @@ set_property(TARGET API PROPERTY FOLDER "MantidFramework")
 
 target_link_libraries(
   API
-  PUBLIC Mantid::HistogramData
-         Mantid::Types
-         Mantid::Kernel
-         Mantid::Geometry
-         Mantid::Indexing
-         Mantid::Parallel
-         Nexus::nexus
+  PUBLIC Mantid::HistogramData Mantid::Types Mantid::Kernel Mantid::Geometry Mantid::Indexing Mantid::Nexus
   PRIVATE ${WINSOCK} ${BCRYPT} Mantid::Beamline Mantid::Json
 )
 

@@ -12,6 +12,7 @@
 #include <boost/lexical_cast.hpp>
 #include <memory>
 #endif
+#include <algorithm>
 #include <map>
 #include <set>
 #include <unordered_set>
@@ -112,6 +113,8 @@ protected:
     if (m_allowedValues.end() != std::find(m_allowedValues.begin(), m_allowedValues.end(), value)) {
       return "";
     } else {
+      // For a generic type, isEmpty always returns false, but if TYPE is std::string,
+      // then the string version of isEmpty will be used, which could be true or false.
       if (isEmpty(value))
         return "Select a value";
       if (isAlias(value))

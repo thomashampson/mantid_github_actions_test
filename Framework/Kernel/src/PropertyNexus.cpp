@@ -5,27 +5,22 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidKernel/PropertyNexus.h"
-
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
-
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/DateAndTime.h"
 #include "MantidKernel/Property.h"
 #include "MantidKernel/PropertyWithValue.h"
 #include "MantidKernel/TimeSeriesProperty.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 // PropertyWithValue implementation
-#include "MantidKernel/PropertyWithValue.tcc"
+#include "MantidKernel/PropertyWithValue.hxx"
 
 #include <boost/algorithm/string/split.hpp>
 
 #include <memory>
 
 using namespace Mantid::Kernel;
-using namespace ::NeXus;
 
 #ifdef _WIN32
 #pragma warning(push)
@@ -44,7 +39,7 @@ namespace {
  * @return Property *
  */
 template <typename NumT>
-std::unique_ptr<Property> makeProperty(::NeXus::File *file, const std::string &name,
+std::unique_ptr<Property> makeProperty(Nexus::File *file, const std::string &name,
                                        const std::vector<Types::Core::DateAndTime> &times) {
   std::vector<NumT> values;
   file->getData(values);
@@ -68,7 +63,7 @@ std::unique_ptr<Property> makeProperty(::NeXus::File *file, const std::string &n
  * @param times :: vector of times, empty = single property with value
  * @return Property *
  */
-std::unique_ptr<Property> makeTimeSeriesBoolProperty(::NeXus::File *file, const std::string &name,
+std::unique_ptr<Property> makeTimeSeriesBoolProperty(Nexus::File *file, const std::string &name,
                                                      const std::vector<Types::Core::DateAndTime> &times) {
   std::vector<uint8_t> savedValues;
   file->getData(savedValues);
@@ -83,7 +78,7 @@ std::unique_ptr<Property> makeTimeSeriesBoolProperty(::NeXus::File *file, const 
 }
 
 /** Make a string/vector\<string\> property */
-std::unique_ptr<Property> makeStringProperty(::NeXus::File *file, const std::string &name,
+std::unique_ptr<Property> makeStringProperty(Nexus::File *file, const std::string &name,
                                              const std::vector<Types::Core::DateAndTime> &times) {
   if (times.empty()) {
     std::string bigString = file->getStrData();
@@ -108,13 +103,13 @@ std::unique_ptr<Property> makeStringProperty(::NeXus::File *file, const std::str
 /**
  * Common function to populate "time" and "start" entries from NeXus file
  */
-void getTimeAndStart(::NeXus::File *file, std::vector<double> &timeSec, std::string &startStr) {
+void getTimeAndStart(Nexus::File *file, std::vector<double> &timeSec, std::string &startStr) {
   file->openData("time");
   file->getData(timeSec);
   // Optionally get a start
   try {
     file->getAttr("start", startStr);
-  } catch (::NeXus::Exception &) {
+  } catch (Nexus::Exception const &) {
   }
   file->closeData();
 }
@@ -128,7 +123,7 @@ void getTimeAndStart(::NeXus::File *file, std::vector<double> &timeSec, std::str
  * @param unitsStr  out
  * @return std::unique_ptr<Property>
  */
-std::unique_ptr<Property> loadPropertyCommon(::NeXus::File *file, const std::string &group,
+std::unique_ptr<Property> loadPropertyCommon(Nexus::File *file, const std::string &group,
                                              const std::vector<double> &timeSec, std::string &startStr) {
   std::vector<Types::Core::DateAndTime> times;
   if (!timeSec.empty()) {
@@ -145,28 +140,28 @@ std::unique_ptr<Property> loadPropertyCommon(::NeXus::File *file, const std::str
   file->openData("value");
   std::unique_ptr<Property> retVal = nullptr;
   switch (file->getInfo().type) {
-  case ::NeXus::FLOAT32:
+  case NXnumtype::FLOAT32:
     retVal = makeProperty<float>(file, group, times);
     break;
-  case ::NeXus::FLOAT64:
+  case NXnumtype::FLOAT64:
     retVal = makeProperty<double>(file, group, times);
     break;
-  case ::NeXus::INT32:
+  case NXnumtype::INT32:
     retVal = makeProperty<int32_t>(file, group, times);
     break;
-  case ::NeXus::UINT32:
+  case NXnumtype::UINT32:
     retVal = makeProperty<uint32_t>(file, group, times);
     break;
-  case ::NeXus::INT64:
+  case NXnumtype::INT64:
     retVal = makeProperty<int64_t>(file, group, times);
     break;
-  case ::NeXus::UINT64:
+  case NXnumtype::UINT64:
     retVal = makeProperty<uint64_t>(file, group, times);
     break;
-  case ::NeXus::CHAR:
+  case NXnumtype::CHAR:
     retVal = makeStringProperty(file, group, times);
     break;
-  case ::NeXus::UINT8: {
+  case NXnumtype::UINT8: {
     // Check the type at the group level. Boolean stored as UINT8
     file->closeData();
     const bool typeIsBool = file->hasAttr("boolean");
@@ -176,10 +171,13 @@ std::unique_ptr<Property> loadPropertyCommon(::NeXus::File *file, const std::str
       retVal = makeTimeSeriesBoolProperty(file, group, times);
     break;
   }
-  case ::NeXus::INT8:
-  case ::NeXus::INT16:
-  case ::NeXus::UINT16:
+  case NXnumtype::INT8:
+  case NXnumtype::INT16:
+  case NXnumtype::UINT16:
     retVal = nullptr;
+    break;
+  case NXnumtype::BAD:
+    throw std::runtime_error("Invalid data type found.");
     break;
   }
 
@@ -188,7 +186,7 @@ std::unique_ptr<Property> loadPropertyCommon(::NeXus::File *file, const std::str
   std::string unitsStr;
   try {
     file->getAttr("units", unitsStr);
-  } catch (::NeXus::Exception &) {
+  } catch (Nexus::Exception const &) {
     // let it drop on the floor
   }
 
@@ -203,8 +201,7 @@ std::unique_ptr<Property> loadPropertyCommon(::NeXus::File *file, const std::str
 } // namespace
 //----------------------------------------------------------------------------------------------
 
-std::unique_ptr<Property> loadProperty(::NeXus::File *file, const std::string &group,
-                                       const Mantid::Kernel::NexusHDF5Descriptor &fileInfo, const std::string &prefix) {
+std::unique_ptr<Property> loadProperty(Nexus::File *file, const std::string &group, const std::string &prefix) {
   file->openGroup(group, "NXlog");
 
   // Times in second offsets
@@ -212,7 +209,7 @@ std::unique_ptr<Property> loadProperty(::NeXus::File *file, const std::string &g
   std::string startStr;
 
   // Check if the "time" field is present
-  if (fileInfo.isEntry(prefix + "/" + group + "/time")) {
+  if (file->hasAddress(prefix + "/" + group + "/time")) {
     getTimeAndStart(file, timeSec, startStr);
   }
 
@@ -227,16 +224,17 @@ std::unique_ptr<Property> loadProperty(::NeXus::File *file, const std::string &g
  * @param group :: name of NXlog group to open
  * @return Property pointer
  */
-std::unique_ptr<Property> loadProperty(::NeXus::File *file, const std::string &group) {
+std::unique_ptr<Property> loadProperty(Nexus::File *file, const std::string &group) {
   file->openGroup(group, "NXlog");
 
   // Times in second offsets
   std::vector<double> timeSec;
   std::string startStr;
 
-  // Get the entries so that you can check if the "time" field is present
-  std::map<std::string, std::string> entries = file->getEntries();
-  if (entries.find("time") != entries.end()) {
+  // find the time entry
+  std::string const currentAddress = file->getAddress();
+  std::string timeAddress = currentAddress + "/time";
+  if (file->hasAddress(timeAddress)) {
     getTimeAndStart(file, timeSec, startStr);
   }
 

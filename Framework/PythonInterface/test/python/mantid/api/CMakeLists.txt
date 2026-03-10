@@ -36,6 +36,7 @@ set(TEST_PY_FILES
     MDHistoWorkspaceTest.py
     MultipleExperimentInfos.py
     MultipleFilePropertyTest.py
+    PanelsSurfaceCalculatorTest.py
     PreviewManagerTest.py
     ProgressTest.py
     ProjectionTest.py
@@ -55,6 +56,7 @@ set(TEST_PY_FILES
     WorkspacePropertiesTest.py
     WorkspaceUnaryOpsTest.py
     WorkspaceValidatorsTest.py
+    WorkspaceNearestNeighbourInfoTest.py
 )
 
 check_tests_valid(${CMAKE_CURRENT_SOURCE_DIR} ${TEST_PY_FILES})

@@ -56,7 +56,7 @@ public:
   /// Algorithm's version for identification overriding a virtual method
   int version() const override { return 1; };
   const std::vector<std::string> seeAlso() const override {
-    return {"LoadMcStasNexus",    "LoadNexusMonitors", "LoadNexusProcessed", "LoadTOFRawNexus",
+    return {"LoadMcStas",         "LoadNexusMonitors", "LoadNexusProcessed", "LoadTOFRawNexus",
             "LoadILLDiffraction", "LoadILLTOF",        "LoadILLIndirect",    "LoadILLReflectometry",
             "LoadILLSANS",        "LoadMuonNexus",     "LoadFlexiNexus"};
   }
@@ -65,6 +65,9 @@ public:
 
   static const std::string muonTD;
   static const std::string pulsedTD;
+
+  static int getNexusEntryTypes(const std::string &fileName, std::vector<std::string> &entryName,
+                                std::vector<std::string> &definition);
 
 private:
   /// Overwrites Algorithm method.

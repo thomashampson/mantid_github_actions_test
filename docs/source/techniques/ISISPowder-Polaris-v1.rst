@@ -55,6 +55,7 @@ The following methods can be executed on a POLARIS object:
 - :ref:`create_vanadium_polaris_isis-powder-diffraction-ref`
 - :ref:`focus_polaris_isis-powder-diffraction-ref`
 - :ref:`set_sample_polaris_isis-powder-diffraction-ref`
+- :ref:`create_total_scattering_pdf_polaris-isis-powder-ref`
 
 For information on creating a POLARIS object see:
 :ref:`creating_polaris_object_isis-powder-diffraction-ref`
@@ -162,7 +163,6 @@ Example
 
 .. _create_total_scattering_pdf_polaris-isis-powder-ref:
 
-
 create_total_scattering_pdf
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .. warning:: Total scattering support is not yet fully implemented.
@@ -224,6 +224,8 @@ The output PDF can be customized with the following parameters:
 - By calling with `placzek_order` the Placzek correction order can be specified, with the option of 1 or 2 (defaults to 1).
 - By calling with `sample_temp` the user can override the sample temperature provided in the logs. It defaults to using values from the logs if available.
 - By calling with `pdf_output_name`, the name of the output PDF will be set to the user-provided name. If not specified, the output will be the run number suffixed with the PDF type.
+- By calling with `wavelength_lims = [min, max]` the focussed data in all banks will be cropped to include only wavelengths between `min` and `max`.
+- By calling with `r_lims=[min, max]` to specify the r-range of the output pdf (corresponds to `RMin` and `Rmax` parameters in :ref:`algm-PDFFourierTransform-v2`).
 
 Example
 =======
@@ -358,7 +360,7 @@ and :ref:`focus_polaris_isis-powder-diffraction-ref` method.
 This determines which vanadium and empty run numbers
 to use whilst processing.
 
-Accepted values are: **PDF** or **Rietveld**
+Accepted values are: **PDF**, **PDF_NORM** or **Rietveld**
 
 *Note: This parameter is not case sensitive*
 
@@ -371,6 +373,8 @@ Example Input:
 
   polaris_example.create_vanadium(mode="PDF", ...)
   # Or
+  polaris_example.create_vanadium(mode="PDF_NORM", ...)
+  # Or alternatively
   polaris_example.focus(mode="Rietveld", ...)
 
 .. _config_file_polaris_isis-powder-diffraction-ref:
@@ -911,6 +915,14 @@ On POLARIS this is set to the following:
                               (800, 19995),  # Bank 4
                               (800, 19995),  # Bank 5
                              ]
+
+.. _enforce_high_q_to_1_polaris_isis-powder-diffraction-ref:
+
+enforce_high_q_to_1
+^^^^^^^^^^^^^^^^^^^
+This is a work around for a known issue in the normalisation of total scattering data. It will likely be removed once the issue is resolved. Check that it is appropriate to use for your data.
+
+S(Q) should tend to 1 at high Q if normalisation and conversion are done correctly. This option forces S(Q) to 1 by subtracting the final value of S(Q)-1 of the back-scattering bank (last focussed spectrum) from all values, i.e. subtracting a constant, before computing the pair distribution function (PDFFourierTransform).
 
 .. _vanadium_sample_details_polaris_isis-powder-diffraction-ref:
 

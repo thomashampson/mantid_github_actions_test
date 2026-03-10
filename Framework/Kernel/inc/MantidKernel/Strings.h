@@ -17,6 +17,7 @@
 #ifndef Q_MOC_RUN
 #include <boost/lexical_cast.hpp>
 #endif
+#include <algorithm>
 #include <iosfwd>
 #include <map>
 #include <set>
@@ -167,6 +168,7 @@ join(ITERATOR_TYPE begin, ITERATOR_TYPE end, const std::string &separator,
     master_string.reserve(stream_size - separator.length());
 
     // Concatenate the contributions from the remaning threads
+    // cppcheck-suppress knownConditionTrueFalse
     for (int i = 1; i < nThreads; i++) {
       master_string += output[i];
     }
@@ -239,6 +241,10 @@ MANTID_KERNEL_DLL std::string shorten(const std::string &input, const size_t max
 /// Return a string with all matching occurence-strings
 MANTID_KERNEL_DLL std::string replace(const std::string &input, const std::string &find_what,
                                       const std::string &replace_with);
+
+/// Return a string with all occurrences of indicated character replaced by the new character
+MANTID_KERNEL_DLL std::string replaceAll(std::string const &input, char const to_replace, char const substitute);
+
 /// Return a string with all occurrences of the characters in the input replaced
 /// by the replace string
 MANTID_KERNEL_DLL std::string replaceAll(const std::string &input, const std::string &charStr,
@@ -266,6 +272,8 @@ MANTID_KERNEL_DLL std::string removeSpace(const std::string &CLine);
 MANTID_KERNEL_DLL std::string fullBlock(const std::string &A);
 /// strip pre/post spaces
 MANTID_KERNEL_DLL std::string strip(const std::string &A);
+/// strip pre/post spaces
+MANTID_KERNEL_DLL void stripInPlace(std::string &A);
 /// strip trailling comments
 MANTID_KERNEL_DLL void stripComment(std::string &A);
 /// Determines if a string is only spaces
@@ -438,6 +446,15 @@ MANTID_KERNEL_DLL std::string randomString(const size_t len);
 
 /// Extract a line from input stream, discarding any EOL characters encountered
 MANTID_KERNEL_DLL std::istream &extractToEOL(std::istream &is, std::string &str);
+
+/**
+ * This is the constructor that std::string needed to have.
+ * Initialize a string from a c-style formatting string, as you would with printf.
+ * @param fmt : c-style format string with specifiers such as %d or %f
+ * @param ... : variadic arguments corresponding to c-style format specifiers
+ * @return formatted string, or empty string on error condition
+ */
+MANTID_KERNEL_DLL std::string strmakef(char const *const fmt, ...);
 
 } // NAMESPACE Strings
 

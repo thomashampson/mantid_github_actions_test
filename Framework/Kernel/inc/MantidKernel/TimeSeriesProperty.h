@@ -18,11 +18,6 @@
 #include <cstdint>
 #include <utility>
 
-// Forward declare
-namespace NeXus {
-class File;
-}
-
 namespace Mantid {
 namespace Kernel {
 class DataItem;
@@ -104,35 +99,35 @@ struct MANTID_KERNEL_DLL TimeSeriesPropertyStatistics {
 /**
  * Class to hold unit value (DateAndTime, T)
  */
-template <class TYPE> class TimeValueUnit {
+template <class TYPE> class MANTID_KERNEL_DLL TimeValueUnit {
 private:
-  Types::Core::DateAndTime mtime;
-  TYPE mvalue;
+  Types::Core::DateAndTime m_time;
+  TYPE m_value;
 
 public:
-  TimeValueUnit(const Types::Core::DateAndTime &time, const TYPE &value) : mtime(time), mvalue(value) {}
+  TimeValueUnit(const Types::Core::DateAndTime &time, const TYPE &value) : m_time(time), m_value(value) {}
 
   ~TimeValueUnit() = default;
 
-  bool operator>(const TimeValueUnit &rhs) { return (mtime > rhs.mtime); }
+  bool operator>(const TimeValueUnit &rhs) { return (m_time > rhs.m_time); }
 
-  friend bool operator>(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.mtime > rhs.mtime); }
+  friend bool operator>(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.m_time > rhs.m_time); }
 
-  bool operator==(const TimeValueUnit &rhs) { return (mtime == rhs.mtime); }
+  bool operator==(const TimeValueUnit &rhs) { return (m_time == rhs.m_time); }
 
-  friend bool operator==(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.mtime == rhs.mtime); }
+  friend bool operator==(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.m_time == rhs.m_time); }
 
-  bool operator<(const TimeValueUnit &rhs) { return (mtime < rhs.mtime); }
+  bool operator<(const TimeValueUnit &rhs) { return (m_time < rhs.m_time); }
 
-  friend bool operator<(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.mtime < rhs.mtime); }
+  friend bool operator<(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.m_time < rhs.m_time); }
 
-  Types::Core::DateAndTime time() const { return mtime; }
+  Types::Core::DateAndTime time() const { return m_time; }
 
-  void setTime(Types::Core::DateAndTime newtime) { mtime = newtime; }
+  void setTime(Types::Core::DateAndTime newtime) { m_time = newtime; }
 
-  TYPE value() const { return mvalue; }
+  const TYPE &value() const { return m_value; }
 
-  static bool valueCmp(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.mvalue < rhs.mvalue); }
+  static bool valueCmp(const TimeValueUnit &lhs, const TimeValueUnit &rhs) { return (lhs.m_value < rhs.m_value); }
 };
 //========================================================================================================
 
@@ -164,7 +159,7 @@ public:
   /// property
   std::unique_ptr<TimeSeriesProperty<double>> getDerivative() const;
 
-  void saveProperty(::NeXus::File *file) override;
+  void saveProperty(Nexus::File *file) override;
   Json::Value valueAsJson() const override;
 
   /// "Virtual" copy constructor with a time shift in seconds
@@ -228,9 +223,11 @@ public:
   /// Return the time series's times as a vector<DateAndTime>
   std::vector<Types::Core::DateAndTime> timesAsVector() const override;
 
-  /// Return the series as list of times, where the time is the number of
-  /// seconds since the start.
+  /// Return the series as list of times, where the time is the number of seconds since the start.
   std::vector<double> timesAsVectorSeconds() const;
+  /// Return the series as list of times, where the time is the number of seconds since the start.
+  std::vector<double> timesAsVectorSeconds(Types::Core::DateAndTime start) const;
+
   /// Get filtered times as a vector
   virtual std::vector<Types::Core::DateAndTime> filteredTimesAsVector(const Kernel::TimeROI *roi) const;
   // overload method rather than default value so python bindings work
@@ -364,7 +361,7 @@ private:
 protected:
   //----------------------------------------------------------------------------------------------
   /// Saves the time vector has time + start attribute
-  void saveTimeVector(::NeXus::File *file);
+  void saveTimeVector(Nexus::File *file);
   /// Sort the property into increasing times, if not already sorted
   void sortIfNecessary() const;
   ///  Find the index of the entry of time t in the mP vector (sorted)

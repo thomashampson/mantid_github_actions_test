@@ -21,10 +21,10 @@
 #include "MantidKernel/Logger.h"
 #include "MantidKernel/PhysicalConstants.h"
 #include "MantidKernel/Unit.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <algorithm>
 #include <memory>
-#include <nexus/NeXusFile.hpp>
 #include <queue>
 #include <utility>
 
@@ -88,8 +88,7 @@ Instrument::Instrument(const Instrument &instr)
   getChildren(children, true);
   std::vector<IComponent_const_sptr>::const_iterator it;
   for (it = children.begin(); it != children.end(); ++it) {
-    // First check if the current component is a detector and add to cache if it
-    // is
+    // First check if the current component is a detector and add to cache if it is
     if (const IDetector *det = dynamic_cast<const Detector *>(it->get())) {
       if (instr.isMonitor(det->getID()))
         markAsMonitor(det);
@@ -98,8 +97,7 @@ Instrument::Instrument(const Instrument &instr)
       continue;
     }
     // Now check whether the current component is the source or sample.
-    // As the majority of components will be detectors, we will rarely get to
-    // here
+    // As the majority of components will be detectors, we will rarely get to here
     if (const auto *obj = dynamic_cast<const Component *>(it->get())) {
       const std::string objName = obj->getName();
       // This relies on the source and sample having a unique name.
@@ -301,6 +299,17 @@ void Instrument::getDetectorsInBank(std::vector<IDetector_const_sptr> &dets, con
     throw Kernel::Exception::NotFoundError("Instrument: Could not find component", bankName);
   }
   getDetectorsInBank(dets, *comp);
+}
+
+std::set<detid_t> Instrument::getDetectorIDsInBank(const std::string &bankName) const {
+  std::set<detid_t> detIDs;
+  std::vector<IDetector_const_sptr> detectors;
+  getDetectorsInBank(detectors, bankName);
+
+  for (const auto &det : detectors) {
+    detIDs.emplace(det->getID());
+  }
+  return detIDs;
 }
 
 /** Checks to see if the Instrument has a source.
@@ -626,8 +635,8 @@ void Instrument::markAsDetector(const IDetector *det) {
   if ((it != m_detectorCache.end()) && (std::get<0>(*it) == det->getID())) {
     raiseDuplicateDetectorError(det->getID());
   }
-  bool isMonitor = false;
-  m_detectorCache.emplace(it, det->getID(), det_sptr, isMonitor);
+  bool isMonitorFlag = false;
+  m_detectorCache.emplace(it, det->getID(), det_sptr, isMonitorFlag);
 }
 
 /// As markAsDetector but without the required sorting. Must call
@@ -639,8 +648,8 @@ void Instrument::markAsDetectorIncomplete(const IDetector *det) {
 
   // Create a (non-deleting) shared pointer to it
   IDetector_const_sptr det_sptr = IDetector_const_sptr(det, NoDeleting());
-  bool isMonitor = false;
-  m_detectorCache.emplace_back(det->getID(), det_sptr, isMonitor);
+  bool isMonitorFlag = false;
+  m_detectorCache.emplace_back(det->getID(), det_sptr, isMonitorFlag);
 }
 
 /// Sorts the detector cache. Called after all detectors have been marked via
@@ -883,7 +892,7 @@ const std::string &Instrument::getXmlText() const {
  * @param file :: open NeXus file
  * @param group :: name of the group to create
  */
-void Instrument::saveNexus(::NeXus::File *file, const std::string &group) const {
+void Instrument::saveNexus(Nexus::File *file, const std::string &group) const {
   file->makeGroup(group, "NXinstrument", true);
   file->putAttr("version", 1);
 
@@ -943,7 +952,7 @@ void Instrument::saveNexus(::NeXus::File *file, const std::string &group) const 
  *                 a group must be open that has only one call of this function.
  *  @param detIDs :: the dectector IDs of the detectors belonging to the set
  */
-void Instrument::saveDetectorSetInfoToNexus(::NeXus::File *file, const std::vector<detid_t> &detIDs) const {
+void Instrument::saveDetectorSetInfoToNexus(Nexus::File *file, const std::vector<detid_t> &detIDs) const {
 
   size_t nDets = detIDs.size();
   if (nDets == 0)
@@ -989,7 +998,7 @@ void Instrument::saveDetectorSetInfoToNexus(::NeXus::File *file, const std::vect
  * @param file :: open NeXus file
  * @param group :: name of the group to open
  */
-void Instrument::loadNexus(::NeXus::File *file, const std::string &group) {
+void Instrument::loadNexus(Nexus::File *file, const std::string &group) {
   file->openGroup(group, "NXinstrument");
   file->closeGroup();
 }
@@ -1082,31 +1091,6 @@ Instrument::ContainsState Instrument::containsRectDetectors() const {
     return Instrument::ContainsState::None;
 }
 
-std::vector<RectangularDetector_const_sptr> Instrument::findRectDetectors() const {
-  std::queue<IComponent_const_sptr> compQueue; // Search queue
-  addInstrumentChildrenToQueue(compQueue);
-
-  std::vector<RectangularDetector_const_sptr> detectors;
-
-  IComponent_const_sptr comp;
-
-  while (!compQueue.empty()) {
-    comp = compQueue.front();
-    compQueue.pop();
-
-    if (!validateComponentProperties(comp))
-      continue;
-
-    if (auto const detector = std::dynamic_pointer_cast<const RectangularDetector>(comp)) {
-      detectors.push_back(detector);
-    } else {
-      // If component is a ComponentAssembly, we add its children to the queue to check if they're Rectangular Detectors
-      addAssemblyChildrenToQueue(compQueue, comp);
-    }
-  }
-  return detectors;
-}
-
 bool Instrument::validateComponentProperties(IComponent_const_sptr component) const {
   // Skip source, if has one
   if (m_sourceCache && m_sourceCache->getComponentID() == component->getComponentID())
@@ -1157,11 +1141,6 @@ bool Instrument::isMonitorViaIndex(const size_t index) const {
 }
 
 bool Instrument::isEmptyInstrument() const { return this->nelements() == 0; }
-
-int Instrument::add(IComponent *component) {
-  // invalidate cache
-  return CompAssembly::add(component);
-}
 
 /// Returns the index for a detector ID. Used for accessing DetectorInfo.
 size_t Instrument::detectorIndex(const detid_t detID) const {
@@ -1252,9 +1231,8 @@ std::shared_ptr<ParameterMap> Instrument::makeLegacyParameterMap() const {
     // Tolerance 1e-9 m as in Beamline::DetectorInfo::isEquivalent.
     if ((relPos - toVector3d(baseComponent->getRelativePos())).norm() >= 1e-9) {
       if (isDetFixedInBank) {
-        throw std::runtime_error("Cannot create legacy ParameterMap: Position "
-                                 "parameters for GridDetectorPixel are "
-                                 "not supported");
+        throw std::runtime_error(
+            "Cannot create legacy ParameterMap: Position parameters for GridDetectorPixel are not supported");
       }
       pmap->addV3D(componentId, ParameterMap::pos(), Kernel::toV3D(relPos));
     }
@@ -1274,9 +1252,8 @@ std::shared_ptr<ParameterMap> Instrument::makeLegacyParameterMap() const {
  * instrument are loaded. */
 void Instrument::parseTreeAndCacheBeamline() {
   if (isParametrized())
-    throw std::logic_error("Instrument::parseTreeAndCacheBeamline must be "
-                           "called with the base instrument, not a "
-                           "parametrized instrument");
+    throw std::logic_error(
+        "Instrument::parseTreeAndCacheBeamline must be called with the base instrument, not a parametrized instrument");
   std::tie(m_componentInfo, m_detectorInfo) = InstrumentVisitor::makeWrappers(*this);
 }
 

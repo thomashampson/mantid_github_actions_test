@@ -49,6 +49,8 @@ public:
   size_t getMemorySize() const override;
   /// Sort the internal data structure according to member name
   void sortMembersByName();
+  /// Reorder the group members using a list of indices (e.g the list 4,3,2,1 would reverse the order)
+  void reorderMembersWithIndices(const std::vector<int> &indices);
   /// Adds a workspace to the group.
   void addWorkspace(const Workspace_sptr &workspace);
   /// Return the number of entries within the group
@@ -69,8 +71,10 @@ public:
   /// This method returns true if the group is empty (no member workspace)
   bool isEmpty() const;
   bool areNamesSimilar() const;
-  /// Inidicates that the workspace group can be treated as multiperiod.
+  /// Indicates that the workspace group can be treated as multiperiod.
   bool isMultiperiod() const;
+  /// Check if the workspace group contains just peak workspaces
+  bool isGroupPeaksWorkspaces() const;
   /// Check if a workspace is included in this group or any nested groups.
   bool isInGroup(const Workspace &workspaceToCheck, size_t level = 0) const;
   /// Prints the group to the screen using the logger at debug

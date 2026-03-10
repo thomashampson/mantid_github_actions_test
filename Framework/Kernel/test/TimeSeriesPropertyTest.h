@@ -1307,6 +1307,35 @@ public:
     TS_ASSERT_THROWS(empty.getSingleValue(time, i), const std::runtime_error &);
   }
 
+  void test_timesAsVectorSeconds_empty() {
+    // make sure that running timesAsVectorSeconds does not cause any errors for empty arrays
+    const TimeSeriesProperty<int> empty("Empty");
+    std::vector<double> times;
+    TS_ASSERT_THROWS_NOTHING(times = empty.timesAsVectorSeconds());
+    TS_ASSERT(times.empty());
+  }
+
+  void test_timesAsVectorSeconds_nonzero_start() {
+    TimeSeriesProperty<double> *p = new TimeSeriesProperty<double>("doubleProp");
+    DateAndTime start("2007-11-30T16:17:00");
+    int const N = 10;
+    // add sequence of times at 1s, 2s, 3s, etc...
+    for (int i = 0; i < N; i++) {
+      TS_ASSERT_THROWS_NOTHING(p->addValue((start + double(i + 1)), 0.));
+    }
+    // if no start specified, times are from first time of 1s
+    std::vector<double> timeSecFromFirst = p->timesAsVectorSeconds();
+    for (int i = 0; i < N; i++) {
+      TS_ASSERT_DELTA(timeSecFromFirst[i], double(i), 1e-6);
+    }
+    // if start specified, times are from 0s
+    std::vector<double> timeSecFromStart = p->timesAsVectorSeconds(start);
+    for (int i = 0; i < N; i++) {
+      TS_ASSERT_DELTA(timeSecFromStart[i], double(i + 1), 1e-6);
+    }
+    delete p;
+  }
+
   void test_firstLastTimeValue() {
     TimeSeriesProperty<double> *p = createDoubleTSP();
 
@@ -2169,6 +2198,21 @@ public:
     const auto lastDuration = log->nthInterval(log->size() - 1).length();
     const auto stop = log->lastTime() + lastDuration;
     TS_ASSERT_EQUALS(range.stop(), stop);
+  }
+
+  void test_negativeTimes() {
+    using namespace Mantid::Types::Core;
+    TimeSeriesProperty<double> series("doubleProperty");
+    const DateAndTime startTime(100000, 0);
+    const std::vector<double> times{-5000, -1, 0, 1, 5};
+    const std::vector<double> values{1, 1, 1, 1, 1};
+    series.create(startTime, times, values);
+    TS_ASSERT_EQUALS(times.size(), series.size());
+    TS_ASSERT_EQUALS(values.size(), series.valuesAsVector().size());
+    const std::vector<DateAndTime> timesAsVector = series.timesAsVector();
+    for (size_t i = 0; i < times.size(); i++) {
+      TS_ASSERT_EQUALS(startTime + times[i], timesAsVector[i]);
+    }
   }
 
 private:

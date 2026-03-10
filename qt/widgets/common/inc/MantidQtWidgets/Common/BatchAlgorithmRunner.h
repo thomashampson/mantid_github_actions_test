@@ -70,7 +70,7 @@ public:
       : Poco::Notification(), m_algorithm(std::move(algorithm)), m_errorMessage(errorMessage) {}
 
   IConfiguredAlgorithm_sptr algorithm() const { return m_algorithm; }
-  std::string errorMessage() const { return m_errorMessage; }
+  const std::string &errorMessage() const { return m_errorMessage; }
 
 private:
   IConfiguredAlgorithm_sptr m_algorithm;
@@ -89,6 +89,10 @@ class EXPORT_OPT_MANTIDQT_COMMON BatchAlgorithmRunner : public QObject {
 public:
   explicit BatchAlgorithmRunner(QObject *parent = nullptr);
   ~BatchAlgorithmRunner() override;
+
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  BatchAlgorithmRunner(const BatchAlgorithmRunner &) = delete;
+  BatchAlgorithmRunner &operator=(const BatchAlgorithmRunner &) = delete;
 
   /// Adds an algorithm to the execution queue
   void addAlgorithm(const Mantid::API::IAlgorithm_sptr &algo);

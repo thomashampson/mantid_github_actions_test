@@ -5,8 +5,9 @@
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
 
-import numbers
 from typing import Dict
+
+import numpy as np
 
 from mantid.api import AlgorithmFactory, PythonAlgorithm, Progress
 from mantid.api import WorkspaceFactory, AnalysisDataService
@@ -15,7 +16,8 @@ from mantid.kernel import logger
 # noinspection PyProtectedMember
 from mantid.simpleapi import GroupWorkspaces
 import abins
-from abins.abinsalgorithm import AbinsAlgorithm
+from abins.abinsalgorithm import AbinsAlgorithm, AtomInfo, validate_e_init
+from abins.instruments.pychop import validate_pychop_params
 
 
 # noinspection PyPep8Naming,PyMethodMayBeStatic
@@ -64,7 +66,7 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
         """
         Performs input validation. Use to ensure the user has defined a consistent set of parameters.
         """
-        from abins.constants import MILLI_EV_TO_WAVENUMBER, TWO_DIMENSIONAL_CHOPPER_INSTRUMENTS
+        from abins.constants import TWO_DIMENSIONAL_CHOPPER_INSTRUMENTS
 
         issues = dict()
         issues = self.validate_common_inputs(issues)
@@ -73,35 +75,25 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
         self._check_advanced_parameter()
 
         instrument_name = self.getProperty("Instrument").value
-        if instrument_name in TWO_DIMENSIONAL_CHOPPER_INSTRUMENTS:
-            allowed_frequencies = abins.parameters.instruments[instrument_name]["chopper_allowed_frequencies"]
-            default_frequency = abins.parameters.instruments[instrument_name].get("chopper_frequency_default", None)
 
-            if (self.getProperty("ChopperFrequency").value) == "" and (default_frequency is None):
-                issues["ChopperFrequency"] = "This instrument does not have a default chopper frequency"
-            elif self.getProperty("ChopperFrequency").value and int(self.getProperty("ChopperFrequency").value) not in allowed_frequencies:
-                issues["ChopperFrequency"] = (
-                    f"This chopper frequency is not valid for the instrument {instrument_name}. "
-                    "Valid frequencies: " + ", ".join([str(freq) for freq in allowed_frequencies])
+        issues.update(
+            validate_e_init(
+                e_init=self.getProperty("IncidentEnergy").value,
+                energy_units=self.getProperty("EnergyUnits").value,
+                instrument_name=instrument_name,
+            )
+        )
+
+        if instrument_name in TWO_DIMENSIONAL_CHOPPER_INSTRUMENTS and not set(issues) & ({"Chopper", "IncidentEnergy", "EnergyUnits"}):
+            issues.update(
+                validate_pychop_params(
+                    instrument_name,
+                    self.getProperty("Chopper").value,
+                    self.getProperty("ChopperFrequency").value,
+                    self.getProperty("IncidentEnergy").value,
+                    self.getProperty("EnergyUnits").value,
                 )
-
-        if not isinstance(float(self.getProperty("IncidentEnergy").value), numbers.Real):
-            issues["IncidentEnergy"] = "Incident energy must be a real number"
-
-        if "max_wavenumber" in abins.parameters.instruments[instrument_name]:
-            max_energy = abins.parameters.instruments[instrument_name]["max_wavenumber"]
-        else:
-            max_energy = abins.parameters.sampling["max_wavenumber"]
-
-        energy_units = self.getProperty("EnergyUnits").value
-
-        if energy_units == "meV":
-            max_energy = max_energy / MILLI_EV_TO_WAVENUMBER
-        else:
-            max_energy = max_energy
-
-        if float(self.getProperty("IncidentEnergy").value) > max_energy:
-            issues["IncidentEnergy"] = f"Incident energy cannot be greater than {max_energy:.3f} {energy_units} for this instrument."
+            )
 
         return issues
 
@@ -116,7 +108,11 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
         prog_reporter.report("Input data from the user has been collected.")
 
         # 2) read ab initio data
-        ab_initio_data = abins.AbinsData.from_calculation_data(self._vibrational_or_phonon_data_file, self._ab_initio_program)
+        ab_initio_data = abins.AbinsData.from_calculation_data(
+            self._vibrational_or_phonon_data_file,
+            self._ab_initio_program,
+            cache_directory=self._cache_directory,
+        )
         prog_reporter.report("Vibrational/phonon data has been read.")
 
         # 3) calculate S
@@ -137,10 +133,12 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
             autoconvolution_max=autoconvolution_max,
             instrument=self._instrument,
             quantum_order_num=self._num_quantum_order_events,
+            cache_directory=self._cache_directory,
         )
         s_calculator.progress_reporter = prog_reporter
-        s_data = s_calculator.get_formatted_data()
-        self._q_bins = s_data.get_q_bins()
+        spectra = s_calculator.get_formatted_data()
+
+        self._q_bins = spectra.get_bin_edges(bin_ax="x").to("1/angstrom").magnitude
 
         # Hold reporter at 80% for this message
         prog_reporter.resetNumSteps(1, 0.8, 0.80000001)
@@ -160,11 +158,17 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
         workspaces = []
         workspaces.extend(
             self.create_workspaces(
-                atoms_symbols=atom_symbols, s_data=s_data, atoms_data=atoms_data, max_quantum_order=self._max_event_order
+                atoms_symbols=atom_symbols,
+                spectra=spectra,
+                max_quantum_order=self._max_event_order,
             )
         )
         workspaces.extend(
-            self.create_workspaces(atom_numbers=atom_numbers, s_data=s_data, atoms_data=atoms_data, max_quantum_order=self._max_event_order)
+            self.create_workspaces(
+                atom_numbers=atom_numbers,
+                spectra=spectra,
+                max_quantum_order=self._max_event_order,
+            )
         )
         prog_reporter.report("Workspaces with partial dynamical structure factors have been constructed.")
 
@@ -184,14 +188,13 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
         self.setProperty("OutputWorkspace", self._out_ws_name)
         prog_reporter.report("Group workspace with all required  dynamical structure factors has been constructed.")
 
-    def _fill_s_workspace(self, s_points=None, workspace=None, protons_number=None, nucleons_number=None):
+    def _fill_s_workspace(self, *, s_points=None, workspace: str, species: AtomInfo | None = None):
         """
         Puts S into workspace(s).
 
         :param s_points: dynamical factor for the given atom
         :param workspace:  workspace to be filled with S
-        :param protons_number: number of protons in the given type fo atom
-        :param nucleons_number: number of nucleons in the given type of atom
+        :param species: Atom/isotope data
         """
         from abins.constants import FUNDAMENTALS, TWO_DIMENSIONAL_INSTRUMENTS
 
@@ -200,15 +203,11 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
 
         # only FUNDAMENTALS [data is 3d with length 1 in axis 0]
         if s_points.shape[0] == FUNDAMENTALS:
-            self._fill_s_2d_workspace(
-                s_points=s_points[0], workspace=workspace, protons_number=protons_number, nucleons_number=nucleons_number
-            )
+            self._fill_s_2d_workspace(s_points=s_points[0], workspace=workspace, species=species)
 
         # total workspaces [data is 2d array of S]
         elif s_points.shape[0] == abins.parameters.instruments[self._instrument.get_name()]["q_size"]:
-            self._fill_s_2d_workspace(
-                s_points=s_points, workspace=workspace, protons_number=protons_number, nucleons_number=nucleons_number
-            )
+            self._fill_s_2d_workspace(s_points=s_points, workspace=workspace, species=species)
 
         # Multiple quantum order events [data is 3d table of S using axis 0 for quantum orders]
         else:
@@ -219,9 +218,7 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
                 wrk_name = f"{workspace}_quantum_event_{n + 1}"
                 partial_wrk_names.append(wrk_name)
 
-                self._fill_s_2d_workspace(
-                    s_points=s_points[n], workspace=wrk_name, protons_number=protons_number, nucleons_number=nucleons_number
-                )
+                self._fill_s_2d_workspace(s_points=s_points[n], workspace=wrk_name, species=species)
 
                 GroupWorkspaces(InputWorkspaces=partial_wrk_names, OutputWorkspace=workspace)
 
@@ -232,18 +229,17 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
         AnalysisDataService.addOrReplace(name, wrk)
         return wrk
 
-    def _fill_s_2d_workspace(self, s_points=None, workspace=None, protons_number=None, nucleons_number=None):
+    def _fill_s_2d_workspace(self, *, s_points: np.ndarray, workspace: str, species: AtomInfo | None = None):
         from mantid.api import NumericAxis
         from abins.constants import MILLI_EV_TO_WAVENUMBER
 
-        if protons_number is not None:
-            s_points = s_points * self.get_cross_section(
-                scattering=self._scale_by_cross_section, protons_number=protons_number, nucleons_number=nucleons_number
-            )
+        if species is not None:
+            s_points = s_points * self.get_cross_section(scattering=self._scale_by_cross_section, species=species)
 
         n_q_values, n_freq_bins = s_points.shape
         n_q_bins = self._q_bins.size
-        assert n_q_values + 1 == n_q_bins
+        if n_q_values + 1 != n_q_bins:
+            raise ValueError("Mismatch between number of values and bins")
 
         if self._energy_units == "meV":
             energy_bins = self._bins / MILLI_EV_TO_WAVENUMBER
@@ -292,7 +288,7 @@ class Abins2D(AbinsAlgorithm, PythonAlgorithm):
 
             self._instrument_kwargs.update({"chopper_frequency": chopper_frequency})
         elif self.getProperty("ChopperFrequency").value:
-            logger.warning("The selected instrument does not use a chopper: " "chopper frequency will be ignored.")
+            logger.warning("The selected instrument does not use a chopper: chopper frequency will be ignored.")
 
         self.set_instrument()
 

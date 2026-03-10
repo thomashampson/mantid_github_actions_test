@@ -90,7 +90,7 @@ class SimulatedDensityOfStates(PythonAlgorithm):
 
         self.declareProperty(
             StringArrayProperty("Ions", Direction.Input),
-            doc="List of Ions to use to calculate partial density of states." "If left blank, total density of states will be calculated",
+            doc="List of Ions to use to calculate partial density of states. If left blank, total density of states will be calculated",
         )
 
         self.declareProperty(name="SumContributions", defaultValue=False, doc="Sum the partial density of states into a single workspace.")
@@ -366,7 +366,7 @@ class SimulatedDensityOfStates(PythonAlgorithm):
             # Sort workspaces
             if calc_ion_index:
                 # Sort by index after '_'
-                partial_ws_names.sort(key=lambda item: (int(item[(item.rfind("_") + 1) :])))
+                partial_ws_names.sort(key=lambda item: int(item[(item.rfind("_") + 1) :]))
             group = ",".join(partial_ws_names)
             s_api.GroupWorkspaces(group, OutputWorkspace=self._out_ws_name)
 
@@ -416,8 +416,13 @@ class SimulatedDensityOfStates(PythonAlgorithm):
 
         if PEAK_WIDTH_ENERGY_FLAG in self._peak_width:
             try:
+
+                def eval_peak_width_code(p):
+                    return eval(self._peak_width.replace(PEAK_WIDTH_ENERGY_FLAG, str(energies[p])))  # noqa: S307
+
                 peak_widths = np.fromiter(
-                    [eval(self._peak_width.replace(PEAK_WIDTH_ENERGY_FLAG, str(energies[p]))) for p in peaks], dtype=float
+                    [eval_peak_width_code(p) for p in peaks],
+                    dtype=float,
                 )
             except SyntaxError:
                 raise ValueError('Invalid peak width function (must be either a decimal or function containing "energy")')

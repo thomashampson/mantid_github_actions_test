@@ -21,6 +21,7 @@
 #include "MantidAPI/WorkspaceProperty.h"
 #include "MantidAPI/WorkspaceOpOverloads.h"
 #include "MantidDataObjects/EventWorkspaceHelpers.h"
+#include "MantidKernel/OptionalBool.h"
 
 using namespace Mantid::API;
 using namespace Mantid::Kernel;
@@ -75,6 +76,29 @@ public:
     TS_ASSERT_THROWS( alg->setPropertyValue("LHSWorkspace","test_in21"), const std::invalid_argument &);
     TS_ASSERT_THROWS( alg->setPropertyValue("RHSWorkspace","test_in22"), const std::invalid_argument &);
     TS_ASSERT_THROWS_NOTHING( alg->setPropertyValue("OutputWorkspace","test_out2") );
+
+    if (DO_DIVIDE)
+    {
+      // Test OptionalBool
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool(OptionalBool::True)));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool(OptionalBool::False)));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool(true)));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool(false)));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool("True")));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool("true")));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool("False")));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool("false")));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool(0)));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", OptionalBool(1)));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", "True"));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", "False"));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", "true"));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", "false"));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", "0"));
+      TS_ASSERT_THROWS_NOTHING( alg->setProperty("IsDistribution", "1"));
+      TS_ASSERT_THROWS( alg->setProperty("IsDistribution", "jimmy"), const std::invalid_argument &);
+    }
+
     delete alg;
   }
 
@@ -86,6 +110,46 @@ public:
   void testDivideWithMaskedSpectraProducesZeroesWhenReplacingInputWorkspace()
   {
     doDivideWithMaskedTest(true);
+  }
+
+  void testDivideForceIsDistributionTrue()
+  {
+    if (DO_DIVIDE) {
+      MatrixWorkspace_sptr numerator = WorkspaceCreationHelper::create2DWorkspace(10, 2);
+      MatrixWorkspace_sptr denominator = WorkspaceCreationHelper::createWorkspaceSingleValue(1.0);
+
+      Divide alg;
+      alg.initialize();
+      alg.setChild(true);
+      alg.setProperty("LHSWorkspace", numerator);
+      alg.setProperty("RHSWorkspace", denominator);
+      alg.setPropertyValue("OutputWorkspace", "dummy");
+      alg.setProperty("IsDistribution", OptionalBool(true));
+      alg.execute();
+
+      MatrixWorkspace_sptr outWS = alg.getProperty("OutputWorkspace");
+      TS_ASSERT_EQUALS(outWS->isDistribution(), true);
+    }
+  }
+  void testDivideForceIsDistributionFalse()
+  {
+    if (DO_DIVIDE) {
+
+      MatrixWorkspace_sptr numerator = WorkspaceCreationHelper::createWorkspaceSingleValue(10.0);
+      MatrixWorkspace_sptr denominator = WorkspaceCreationHelper::createWorkspaceSingleValue(1.0);
+
+      Divide alg;
+      alg.initialize();
+      alg.setChild(true);
+      alg.setProperty("LHSWorkspace", numerator);
+      alg.setProperty("RHSWorkspace", denominator);
+      alg.setPropertyValue("OutputWorkspace", "dummy");
+      alg.setProperty("IsDistribution", OptionalBool(false));
+      alg.execute();
+
+      MatrixWorkspace_sptr outWS = alg.getProperty("OutputWorkspace");
+      TS_ASSERT_EQUALS(outWS->isDistribution(), false);
+    }
   }
 
   void testCompoundAssignment()
@@ -1010,51 +1074,32 @@ public:
     if( !replaceInput ) AnalysisDataService::Instance().remove(outputSpace);
   }
 
-  MatrixWorkspace_sptr create_RaggedWorkspace()
-  {
-    // create workspace with 2 histograms
-    MatrixWorkspace_sptr raggedWS = WorkspaceCreationHelper::create2DWorkspace(2, 1);
-
-    // create and replace histograms with ragged ones
-    Mantid::MantidVec x_data{100., 200., 300., 400.};
-    Mantid::MantidVec y_data{2., 2., 2.};
-    Mantid::MantidVec e_data{2., 2., 2.};
-    Mantid::HistogramData::HistogramBuilder builder;
-    builder.setX(x_data);
-    builder.setY(y_data);
-    builder.setE(e_data);
-    raggedWS->setHistogram(0, builder.build());
-
-    Mantid::MantidVec x_data2{200., 400., 600.};
-    Mantid::MantidVec y_data2{2., 2.};
-    Mantid::MantidVec e_data2{2., 2.};
-    Mantid::HistogramData::HistogramBuilder builder2;
-    builder2.setX(x_data2);
-    builder2.setY(y_data2);
-    builder2.setE(e_data2);
-    raggedWS->setHistogram(1, builder2.build());
-
-    // quick check of the workspace
-    TS_ASSERT(raggedWS->isRaggedWorkspace());
-    TS_ASSERT_EQUALS(raggedWS->getNumberHistograms(), 2);
-    TS_ASSERT_EQUALS(raggedWS->x(0).size(), 4);
-    TS_ASSERT_EQUALS(raggedWS->x(1).size(), 3);
-    TS_ASSERT_EQUALS(raggedWS->y(0).size(), 3);
-    TS_ASSERT_EQUALS(raggedWS->y(1).size(), 2);
-    return raggedWS;
-  }
-
   void test_RaggedWorkspace()
   {
-    auto lhs = create_RaggedWorkspace();
-    auto rhs = create_RaggedWorkspace();
+    auto lhs = WorkspaceCreationHelper::create2DWorkspaceRagged(4);
+    auto rhs = WorkspaceCreationHelper::create2DWorkspaceRagged(4);
     auto result = performTest(lhs, rhs, false, DO_DIVIDE ? 1.0 : 4.0, DO_DIVIDE ? 1.4142135625 : 5.6568542436);
     TS_ASSERT(result->isRaggedWorkspace());
+    TS_ASSERT_EQUALS(result->isDistribution(), DO_DIVIDE ? true : false);
+    TS_ASSERT(result->YUnit().empty());
+  }
+
+  void test_RaggedWorkspace_sameunit()
+  {
+    auto lhs = WorkspaceCreationHelper::create2DWorkspaceRagged(4);
+    auto rhs = WorkspaceCreationHelper::create2DWorkspaceRagged(4);
+    lhs->setYUnit("counts");
+    rhs->setYUnit("counts");
+    DO_DIVIDE = true;
+    auto result = performTest(lhs, rhs, false, DO_DIVIDE ? 1.0 : 4.0, DO_DIVIDE ? 1.4142135625 : 5.6568542436);
+    TS_ASSERT(result->isRaggedWorkspace());
+    TS_ASSERT_EQUALS(result->isDistribution(), DO_DIVIDE ? true : false);
+    TS_ASSERT(result->YUnit().empty());
   }
 
   void test_RaggedWorkspace_and_single_value()
   {
-    auto lhs = create_RaggedWorkspace();
+    auto lhs = WorkspaceCreationHelper::create2DWorkspaceRagged(4);
     auto rhs = WorkspaceCreationHelper::createWorkspaceSingleValue(2);
     auto result = performTest(lhs, rhs, false, DO_DIVIDE ? 1.0 : 4.0, DO_DIVIDE ? 1.2247448711 : 4.8989794899);
     TS_ASSERT(result->isRaggedWorkspace());
@@ -1062,7 +1107,7 @@ public:
 
   void test_RaggedWorkspace_not_compatible_x()
   {
-    auto lhs = create_RaggedWorkspace();
+    auto lhs = WorkspaceCreationHelper::create2DWorkspaceRagged(4);
     auto rhs = WorkspaceCreationHelper::create2DWorkspace(2, 4);
     performTest_fails(lhs, rhs);
   }

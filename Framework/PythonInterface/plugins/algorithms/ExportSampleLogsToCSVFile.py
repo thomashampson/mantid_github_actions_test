@@ -79,14 +79,13 @@ class ExportSampleLogsToCSVFile(PythonAlgorithm):
         self.declareProperty(
             "DateTitleInHeader",
             True,
-            "If true, then the first 2 lines of header will be experiment date and title."
-            "Otherwise, there will be only 1 line in header.",
+            "If true, then the first 2 lines of header will be experiment date and title.Otherwise, there will be only 1 line in header.",
         )
 
         self.declareProperty(
             "SeparateHeaderFile",
             True,
-            "If true, then the header is written to another file." "Otherwise, header will be in the same output file.",
+            "If true, then the header is written to another file. Otherwise, header will be in the same output file.",
         )
 
         # Time zone
@@ -487,7 +486,7 @@ def getLocalTimeShiftInSecond(utctime, localtimezone, currentlogger=None):
     DataAndTime
     """
     from datetime import datetime
-    from dateutil import tz
+    from zoneinfo import ZoneInfo
 
     if currentlogger:
         currentlogger.information("Input UTC time = %s" % (str(utctime)))
@@ -497,8 +496,8 @@ def getLocalTimeShiftInSecond(utctime, localtimezone, currentlogger=None):
         return 0
 
     # Find out difference in time zone
-    from_zone = tz.gettz("UTC")
-    to_zone = tz.gettz(localtimezone)
+    from_zone = ZoneInfo("UTC")
+    to_zone = ZoneInfo(localtimezone)
 
     t1str = (str(utctime)).split(".")[0].strip()
     if currentlogger:

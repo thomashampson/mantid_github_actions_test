@@ -55,7 +55,7 @@ void convertGroupsToMapFile(const std::vector<std::vector<int>> &groups, const S
   // The input gives the groups as a vector of a vector of ints. Turn
   // this into a string, just like the contents of a map file.
   commands << groups.size() << "\n";
-  for (auto &group : groups) {
+  for (const auto &group : groups) {
     const int groupId = axis.spectraNo(group[0]);
     const auto groupSize = static_cast<int>(group.size());
 
@@ -1009,6 +1009,14 @@ size_t GroupDetectors2::formGroupsEvent(const DataObjects::EventWorkspace_const_
     outEL.setSpectrumNo(it->first);
     // Start fresh with no detector IDs
     outEL.clearDetectorIDs();
+
+    // Reserve space for the event list
+    std::size_t totalEvents = 0;
+    for (auto i : it->second) {
+      totalEvents += inputWS->getSpectrum(i).getNumberEvents();
+    }
+    outEL.switchTo(inputWS->getSpectrum(0).getEventType());
+    outEL.reserve(totalEvents);
 
     // the Y values and errors from spectra being grouped are combined in the
     // output spectrum

@@ -62,12 +62,9 @@ public:
   ~RunsPresenter() override;
   RunsPresenter const &operator=(RunsPresenter const &) = delete;
 
-  RunsPresenter(RunsPresenter &&) = default;
-  RunsPresenter &operator=(RunsPresenter &&) = default;
-
   // IRunsPresenter overrides
   void acceptMainPresenter(IBatchPresenter *mainPresenter) override;
-  void initInstrumentList(const std::string &selectedInstrument = "") override;
+  std::string initInstrumentList(const std::string &selectedInstrument = "") override;
   RunsTable const &runsTable() const override;
   RunsTable &mutableRunsTable() override;
   bool isProcessing() const override;
@@ -80,9 +77,9 @@ public:
   void notifyResumeReductionRequested() override;
   void notifyPauseReductionRequested() override;
   void notifyRowStateChanged() override;
-  void notifyRowStateChanged(boost::optional<Item const &> item) override;
+  void notifyRowStateChanged(std::optional<std::reference_wrapper<const Item>> item) override;
   void notifyRowModelChanged() override;
-  void notifyRowModelChanged(boost::optional<Item const &> item) override;
+  void notifyRowModelChanged(std::optional<std::reference_wrapper<const Item>> item) override;
   void notifyBatchLoaded() override;
 
   void notifyReductionPaused() override;

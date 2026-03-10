@@ -25,7 +25,7 @@ public:
   MOCK_CONST_METHOD0(isWarnDiscardChangesChecked, bool());
   MOCK_CONST_METHOD0(isRoundChecked, bool());
   MOCK_CONST_METHOD0(getRoundPrecision, int &());
-  MOCK_CONST_METHOD0(roundPrecision, boost::optional<int>());
+  MOCK_CONST_METHOD0(roundPrecision, std::optional<int>());
   MOCK_METHOD0(isCloseEventPrevented, bool());
   MOCK_CONST_METHOD1(isCloseBatchPrevented, bool(int));
   MOCK_CONST_METHOD1(isOverwriteBatchPrevented, bool(int));
@@ -45,6 +45,7 @@ public:
   MOCK_CONST_METHOD0(instrument, Mantid::Geometry::Instrument_const_sptr());
   MOCK_CONST_METHOD0(instrumentName, std::string());
   MOCK_CONST_METHOD1(discardChanges, bool(std::string const &));
+  MOCK_CONST_METHOD1(encodeBatchToStr, std::string(const std::vector<std::string> &));
 
   ~MockMainWindowPresenter() override {};
 };

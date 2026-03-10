@@ -63,6 +63,10 @@ class GSAS2View(QtWidgets.QWidget, Ui_calib):
         self.x_min_line_edit.setValidator(LineEditDoubleValidator(self.x_min_line_edit, 0))
         self.x_max_line_edit.setValidator(LineEditDoubleValidator(self.x_max_line_edit, 1))
 
+        combobox_index = self.refinement_method_combobox.findText("Rietveld")
+        self.refinement_method_combobox.model().item(combobox_index).setEnabled(False)
+        self.refinement_method_combobox.model().item(combobox_index).setToolTip("Rietveld is not currently supported.")
+
         # Plotting
         self.figure = None
         self.min_line = None
@@ -135,7 +139,7 @@ class GSAS2View(QtWidgets.QWidget, Ui_calib):
             and self.refine_gamma_y_checkbox.isChecked()
         ):
             self.checkboxes_invalid.show()
-            self.checkboxes_invalid.setToolTip("Refining the Microstrain with Sigma-1 and Gamma(Y)" " may not be advisable.")
+            self.checkboxes_invalid.setToolTip("Refining the Microstrain with Sigma-1 and Gamma(Y) may not be advisable.")
         else:
             self.checkboxes_invalid.hide()
             self.checkboxes_invalid.setToolTip("")

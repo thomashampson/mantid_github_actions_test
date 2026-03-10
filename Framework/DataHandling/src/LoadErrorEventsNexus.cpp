@@ -60,7 +60,7 @@ void LoadErrorEventsNexus::exec() {
 
   MatrixWorkspace_sptr outWS = WorkspaceFactory::Instance().create("EventWorkspace", 1, 2, 1);
 
-  const Kernel::NexusHDF5Descriptor descriptor(filename);
+  const Nexus::NexusDescriptor descriptor(filename);
 
   if (!descriptor.isEntry("/entry/bank_error_events"))
     throw std::runtime_error("entry bank_error_events does not exist");
@@ -78,21 +78,21 @@ void LoadErrorEventsNexus::exec() {
 
   // load run metadata
   try {
-    LoadEventNexus::loadEntryMetadata(filename, outWS, "entry", descriptor);
+    LoadEventNexus::loadEntryMetadata(filename, outWS, "entry");
   } catch (std::exception &e) {
     g_log.warning() << "Error while loading meta data: " << e.what() << '\n';
   }
 
   // load the data
-  ::NeXus::File file(filename);
+  Nexus::File file(filename);
 
-  file.openPath("/");
+  file.openAddress("/");
   file.openGroup("entry", "NXentry");
   file.openGroup("bank_error_events", "NXevent_data");
 
-  const auto event_times = Mantid::NeXus::NeXusIOHelper::readNexusVector<float>(file, "event_time_offset");
-  const auto event_index = std::make_shared<std::vector<uint64_t>>(
-      Mantid::NeXus::NeXusIOHelper::readNexusVector<uint64_t>(file, "event_index"));
+  const auto event_times = Nexus::IOHelper::readNexusVector<float>(file, "event_time_offset");
+  const auto event_index =
+      std::make_shared<std::vector<uint64_t>>(Nexus::IOHelper::readNexusVector<uint64_t>(file, "event_index"));
   const auto bankPulseTimes = std::make_shared<BankPulseTimes>(boost::ref(file), periodLog->valuesAsVector());
 
   file.closeGroup(); // bank_error_events
@@ -132,7 +132,10 @@ void LoadErrorEventsNexus::exec() {
   g_log.information() << "Loaded " << numEvents << " events with TOF min = " << min_tof << ", max = " << max_tof
                       << "\n";
 
-  eventWS->setAllX(HistogramData::BinEdges{min_tof, max_tof});
+  if (min_tof < max_tof)
+    eventWS->setAllX(HistogramData::BinEdges{min_tof, max_tof});
+  else
+    eventWS->setAllX(HistogramData::BinEdges{0, 16666.7});
 
   outWS->getAxis(0)->setUnit("TOF");
   outWS->setYUnit("Counts");

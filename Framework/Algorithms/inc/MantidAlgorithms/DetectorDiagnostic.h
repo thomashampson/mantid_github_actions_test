@@ -20,7 +20,7 @@ namespace Mantid {
 namespace Algorithms {
 /**
   A base class for a detector diagnostic algorithm. It has not exec
-  implemenation but provides functions
+  implementation but provides functions
   that are common among these algorithms such as calculating the median and
   writing to a file.
 
@@ -31,8 +31,6 @@ class MANTID_ALGORITHMS_DLL DetectorDiagnostic : public API::Algorithm {
 public:
   /// Default constructor
   DetectorDiagnostic();
-  /// Default destructor
-  virtual ~DetectorDiagnostic() = default;
   /// Algorithm's category for identification
   const std::string category() const override;
   /// Algorithm's name for identification overriding a virtual method

@@ -6,11 +6,9 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 
 #include "MantidDataHandling/SNSAppendGeometryToNexus.h"
 
@@ -49,10 +47,10 @@ public:
     TS_ASSERT_THROWS_NOTHING(alg.execute(););
     TS_ASSERT(alg.isExecuted());
 
-    std::string fullpath(Poco::Path::temp() + NXS_FILENAME);
+    std::filesystem::path fullpath = std::filesystem::temp_directory_path() / NXS_FILENAME;
 
-    if (Poco::File(fullpath).exists()) {
-      Poco::File(fullpath).remove();
+    if (std::filesystem::exists(fullpath)) {
+      std::filesystem::remove(fullpath);
     }
 
     // Retrieve the workspace from data service. TODO: Change to your desired

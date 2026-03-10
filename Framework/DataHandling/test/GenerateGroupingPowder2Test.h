@@ -19,16 +19,15 @@
 #include "MantidFrameworkTestHelpers/WorkspaceCreationHelper.h"
 #include "MantidGeometry/Crystal/AngleUnits.h"
 #include "MantidGeometry/Instrument/DetectorInfo.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
 
 #include <Poco/DOM/DOMParser.h>
 #include <Poco/DOM/NodeFilter.h>
 #include <Poco/DOM/NodeIterator.h>
-#include <Poco/File.h>
 #include <Poco/SAX/InputSource.h>
 #include <cxxtest/TestSuite.h>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 
 using namespace Mantid;
@@ -48,7 +47,7 @@ public:
     lei.initialize();
     lei.setChild(true);
     lei.setRethrows(true);
-    lei.setPropertyValue("Filename", "CNCS_Definition.xml");
+    lei.setPropertyValue("Filename", "CNCS_Definition_20190602_20250806.xml");
     lei.setPropertyValue("OutputWorkspace", "unused_for_child");
     lei.execute();
     m_emptyInstrument = lei.getProperty("OutputWorkspace");
@@ -466,7 +465,7 @@ public:
     const bool numberByAngle{true};
     const bool splitSides{true};
     const std::vector<int> groups_exp{7, 8, 9, 10, 11, 12, 13, 14};
-    const std::vector<double> pixel_groups_exp{11, 11, 11, 9, 9, 9, 9, 9, 9, 10, 10, 10, 12, 12, 12, 12, 12, 12};
+    const std::vector<double> pixel_groups_exp{12, 12, 12, 10, 10, 10, 9, 9, 9, 8, 8, 10, 10, 10, 12, 11, 11, 13};
     run_SNAPliteTest("PowderGrouping_no_azimuth_angle_numbering", ang1, ang2, numberByAngle, splitSides, groups_exp,
                      pixel_groups_exp);
   }
@@ -545,8 +544,5 @@ private:
 
   MatrixWorkspace_sptr m_emptyInstrument;
 
-  bool fileExists(const std::string &filename) {
-    Poco::File handle{filename};
-    return handle.exists();
-  }
+  bool fileExists(const std::string &filename) { return std::filesystem::exists(filename); }
 };

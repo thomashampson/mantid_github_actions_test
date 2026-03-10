@@ -24,6 +24,7 @@
 #include "MantidKernel/BoundedValidator.h"
 #include "MantidKernel/ConfigService.h"
 #include "MantidKernel/ListValidator.h"
+#include "MantidKernel/MDUnitFactory.h"
 #include "MantidKernel/PhysicalConstants.h"
 #include "MantidKernel/TimeSeriesProperty.h"
 #include "MantidKernel/UnitLabelTypes.h"
@@ -35,14 +36,14 @@
 #include <Poco/DateTimeFormatter.h>
 #include <Poco/DateTimeParser.h>
 #include <Poco/DirectoryIterator.h>
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/exception/diagnostic_information.hpp>
 #include <boost/exception_ptr.hpp>
 #include <boost/regex.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 #include <iomanip>
 #include <iterator>
 #include <map>
@@ -149,10 +150,8 @@ void LoadDNSSCD::init() {
   auto reasonableAngle = std::make_shared<BoundedValidator<double>>();
   reasonableAngle->setLower(5.0);
   reasonableAngle->setUpper(175.0);
-  // clang-format off
-  auto mustBe3D = std::make_shared<ArrayLengthValidator<double> >(3);
-  auto mustBe2D = std::make_shared<ArrayLengthValidator<double> >(2);
-  // clang-format on
+  auto mustBe3D = std::make_shared<ArrayLengthValidator<double>>(3);
+  auto mustBe2D = std::make_shared<ArrayLengthValidator<double>>(2);
   std::vector<double> u0(3, 0), v0(3, 0);
   u0[0] = 1.;
   u0[1] = 1.;
@@ -720,14 +719,18 @@ void LoadDNSSCD::read_data(const std::string &fname, std::map<std::string, std::
     throw std::invalid_argument("Not a DNS file");
   }
   // get file save time
-  Poco::File pfile(fname);
-  Poco::DateTime lastModified = pfile.getLastModified();
-  std::string wtime(Poco::DateTimeFormatter::format(lastModified, "%Y-%m-%dT%H:%M:%S"));
+  auto ftime = std::filesystem::last_write_time(fname);
+  auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+      ftime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+  std::time_t cftime = std::chrono::system_clock::to_time_t(sctp);
+  std::tm *gmt = std::gmtime(&cftime);
+  std::ostringstream wtime_stream;
+  wtime_stream << std::put_time(gmt, "%Y-%m-%dT%H:%M:%S");
+  std::string wtime = wtime_stream.str();
   str_metadata.insert(std::make_pair("file_save_time", wtime));
 
   // get file basename
-  Poco::Path p(fname);
-  str_metadata.insert(std::make_pair("run_number", p.getBaseName()));
+  str_metadata.insert(std::make_pair("run_number", std::filesystem::path(fname).stem().string()));
 
   // parse metadata
   while (getline(file, line)) {

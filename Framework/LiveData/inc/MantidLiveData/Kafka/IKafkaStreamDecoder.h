@@ -8,6 +8,7 @@
 
 #include "MantidAPI/SpectraDetectorTypes.h"
 #include "MantidDataObjects/EventWorkspace.h"
+#include "MantidLiveData/DllConfig.h"
 #include "MantidLiveData/Kafka/IKafkaBroker.h"
 #include "MantidLiveData/Kafka/IKafkaStreamSubscriber.h"
 
@@ -24,7 +25,7 @@ namespace LiveData {
 Kafka stream decoder interface. Handles (implements) all thread synchronization
 functionality for accessing the data stream and processing data.
 */
-class DLLExport IKafkaStreamDecoder {
+class MANTID_LIVEDATA_DLL IKafkaStreamDecoder {
 public:
   /**
    * Defines a thread-safe callback. A mutex is held
@@ -78,7 +79,7 @@ public:
   ///@{
   bool isCapturing() const noexcept { return m_capturing; }
   virtual bool hasData() const noexcept = 0;
-  std::string runId() const noexcept { return m_runId; }
+  const std::string &runId() const noexcept { return m_runId; }
   int runNumber() const noexcept;
   virtual bool hasReachedEndOfRun() noexcept = 0;
   bool dataReset();

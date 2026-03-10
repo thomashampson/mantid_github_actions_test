@@ -19,10 +19,10 @@
 #include "MantidKernel/MandatoryValidator.h"
 #include "MantidKernel/PropertyWithValue.h"
 
-#include <Poco/File.h>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <filesystem>
 
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
@@ -65,7 +65,7 @@ std::string filterToExistingSources(std::vector<std::string> &input_data, std::v
  * @returns true if a workspace or file with given name exists
  */
 bool dataExists(const std::string &data_name) {
-  const std::string filepath = Mantid::API::FileFinder::Instance().getFullPath(data_name);
+  auto filepath = Mantid::API::FileFinder::Instance().getFullPath(data_name);
   // Calls to the ADS in algorithms like this should ordinarily
   // be avoided, unfortunately we have little choice in this case.
   // If we gave FileFinder an absolute path it just returns it (whether or not
@@ -79,11 +79,10 @@ bool dataExists(const std::string &data_name) {
  * @param filename :: full path of a file to test existence of
  * @returns true if the file exists
  */
-bool fileExists(const std::string &filename) {
+bool fileExists(const std::filesystem::path &filename) {
   if (filename.empty())
     return false;
-  Poco::File test_file(filename);
-  return test_file.exists();
+  return std::filesystem::exists(filename);
 }
 
 /*

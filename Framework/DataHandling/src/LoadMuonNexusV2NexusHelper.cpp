@@ -11,6 +11,7 @@
 #include "MantidAPI/WorkspaceFactory.h"
 #include "MantidDataObjects/TableWorkspace.h"
 #include "MantidDataObjects/Workspace2D.h"
+#include "MantidNexus/NexusClasses.h"
 
 #include <algorithm>
 #include <cctype>
@@ -50,15 +51,14 @@ const std::string PERIODOUTPUT{"output"};
 const std::string PERIODCOUNTS{"total_counts"};
 } // namespace NeXusEntry
 
-using namespace NeXus;
 using namespace Kernel;
 using namespace API;
-using namespace NeXus;
+using namespace Nexus;
 using namespace HistogramData;
 using std::size_t;
 using namespace DataObjects;
 
-LoadMuonNexusV2NexusHelper::LoadMuonNexusV2NexusHelper(const NeXus::NXEntry &entry) : m_entry(entry) {}
+LoadMuonNexusV2NexusHelper::LoadMuonNexusV2NexusHelper(const Nexus::NXEntry &entry) : m_entry(entry) {}
 
 // Loads the good frames from the Muon Nexus V2 entry
 NXInt LoadMuonNexusV2NexusHelper::loadGoodFramesDataFromNexus(bool isFileMultiPeriod) {
@@ -164,10 +164,10 @@ double LoadMuonNexusV2NexusHelper::loadFirstGoodDataFromNexus() {
     std::string firstGoodBin = counts.attributes(NeXusEntry::FIRSTGOODBIN);
     double resolution;
     switch (infoResolution.type) {
-    case NX_FLOAT32:
+    case NXnumtype::FLOAT32:
       resolution = static_cast<double>(detectorEntry.getFloat(NeXusEntry::RESOLUTION));
       break;
-    case NX_INT32:
+    case NXnumtype::INT32:
       resolution = static_cast<double>(detectorEntry.getInt(NeXusEntry::RESOLUTION));
       break;
     default:
@@ -189,10 +189,10 @@ double LoadMuonNexusV2NexusHelper::loadLastGoodDataFromNexus() {
     std::string lastGoodBin = counts.attributes(NeXusEntry::LASTGOODBIN);
     double resolution;
     switch (infoResolution.type) {
-    case NX_FLOAT32:
+    case NXnumtype::FLOAT32:
       resolution = static_cast<double>(detectorEntry.getFloat(NeXusEntry::RESOLUTION));
       break;
-    case NX_INT32:
+    case NXnumtype::INT32:
       resolution = static_cast<double>(detectorEntry.getInt(NeXusEntry::RESOLUTION));
       break;
     default:

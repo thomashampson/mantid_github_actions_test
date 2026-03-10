@@ -118,14 +118,14 @@ class SourceLinkDirective(AlgorithmBaseDirective):
             else:
                 suggested_path = "os_agnostic_path_to_file_from_source_root"
                 if len(path_list) > 1:
-                    suggested_path = path_list[0].replace(self.source_root, "")
+                    suggested_path = path_list[0].relative_to(self.source_root)
                 raise SourceLinkError(
                     "Found multiple possibilities for "
                     + file_name
                     + "."
                     + extension
                     + "\n"
-                    + "Possible matches"
+                    + "Possible matches "
                     + str(path_list)
                     + "\n"
                     + "Specify one using the "
@@ -136,7 +136,7 @@ class SourceLinkDirective(AlgorithmBaseDirective):
                     + "      :"
                     + extension
                     + ": "
-                    + suggested_path
+                    + suggested_path.as_posix()
                 )
 
             return self.file_lookup[file_name][extension]
@@ -166,6 +166,9 @@ class SourceLinkDirective(AlgorithmBaseDirective):
         builddir = builddir.resolve()
 
         for dir_name, _, file_list in os.walk(self.source_root):
+            # Ignore files inside pixi environments that live within the source tree
+            if ".pixi" in dir_name:
+                continue
             if builddir in Path(dir_name).resolve().parents:
                 continue  # don't check or add to the cache
             for fname in file_list:

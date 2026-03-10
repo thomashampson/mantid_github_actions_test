@@ -11,6 +11,7 @@ from typing import List
 
 import numpy as np
 from collections.abc import Sequence
+from copy import copy
 
 # 3rd party imports
 from matplotlib.gridspec import GridSpec
@@ -22,53 +23,13 @@ from mantid.api import AnalysisDataService, MatrixWorkspace, WorkspaceGroup
 from mantid.api import IMDHistoWorkspace
 from mantid.kernel import ConfigService
 from mantid.plots import datafunctions, MantidAxes
-from mantid.plots.utility import MantidAxType
+from mantid.plots.utility import MantidAxType, MARKER_MAP, get_plot_specific_properties
 
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
 PROJECTION = "mantid"
 
-MARKER_MAP = {
-    "square": "s",
-    "plus (filled)": "P",
-    "point": ".",
-    "tickdown": 3,
-    "triangle_right": ">",
-    "tickup": 2,
-    "hline": "_",
-    "vline": "|",
-    "pentagon": "p",
-    "tri_left": "3",
-    "caretdown": 7,
-    "caretright (centered at base)": 9,
-    "tickright": 1,
-    "caretright": 5,
-    "caretleft": 4,
-    "tickleft": 0,
-    "tri_up": "2",
-    "circle": "o",
-    "pixel": ",",
-    "caretleft (centered at base)": 8,
-    "diamond": "D",
-    "star": "*",
-    "hexagon1": "h",
-    "octagon": "8",
-    "hexagon2": "H",
-    "tri_right": "4",
-    "x (filled)": "X",
-    "thin_diamond": "d",
-    "tri_down": "1",
-    "triangle_left": "<",
-    "plus": "+",
-    "triangle_down": "v",
-    "triangle_up": "^",
-    "x": "x",
-    "caretup": 6,
-    "caretup (centered at base)": 10,
-    "caretdown (centered at base)": 11,
-    "None": "None",
-}
 
 # -----------------------------------------------------------------------------
 # Decorators
@@ -354,7 +315,7 @@ def raise_if_not_sequence(value, seq_name, element_type=None):
     """
     accepted_types = (list, tuple, range)
     if type(value) not in accepted_types:
-        raise ValueError("{} should be a list or tuple, " "instead found '{}'".format(seq_name, value.__class__.__name__))
+        raise ValueError("{} should be a list or tuple, instead found '{}'".format(seq_name, value.__class__.__name__))
     if element_type is not None:
 
         def raise_if_not_type(x):
@@ -366,7 +327,7 @@ def raise_if_not_sequence(value, seq_name, element_type=None):
         list(map(raise_if_not_type, value))
 
 
-def get_plot_fig(overplot=None, ax_properties=None, window_title=None, axes_num=1, fig=None):
+def get_plot_fig(overplot=None, ax_properties=None, window_title=None, axes_num=1, fig=None):  # noqa: C901
     """
     Create a blank figure and axes, with configurable properties.
     :param overplot: If true then plotting on figure will plot over previous plotting. If an axis object the overplotting
@@ -386,7 +347,8 @@ def get_plot_fig(overplot=None, ax_properties=None, window_title=None, axes_num=
     elif overplot:
         # The create subplot below assumes no figure was passed in, this is ensured by the elif above
         # but add an assert which prevents a future refactoring from breaking this assumption
-        assert not fig
+        if fig is not None:
+            raise ValueError("Expected fig to be empty")
         fig = plt.gcf()
         if not fig.axes:
             plt.close(fig)
@@ -405,9 +367,16 @@ def get_plot_fig(overplot=None, ax_properties=None, window_title=None, axes_num=
             ax_properties["yscale"] = "log"
         else:
             ax_properties["yscale"] = "linear"
+
     if ax_properties:
+        scales_to_amend = [scale for scale in ["x", "y"] if f"{scale}scale" in ax_properties]
         for axis in fig.axes:
-            axis.set(**ax_properties)
+            mod_ax_properties = ax_properties
+            for scale_id in scales_to_amend:
+                mod_ax_properties = _apply_scale_properties(ax_properties, scale_id, axis)
+            if mod_ax_properties:
+                axis.set(**_post_process_props(mod_ax_properties))
+
     if window_title and fig.canvas.manager is not None:
         fig.canvas.manager.set_window_title(window_title)
 
@@ -483,10 +452,10 @@ def _unpack_grouped_workspaces(mixed_list: List):
 def _validate_plot_inputs(workspaces, spectrum_nums, wksp_indices, tiled=False, overplot=False):
     """Raises a ValueError if any arguments have the incorrect types"""
     if spectrum_nums is not None and wksp_indices is not None:
-        raise ValueError("Both spectrum_nums and wksp_indices supplied. " "Please supply only 1.")
+        raise ValueError("Both spectrum_nums and wksp_indices supplied. Please supply only 1.")
 
     if tiled and overplot:
-        raise ValueError("Both tiled and overplot flags set to true. " "Please set only one to true.")
+        raise ValueError("Both tiled and overplot flags set to true. Please set only one to true.")
 
     raise_if_not_sequence(workspaces, "workspaces", MatrixWorkspace)
 
@@ -554,7 +523,7 @@ def _do_single_plot_mdhisto_workspace(ax, workspaces, errors=False):
                 num_dim += 1
         if num_dim != 1:
             raise RuntimeError(
-                f"Workspace {str(ws)} is an IMDHistoWorkspace with number of non-integral dimension " f"equal to {num_dim} but not 1."
+                f"Workspace {str(ws)} is an IMDHistoWorkspace with number of non-integral dimension equal to {num_dim} but not 1."
             )
 
         # Plot
@@ -582,23 +551,27 @@ def _set_axes_limits_from_properties(ax):
 
 
 def _do_single_plot(ax, workspaces, errors, set_title, nums, kw, plot_kwargs, log_name=None, log_values=None):
-    # do the plotting
-    plot_fn = ax.errorbar if errors else ax.plot
-
     counter = 0
     for ws in workspaces:
         for num in nums:
+            plot_fn = ax.errorbar if errors else ax.plot
+            if isinstance(ws, MatrixWorkspace):
+                plot_type = ws.getPlotType()
+                _plot_kwargs = get_plot_specific_properties(ws, plot_type, plot_kwargs)
+                if "errorbar" in plot_type or errors:
+                    plot_fn = ax.errorbar
+
             if log_values:
                 label = log_values[counter]
                 if len(nums) > 1:
                     label = f"spec {num}: {label}"
 
-                plot_kwargs["label"] = label
+                _plot_kwargs["label"] = label
 
                 counter += 1
 
-            plot_kwargs[kw] = num
-            plot_fn(ws, **plot_kwargs)
+            _plot_kwargs[kw] = num
+            plot_fn(ws, **_plot_kwargs)
 
     _set_axes_limits_from_properties(ax)
     ax.make_legend()
@@ -613,3 +586,27 @@ def _do_single_plot(ax, workspaces, errors, set_title, nums, kw, plot_kwargs, lo
             title += f" ({log_name})"
 
         ax.set_title(title)
+
+
+def _apply_scale_properties(ax_properties, scale_id, axis):
+    mod_ax_properties = copy(ax_properties)
+    scale_properties = {"value": mod_ax_properties.pop(f"{scale_id}scale")}
+    add_prop_key = f"{scale_id}scale_opts"
+    if add_prop_key in mod_ax_properties:
+        scale_properties.update(mod_ax_properties.pop(add_prop_key))
+    getattr(axis, f"set_{scale_id}scale")(**scale_properties)
+    return mod_ax_properties
+
+
+def _post_process_props(ax_properties):
+    """
+    ax_properties can be passed from c++, converted from Q objects into python objects.
+    post-processing can be necessary, if SIP does not convert Q objects into the required form.
+    :param ax_properties:
+    """
+    for k, v in ax_properties.items():
+        if k == "limits":  # Convert list to tuple
+            if isinstance(v, list):
+                ax_properties[k] = tuple(v)
+        # elif k == ... # Add further cases to process additional props
+    return ax_properties

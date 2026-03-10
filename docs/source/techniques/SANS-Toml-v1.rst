@@ -16,6 +16,41 @@ General Notes
 Format Changes
 ==============
 
+V1 (Mantid 6.4+) to V2 (Mantid 6.13+)
+-------------------------------------
+
+*polarization* options have been added to the TOML format.
+
+- *flipper_configuration*
+- *spin_configuration*
+- *polarization.flipper.NAME*
+
+  - *idf_component_name*
+  - *device_name*
+  - *location*
+
+    - *x*, *y*, and *z*
+
+  - *transmission*
+  - *efficiency*
+
+- *polarization.polarizer* and *polarization.analyzer*
+
+  - All fields from the flippers plus:
+  - *cell_length*
+  - *gas_pressure*
+  - *empty_cell*
+  - *initial_polarization*
+
+- *polarization.magnetic_field* and *polarization.electric_field*
+
+  - *sample_strength_log*
+  - *sample_direction*
+
+    - *a*, *p*, and *d*
+
+  - *sample_direction_log*
+
 V0 (Mantid 6.3+) to V1 (Mantid 6.4+)
 --------------------------------------
 
@@ -50,13 +85,15 @@ file version. Long-term this allows us to make changes in a backwards compatible
 Available TOML Versions:
 
 - 1
+- 2
 
-..  code-block:: none
+..  code-block:: yaml
 
-  # First line of file
-  toml_file_version = 1
+    # First line of file
+    toml_file_version = 2
 
-  # Everything else
+    # Everything else...
+
 
 Metadata
 --------
@@ -64,7 +101,7 @@ Metadata
 This is a free-form field, typically at the top of the file
 to enter any user attributes. They are ignored by the TOML parser.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [metadata]
     created = "1980-12-31"
@@ -76,13 +113,28 @@ Instrument
 
 This is a required entry to specify the instrument name and `instrument.configuration`, documented in the conversion guide below.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument]
     name = "LARMOR"  # or "LOQ" / "SANS2D" / "ZOOM"...etc.
 
   [instrument.configuration]
     # ...
+
+Phi Mask
+--------
+
+From Mantid 6.15, a new field, ``range``, for adding a range of phi slices is added to the phi mask.
+This is to automatize the process of reducing with different phi masks. A range is input as a list of floats,
+which will produce multiple reductions, each one with a different phi mask.
+Note that the range has to contain an even number of values as the slices will be extracted as pairs from the list:
+:math:`[PhiMin_1,PhiMax_1,PhiMin_2,PhiMax_2] \to [PhiMin_1,PhiMax_1], [PhiMin_2,PhiMax_2]`.
+This field takes precedence over ``phi.start`` and ``phi.stop`` if both are set on the user file.
+
+..  code-block:: yaml
+
+  [mask.phi]
+    range = [-15.0,15.0,45.0,90.0]
 
 
 Conversion From Legacy User Files
@@ -104,18 +156,18 @@ the existing user file format: `[ ]`.
 Examples are given in a way that they can be merged together where headers
 match, for example these three examples:
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       wavelength = {start = 2.0, step=0.125, stop=14.0, type = "Lin"}
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.1d_reduction]
         binning = "0.02,0.05,0.5,-0.1,10.0"
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.2d_reduction]
@@ -125,7 +177,7 @@ match, for example these three examples:
 
 Are combined into the following when writing the TOML file:
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       wavelength = {start = 2.0, step=0.125, stop=14.0, type = "Lin"}
@@ -147,9 +199,9 @@ For converting existing files the following process is recommended:
 - Create a **blank** TOML file (file.toml instead of file.txt)
 - Add the following to the start of the TOML file in the order shown:
 
-..  code-block:: none
+..  code-block:: yaml
 
-    toml_file_version = 1
+    toml_file_version = 2
 
     [metadata]
 
@@ -192,7 +244,7 @@ is now deprecated. See also :ref:`back_mn_times-ref`.
 
 Times were specified in microseconds.
 
-..  code-block:: none
+..  code-block:: yaml
 
     [normalisation]
       [normalisation.all_monitors]
@@ -207,7 +259,7 @@ Times were specified in microseconds.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [normalisation]
       [normalisation.all_monitors]
@@ -226,23 +278,23 @@ background level on a specified monitor. See also :ref:`back_mon_times-ref`.
 
 Times were specified in microseconds.
 
-..  code-block:: none
+..  code-block:: yaml
 
     # Note: both "normalisation" and "normalisation" are both accepted
     [normalisation]
       [normalisation.monitor.Mn]
         spectrum_number = n
-  	    use_own_background = true
+        use_own_background = true
         background = [t1, t2]
 
 *OR*
 
-..  code-block:: none
+..  code-block:: yaml
 
     [transmission]
       [transmission.monitor.Mn]
         spectrum_number = n
-  	    use_own_background = true
+        use_own_background = true
         background = [t1, t2]
 
 **Existing Example**
@@ -253,12 +305,12 @@ Times were specified in microseconds.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [normalisation]
       [normalisation.monitor.M1]
         spectrum_number = 1
-  	    use_own_background = true
+        use_own_background = true
         background = [30000.0, 40000.0]
 
 COMPATIBILITY ON
@@ -298,7 +350,7 @@ in the specified axis.
 
 Tilt rotates a bank by the given number of degrees along the axis specified.
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.correction.position]
@@ -343,7 +395,7 @@ Tilt rotates a bank by the given number of degrees along the axis specified.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.correction.position]
@@ -373,7 +425,7 @@ equivalent to the *rear* detector.
 In TOML the detectors must be specified in lower case, and /BOTH
 has been replaced by "all".
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector.configuration]
       selected_detector = "rear"
@@ -386,7 +438,7 @@ has been replaced by "all".
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector.configuration]
       # Accepts "front", "rear", "merged", or "all".
@@ -400,7 +452,7 @@ detector data should be multiplied to allow it to overlap the
 reduced rear detector data. If omitted n was assumed to be 1.0
 (no rescaling). See also :ref:`det_rescale_fit-ref` and :ref:`det_shift_y-ref`.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.rescale]
@@ -415,7 +467,7 @@ reduced rear detector data. If omitted n was assumed to be 1.0
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.rescale]
@@ -436,7 +488,7 @@ also :ref:`det_rescale_fit-ref`.
 
 Scattering vectors were specified in inverse Angstroms.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.rescale]
@@ -453,7 +505,7 @@ Scattering vectors were specified in inverse Angstroms.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.rescale]
@@ -471,7 +523,7 @@ reduced *front* detector data should be shifted in intensity to allow
 it to overlap the reduced rear detector data. If omitted n was assumed
 to be 0.0 (no shift). See also :ref:`det_rescale_fit-ref` and :ref:`det_shift_y-ref`.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.shift]
@@ -486,7 +538,7 @@ to be 0.0 (no shift). See also :ref:`det_rescale_fit-ref` and :ref:`det_shift_y-
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.shift]
@@ -505,7 +557,7 @@ specified. If omitted, all overlapping Q values were used. See also
 
 Scattering vectors were specified in inverse Angstroms.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.shift]
@@ -521,7 +573,7 @@ Scattering vectors were specified in inverse Angstroms.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.shift]
@@ -538,7 +590,7 @@ omitted, all overlapping Q values were used.
 
 Scattering vectors were specified in inverse Angstroms.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction]
     [reduction.merged.merge_range]
@@ -555,7 +607,7 @@ Scattering vectors were specified in inverse Angstroms.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [merged]
     [reduction.merged.merge_range]
@@ -623,7 +675,7 @@ Times were specified in microseconds.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [mask]
     prompt_peak = {start = t1, stop = t2}
@@ -636,7 +688,7 @@ Times were specified in microseconds.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [mask]
     prompt_peak = {start = 19900.0, stop = 20500.0}
@@ -651,7 +703,7 @@ transmission data. See also :ref:`fitting_on-ref`.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [transmission]
       [transmission.fitting]
@@ -670,7 +722,7 @@ transmission data. See also :ref:`fitting_on-ref`.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [transmission]
       [transmission.fitting]
@@ -708,7 +760,7 @@ Y=C0+C1X+C2X^2+...CnX^n where n>2.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [transmission]
       [transmission.fitting]
@@ -727,7 +779,7 @@ Y=C0+C1X+C2X^2+...CnX^n where n>2.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [transmission]
       [transmission.fitting]
@@ -750,7 +802,7 @@ corrections will be included in that calculation too.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       gravity_enabled = true
@@ -763,7 +815,7 @@ corrections will be included in that calculation too.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       gravity_enabled = true
@@ -783,7 +835,7 @@ to 0.5 * collimation_length. See also :ref:`QRESOL/LCOLLIM=z <qresol-lcollim-z>`
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       gravity_extra_length = x
@@ -796,7 +848,7 @@ to 0.5 * collimation_length. See also :ref:`QRESOL/LCOLLIM=z <qresol-lcollim-z>`
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       gravity_extra_length = 2.0
@@ -821,7 +873,7 @@ tsteps were specified as %/100.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction.events]
     binning = "str"
@@ -834,7 +886,7 @@ tsteps were specified as %/100.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [reduction.events]
     # A negative step (middle val) indicates Log
@@ -859,7 +911,7 @@ Angles were specified in degrees.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.phi]
@@ -875,7 +927,7 @@ Angles were specified in degrees.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.phi]
@@ -900,7 +952,7 @@ implemented but they can be summarised thus:
 
     L/Q q1 q2 qstep/LIN   same as   L/Q/LIN q1 q2 qstep
     L/Q q1 q2 qstep/LOG   same as   L/Q/LOG q1 q2 qstep
-	L/Q q1,qstep1,q2,qstep2,q3...
+    L/Q q1,qstep1,q2,qstep2,q3...
 
 In the first two cases the type of Q-binning is fixed by the choice of
 the \LIN or \LOG qualifier. But in the last case *variable* Q-binning
@@ -915,7 +967,7 @@ qsteps were specified as %/100.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning.1d_reduction]
         # Negative indicates log
@@ -929,7 +981,7 @@ qsteps were specified as %/100.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.1d_reduction]
@@ -953,7 +1005,7 @@ algorithm description.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning.1d_reduction]
         radius_cut = r
@@ -966,7 +1018,7 @@ algorithm description.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.1d_reduction]
@@ -991,7 +1043,7 @@ The cut-off wavelength was specified in Angstroms.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning.1d_reduction]
         wavelength_cut = w
@@ -1004,7 +1056,7 @@ The cut-off wavelength was specified in Angstroms.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.1d_reduction]
@@ -1037,7 +1089,7 @@ Logarithmic qsteps were specified as %/100.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.2d_reduction]
@@ -1055,7 +1107,7 @@ Logarithmic qsteps were specified as %/100.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       [binning.2d_reduction]
@@ -1085,7 +1137,7 @@ However, at some point this rstep seemed to become optional, and indeed was
 never used on some the TS2 instruments. **How the virtual ring width was decided
 in such cases is also unclear!**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       radius_limit = {min = 0.038, max = -0.001}
@@ -1098,7 +1150,7 @@ in such cases is also unclear!**
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       radius_limit = {min = 0.038, max = -0.001}
@@ -1148,7 +1200,7 @@ Logarithmic wsteps were specified as %/100.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     wavelength = {start = min, step = step, stop = max, type = "Lin"}
     # Alternative for ranges
@@ -1162,7 +1214,7 @@ Logarithmic wsteps were specified as %/100.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [binning]
       # Only for "Lin", "Log"
@@ -1197,7 +1249,7 @@ regions of pixels from the calculation.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
     mask_files = ["a", "b", "c"]
@@ -1210,7 +1262,7 @@ regions of pixels from the calculation.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
     mask_files = ["a.xml", "b.xml", "c.xml"]
@@ -1229,7 +1281,7 @@ specified at once.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]  # Or front
@@ -1244,7 +1296,7 @@ specified at once.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]
@@ -1265,7 +1317,7 @@ specified at once.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]  # Or front
@@ -1279,7 +1331,7 @@ specified at once.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]
@@ -1301,7 +1353,7 @@ specified at once.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]  # Or front
@@ -1316,7 +1368,7 @@ specified at once.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]
@@ -1337,7 +1389,7 @@ specified at once.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]  # Or front
@@ -1351,7 +1403,7 @@ specified at once.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.spatial.rear]
@@ -1409,7 +1461,7 @@ instruments.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     beamstop_shadow = {width = a, angle = b}
 
@@ -1421,7 +1473,7 @@ instruments.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       beamstop_shadow = {width = 0.03, angle = 170.0}
@@ -1442,7 +1494,7 @@ even in legacy files!
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     beamstop_shadow = {width = a, angle = b, x_pos = c, y_pos = d}
 
@@ -1454,7 +1506,7 @@ even in legacy files!
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       beamstop_shadow = {width = 0.03, angle = 170.0, x_pos=0.3, y_pos=0.1}
@@ -1470,7 +1522,7 @@ specified at once.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       mask_pixels = [n1, n2, ...n]
@@ -1484,7 +1536,7 @@ specified at once.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       mask_pixels = [123, 456]
@@ -1503,7 +1555,7 @@ specified at once.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.time]
@@ -1523,7 +1575,7 @@ specified at once.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [mask]
       [mask.time]
@@ -1548,7 +1600,7 @@ as wavelength (in Angstroms), efficiency ratio, uncertainty on efficiency ratio.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.correction.direct]
@@ -1564,7 +1616,7 @@ as wavelength (in Angstroms), efficiency ratio, uncertainty on efficiency ratio.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.correction.direct]
@@ -1587,7 +1639,7 @@ efficiency.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.correction.flat]
@@ -1601,7 +1653,7 @@ efficiency.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.correction.flat]
@@ -1674,7 +1726,7 @@ MON/SPECTRUM=n
 This command was used to specify which monitor *spectrum* (not number) was to
 be used for normalisation during data reduction.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     norm_monitor = "Mn"
@@ -1696,7 +1748,7 @@ be used for normalisation during data reduction.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     norm_monitor = "M1"
@@ -1734,7 +1786,7 @@ be used for normalisation during data reduction. As the /TRANS qualifier was
 present the command only applied to the normalisation of *transmission*
 spectra.
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     norm_monitor = "Ma"
@@ -1767,7 +1819,7 @@ spectra.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     norm_monitor = "M1"
@@ -1808,7 +1860,7 @@ still two ways to include equivalent information in the file:
 - The first is within the [metadata] block at the top of the file; for
   example:
 
-..  code-block:: none
+..  code-block:: yaml
 
     [metadata]
       name = "Using beamstop M4 for transmissions"
@@ -1818,7 +1870,7 @@ still two ways to include equivalent information in the file:
 
 - The other is in the form of comments; for example:
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       #Remember to use METRES!
@@ -1848,7 +1900,7 @@ algorithm description.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     enabled = true  # Or false
@@ -1861,7 +1913,7 @@ algorithm description.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     enabled = true  # Or false
@@ -1885,7 +1937,7 @@ uncertainty on time spread (zero if unknown).
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     moderator_file = "filename"
@@ -1898,7 +1950,7 @@ uncertainty on time spread (zero if unknown).
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     moderator_file = "ModeratorStdDev_TS2_SANS_LETexptl_07Aug2015.txt"
@@ -1921,7 +1973,7 @@ in :ref:`algm-TOFSANSResolutionByPixel`.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     delta_r = dr
@@ -1934,7 +1986,7 @@ in :ref:`algm-TOFSANSResolutionByPixel`.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     delta_r = 0.003  # mm
@@ -1957,7 +2009,7 @@ pinhole collimation!**
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     source_aperture = x
@@ -1970,7 +2022,7 @@ pinhole collimation!**
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     source_aperture = 0.03
@@ -1999,7 +2051,7 @@ block at the top of TOML User Files instead of the [q_resolution] block.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     sample_aperture_diameter = x
@@ -2012,7 +2064,7 @@ block at the top of TOML User Files instead of the [q_resolution] block.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     sample_aperture_diameter = 0.02
@@ -2038,7 +2090,7 @@ the heights and widths of a slit do not have to be the same.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     h1 = x1
@@ -2057,7 +2109,7 @@ the heights and widths of a slit do not have to be the same.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [q_resolution]
     h1 = 0.016
@@ -2086,7 +2138,7 @@ Also note that the collimation length was historically specified in metres too.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     collimation_length = z
@@ -2099,7 +2151,7 @@ Also note that the collimation length was historically specified in metres too.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     collimation_length = 4.0
@@ -2114,7 +2166,7 @@ sample position *towards* the detector(s).
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     sample_offset = z
@@ -2127,7 +2179,7 @@ sample position *towards* the detector(s).
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
   [instrument.configuration]
     sample_offset = -0.06
@@ -2151,7 +2203,10 @@ algorithm description.
 
 **Replacement Example**
 
-Unsupported, pending future discussion.
+..  code-block:: yaml
+
+  [transmission]
+    wide_angle_correction=true
 
 .. _set_centre-ref:
 
@@ -2166,7 +2221,7 @@ also SET CENTRE[/MAIN][/HAB] a b [c d].
 centre coordinates to a front detector if present. In most instances
 this will not be sensible.**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.configuration]
@@ -2180,7 +2235,7 @@ this will not be sensible.**
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.configuration]
@@ -2211,7 +2266,7 @@ be optimised using the beam centre finder tool!) are:
     SANS2D: ( 0.100, -0.080)
     ZOOM:   (-0.170, -0.050)
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.configuration]
@@ -2227,7 +2282,7 @@ be optimised using the beam centre finder tool!) are:
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.configuration]
@@ -2247,25 +2302,22 @@ the data reduction calculation.
 In the case of the LOQ instrument, it also allowed the relative scaling of
 the four high-angle detector banks (parameters b, c, d & e) to be accounted
 for (as a*b, a*c, a*d & a*e). For all other ISIS SANS instruments these
-four parameters should be set to unity.
+four parameters would be set to unity.
 
-**Note: In 2020 it was discovered that due to a forever bug in the legacy
-User File command parser the parameters b, c, d & e have never been implemented
-in Mantid.** See this `issue <https://github.com/mantidproject/mantid/issues/27948>`_.
-
-All workspaces are currently scaled by the value represented by `a` for all values,
-rather than on a per-bank basis.
+In the TOML format, the separate scaling factors for the four high angle
+detector banks have been consolidated into a single ``front_scale`` value.
 
 The TOML replacement command allows separate but single scaling factors for
-both rear and front detectors to be specified. But to maintain compatibility
-`front_scale` is ignored by the parser and will not do anything.
+both rear and front detectors to be specified. For instruments with both
+high and low angle banks - if ``front_scale`` is not defined, then the
+``rear_scale`` factor will be used for both banks.
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.configuration]
-        front_scale = a
         rear_scale = a
+        front_scale = b
 
 **Existing Example:**
 
@@ -2275,11 +2327,19 @@ both rear and front detectors to be specified. But to maintain compatibility
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
       [detector.configuration]
-        front_scale = 1.0
+        rear_scale = 0.02938
+
+**OR**
+
+.. code-block:: yaml
+
+    [detector]
+      [detector.configuration]
+        front_scale = 0.02938
         rear_scale = 0.02938
 
 SET[/NOTABLES] BANK a b c d e
@@ -2437,7 +2497,7 @@ TRANS/ROI=filename command.** See also :ref:`trans_transpec-ref`.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       trans_monitor = "ROI"
@@ -2459,6 +2519,8 @@ TRANS/ROI=filename command.** See also :ref:`trans_transpec-ref`.
 
 **Replacement Example**
 
+..  code-block:: yaml
+
     [instrument.configuration]
       trans_monitor = "ROI"
 
@@ -2478,7 +2540,7 @@ number may, or may not, be the same depending on the instrument!
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       # Where Mn is arbitrary but must match the section label
@@ -2496,7 +2558,7 @@ number may, or may not, be the same depending on the instrument!
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       trans_monitor = "M3"
@@ -2519,7 +2581,7 @@ transmission monitors.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       # Where Mn is arbitrary but must match the section label
@@ -2528,7 +2590,7 @@ transmission monitors.
     [transmission]
       [transmission.monitor.Mn]
         spectrum_number = s
-		    shift = dz
+        shift = dz
 
 **Existing Example:**
 
@@ -2538,7 +2600,7 @@ transmission monitors.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [instrument.configuration]
       trans_monitor = "M4"
@@ -2558,7 +2620,7 @@ be amalgamated.
 
 **Replacement**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
 
@@ -2573,7 +2635,7 @@ be amalgamated.
 
 **Replacement Example**
 
-..  code-block:: none
+..  code-block:: yaml
 
     [detector]
 

@@ -4,46 +4,19 @@
 #     NScD Oak Ridge National Laboratory, European Spallation Source
 #     & Institut Laue - Langevin
 # SPDX - License - Identifier: GPL - 3.0 +
-import re
+
+from sans.user_file.toml_parsers.toml_base_schema import TomlSchemaValidator
 
 
-class TomlValidationError(Exception):
-    # A key error would be more appropriate, but there is special
-    # handling on KeyError which escapes any new lines making it un-readable
-    pass
-
-
-class TomlSchemaV1Validator(object):
+class TomlSchemaV1Validator(TomlSchemaValidator):
     # As of the current TOML release there is no way to validate a schema so
     # we must provide an implementation
 
-    # Note : To future devs, if we have a V2 schema a lot of this class could
-    # be split into a SchemaValidator and an inheriting V1 and V2 schema
-    # would override the reference schema with the new one
-
     def __init__(self, dict_to_validate):
-        self._expected_list = self._build_nested_keys(self._reference_schema())
-        self._to_validate_list = self._build_nested_keys(dict_to_validate)
-
-    def validate(self):
-        self._to_validate_list = filter(lambda s: not s.startswith("metadata"), self._to_validate_list)
-        unrecognised = set(self._to_validate_list).difference(self._expected_list)
-
-        if not unrecognised:
-            return
-
-        # Build any with wildcards
-        wildcard_matchers = [re.compile(s) for s in self._expected_list if "*" in s]
-        # Remove anything which matches any the regex wildcards
-        unrecognised = [s for s in unrecognised if not any(wild_matcher.match(s) for wild_matcher in wildcard_matchers)]
-
-        if len(unrecognised) > 0:
-            err = "The following keys were not recognised:\n"
-            err += "".join("{0} \n".format(k) for k in unrecognised)
-            raise TomlValidationError(err)
+        super(TomlSchemaV1Validator, self).__init__(dict_to_validate)
 
     @staticmethod
-    def _reference_schema():
+    def reference_schema():
         """
         Returns a dictionary layout of all supported keys
         :return: Dictionary containing all keys, and values set to None
@@ -58,12 +31,14 @@ class TomlSchemaV1Validator(object):
                 "sample_aperture_diameter",
                 "sample_offset",
                 "trans_monitor",
+                "solid_angle_cylinder_slices",
             },
         }
 
         detector_keys = {
             "configuration": {
                 "selected_detector": None,
+                "front_scale": None,
                 "rear_scale": None,
                 "all_centre": {"x", "y"},
                 "front_centre": {"x", "y"},
@@ -120,6 +95,7 @@ class TomlSchemaV1Validator(object):
             },
             "ROI": {"file"},
             "fitting": {"enabled": None, "function": None, "polynomial_order": None, "parameters": {"lambda_min", "lambda_max"}},
+            "wide_angle_correction": None,
         }
 
         normalisation_keys = {"monitor": {"*": {"spectrum_number", "background"}}, "all_monitors": {"background", "enabled"}}
@@ -127,7 +103,7 @@ class TomlSchemaV1Validator(object):
         mask_keys = {
             "prompt_peak": {"start", "stop"},
             "mask_files": None,
-            "phi": {"mirror", "start", "stop"},
+            "phi": {"mirror", "start", "stop", "range"},
             "time": {"tof"},
             "spatial": {
                 "rear": {"detector_columns", "detector_rows", "detector_column_ranges", "detector_row_ranges"},
@@ -150,26 +126,3 @@ class TomlSchemaV1Validator(object):
             "reduction": reduction_keys,
             "transmission": transmission_keys,
         }
-
-    @staticmethod
-    def _build_nested_keys(d, path="", current_out=None):
-        if not current_out:
-            current_out = []
-
-        def make_path(current_path, new_key):
-            return current_path + "." + new_key if current_path else new_key
-
-        for key, v in d.items():
-            new_path = make_path(path, key)
-            if isinstance(v, dict):
-                # Recurse into dict
-                current_out = TomlSchemaV1Validator._build_nested_keys(v, new_path, current_out)
-            elif isinstance(v, set):
-                # Pack all in from the set of names
-                for name in v:
-                    current_out.append(make_path(new_path, name))
-            else:
-                # This means its a value type with nothing special, so keep name
-                current_out.append(new_path)
-
-        return current_out

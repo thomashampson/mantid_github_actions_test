@@ -66,7 +66,9 @@ set(TEST_PY_FILES
     ReflectometryILLPreprocessTest.py
     ReflectometryISISSumBanksTest.py
     ReflectometryILLSumForegroundTest.py
+    ReflectometryISISCalculatePolEffTest.py
     ReflectometryISISCalibrationTest.py
+    ReflectometryISISCreateTransmissionTest.py
     ReflectometryISISLoadAndProcessTest.py
     ReflectometryISISPreprocessTest.py
     ResNorm2Test.py
@@ -78,6 +80,7 @@ set(TEST_PY_FILES
     SANSILLReductionTest.py
     SANSILLReduction2Test.py
     SANSILLParameterScanTest.py
+    SANSISISPolarizationCorrectionsTest.py
     SANSMaskTest.py
     SANSStitchTest.py
     SavePlot1DTest.py
@@ -87,6 +90,7 @@ set(TEST_PY_FILES
     SimulatedDensityOfStatesTest.py
     SofQWMomentsTest.py
     SofQWMomentsScanTest.py
+    StitchByBackgroundTest.py
     SwapWidthsTest.py
     TimeSliceTest.py
     TOSCABankCorrectionTest.py
@@ -96,6 +100,7 @@ set(TEST_PY_FILES
     WANDPowderReductionTest.py
     InterpolateBackgroundTest.py
     HFIRGoniometerIndependentBackgroundTest.py
+    HFIRPowderReductionTest.py
 )
 check_tests_valid(${CMAKE_CURRENT_SOURCE_DIR} ${TEST_PY_FILES})
 

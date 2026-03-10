@@ -11,6 +11,7 @@
 #include "MantidPythonInterface/core/Policies/RemoveConst.h"
 
 #include <boost/python/class.hpp>
+#include <boost/python/copy_const_reference.hpp>
 #include <boost/python/overloads.hpp>
 #include <boost/python/register_ptr_to_python.hpp>
 
@@ -46,20 +47,23 @@ void export_Instrument() {
            "represents the source")
 
       .def("getComponentByName",
-           (std::shared_ptr<const IComponent>(Instrument::*)(const std::string &, int) const) &
+           (std::shared_ptr<const IComponent> (Instrument::*)(const std::string &, int) const) &
                Instrument::getComponentByName,
            (arg("self"), arg("cname"), arg("nlevels") = 0), "Returns the named :class:`~mantid.geometry.Component`")
 
       .def("getDetector",
-           (std::shared_ptr<const IDetector>(Instrument::*)(const detid_t &) const) & Instrument::getDetector,
+           // cppcheck-suppress cstyleCast
+           (std::shared_ptr<const IDetector> (Instrument::*)(const detid_t &) const) & Instrument::getDetector,
            (arg("self"), arg("detector_id")), "Returns the :class:`~mantid.geometry.Detector` with the given ID")
+
+      .def("getDefaultView", &Instrument::getDefaultView, arg("self"), return_value_policy<copy_const_reference>(),
+           "Return the name of the preferred view in instrument view.")
 
       .def("getNumberDetectors", &Instrument::getNumberDetectors,
            Instrument_getNumberDetectors((arg("self"), arg("skipMonitors") = false)))
 
-      .def("getReferenceFrame",
-           (std::shared_ptr<const ReferenceFrame>(Instrument::*)()) & Instrument::getReferenceFrame, arg("self"),
-           return_value_policy<RemoveConstSharedPtr>(),
+      .def("getReferenceFrame", (std::shared_ptr<const ReferenceFrame> (Instrument::*)())&Instrument::getReferenceFrame,
+           arg("self"), return_value_policy<RemoveConstSharedPtr>(),
            "Returns the :class:`~mantid.geometry.ReferenceFrame` attached that "
            "defines the instrument "
            "axes")
@@ -72,8 +76,15 @@ void export_Instrument() {
            "Return the valid to :class:`~mantid.kernel.DateAndTime` of the "
            "instrument")
 
+      .def("getFilename", &Instrument::getFilename, arg("self"), return_value_policy<copy_const_reference>(),
+           "Return the name of the file that the original IDF was from")
+
+      .def("setFilename", &Instrument::setFilename, (arg("self"), arg("filename")),
+           "Set the name of the file that the original IDF was from")
+
       .def("getBaseInstrument", &Instrument::baseInstrument, arg("self"), return_value_policy<RemoveConstSharedPtr>(),
            "Return reference to the base instrument")
 
-      .def("findRectDetectors", &Instrument::findRectDetectors, arg("self"), "Return a list of rectangular detectors.");
+      .def("findRectDetectors", &Instrument::findRectDetectors, arg("self"), "Return a list of rectangular detectors.")
+      .def("findGridDetectors", &Instrument::findGridDetectors, arg("self"), "Return a list of grid detectors.");
 }

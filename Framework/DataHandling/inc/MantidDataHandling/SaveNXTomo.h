@@ -13,6 +13,7 @@
 #include "MantidDataHandling/DllConfig.h"
 #include "MantidDataObjects/Workspace2D.h"
 #include "MantidGeometry/Instrument/RectangularDetector.h"
+#include "MantidNexus/NexusFile_fwd.h"
 #include <vector>
 
 namespace Mantid {
@@ -83,16 +84,16 @@ private:
   bool processGroups() override;
 
   /// Creates the format for the output file if it doesn't exist
-  ::NeXus::File setupFile();
+  void setupFile();
 
   /// Writes a single workspace into the file
-  void writeSingleWorkspace(const DataObjects::Workspace2D_sptr &workspace, ::NeXus::File &nxFile);
+  void writeSingleWorkspace(const DataObjects::Workspace2D_sptr &workspace);
 
   /// Write various pieces of data from the workspace log with checks on the
   /// structure of the nexus file
-  void writeLogValues(const DataObjects::Workspace2D_sptr &workspace, ::NeXus::File &nxFile, int thisFileInd);
-  void writeIntensityValue(const DataObjects::Workspace2D_sptr &workspace, ::NeXus::File &nxFile, int thisFileInd);
-  void writeImageKeyValue(const DataObjects::Workspace2D_sptr &workspace, ::NeXus::File &nxFile, int thisFileInd);
+  void writeLogValues(const DataObjects::Workspace2D_sptr &workspace, std::size_t thisFileInd);
+  void writeIntensityValue(const DataObjects::Workspace2D_sptr &workspace, std::size_t thisFileInd);
+  void writeImageKeyValue(const DataObjects::Workspace2D_sptr &workspace, std::size_t thisFileInd);
 
   /// Main exec routine, called for group or individual workspace processing.
   void processAll();
@@ -101,19 +102,22 @@ private:
   bool m_includeError;
   bool m_overwriteFile;
   size_t m_spectraCount;
-  std::vector<int64_t> m_slabStart;
-  std::vector<int64_t> m_slabSize;
+  Nexus::DimVector m_slabStart;
+  Nexus::DimVector m_slabSize;
   /// The filename of the output file
   std::string m_filename;
   // Dimensions for axis in nxTomo file.
-  std::vector<int64_t> m_dimensions;
+  Nexus::DimVector m_dimensions;
   // Infinite file range dimensions / for use with makeData data and error
-  std::vector<int64_t> m_infDimensions;
+  Nexus::DimVector m_infDimensions;
 
   /// file format version
   static const std::string NXTOMO_VER;
 
   std::vector<DataObjects::Workspace2D_sptr> m_workspaces;
+
+  // hold reference to NeXusFile;
+  std::unique_ptr<Nexus::File> m_nxFile;
 };
 
 } // namespace DataHandling

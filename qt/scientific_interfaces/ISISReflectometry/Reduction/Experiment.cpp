@@ -19,28 +19,28 @@ Experiment::Experiment()
       m_polarizationCorrections(PolarizationCorrections(PolarizationCorrectionType::None)),
       m_floodCorrections(FloodCorrections(FloodCorrectionType::Workspace)), m_transmissionStitchOptions(),
       m_stitchParameters(std::map<std::string, std::string>()),
-      m_lookupTable(LookupTable({LookupRow(boost::none, boost::none, TransmissionRunPair(), boost::none, RangeInQ(),
-                                           boost::none, ProcessingInstructions(), boost::none, boost::none)})) {}
+      m_lookupTable(LookupTable({LookupRow(std::nullopt, std::nullopt, TransmissionRunPair(), std::nullopt, RangeInQ(),
+                                           std::nullopt, ProcessingInstructions(), std::nullopt, std::nullopt)})),
+      m_diagnostics(false) {}
 
 Experiment::Experiment(AnalysisMode analysisMode, ReductionType reductionType, SummationType summationType,
                        bool includePartialBins, bool debug, BackgroundSubtraction backgroundSubtraction,
                        PolarizationCorrections polarizationCorrections, FloodCorrections floodCorrections,
                        TransmissionStitchOptions transmissionStitchOptions,
-
-                       std::map<std::string, std::string> stitchParameters,
-
-                       LookupTable lookupTable)
+                       std::map<std::string, std::string> stitchParameters, LookupTable lookupTable, bool diagnostics)
     : m_analysisMode(analysisMode), m_reductionType(reductionType), m_summationType(summationType),
       m_includePartialBins(includePartialBins), m_debug(debug), m_backgroundSubtraction(backgroundSubtraction),
-      m_polarizationCorrections(polarizationCorrections), m_floodCorrections(std::move(floodCorrections)),
+      m_polarizationCorrections(std::move(polarizationCorrections)), m_floodCorrections(std::move(floodCorrections)),
       m_transmissionStitchOptions(std::move(transmissionStitchOptions)),
-      m_stitchParameters(std::move(stitchParameters)), m_lookupTable(std::move(lookupTable)) {}
+      m_stitchParameters(std::move(stitchParameters)), m_lookupTable(std::move(lookupTable)),
+      m_diagnostics(diagnostics) {}
 
 AnalysisMode Experiment::analysisMode() const { return m_analysisMode; }
 ReductionType Experiment::reductionType() const { return m_reductionType; }
 SummationType Experiment::summationType() const { return m_summationType; }
 bool Experiment::includePartialBins() const { return m_includePartialBins; }
 bool Experiment::debug() const { return m_debug; }
+bool Experiment::diagnostics() const { return m_diagnostics; }
 
 BackgroundSubtraction const &Experiment::backgroundSubtraction() const { return m_backgroundSubtraction; }
 
@@ -49,7 +49,7 @@ FloodCorrections const &Experiment::floodCorrections() const { return m_floodCor
 
 TransmissionStitchOptions Experiment::transmissionStitchOptions() const { return m_transmissionStitchOptions; }
 
-std::map<std::string, std::string> Experiment::stitchParameters() const { return m_stitchParameters; }
+const std::map<std::string, std::string> &Experiment::stitchParameters() const { return m_stitchParameters; }
 
 std::string Experiment::stitchParametersString() const {
   return MantidQt::MantidWidgets::optionsToString(m_stitchParameters);
@@ -59,25 +59,25 @@ std::vector<LookupRow> const &Experiment::lookupTableRows() const { return m_loo
 
 std::vector<LookupRow::ValueArray> Experiment::lookupTableToArray() const { return m_lookupTable.toValueArray(); }
 
-boost::optional<LookupRow> Experiment::findLookupRow(Row const &row, double tolerance) const {
+std::optional<LookupRow> Experiment::findLookupRow(Row const &row, double tolerance) const {
   return m_lookupTable.findLookupRow(row, tolerance);
 }
 
-boost::optional<LookupRow> Experiment::findLookupRow(PreviewRow const &previewRow, double tolerance) const {
+std::optional<LookupRow> Experiment::findLookupRow(PreviewRow const &previewRow, double tolerance) const {
   return m_lookupTable.findLookupRow(previewRow, tolerance);
 }
 
-boost::optional<LookupRow> Experiment::findWildcardLookupRow() const { return m_lookupTable.findWildcardLookupRow(); }
+std::optional<LookupRow> Experiment::findWildcardLookupRow() const { return m_lookupTable.findWildcardLookupRow(); }
 
 void Experiment::updateLookupRow(LookupRow lookupRow, double tolerance) {
   m_lookupTable.updateLookupRow(std::move(lookupRow), tolerance);
 }
 
-boost::optional<size_t> Experiment::getLookupRowIndexFromRow(Row const &row, double tolerance) const {
+std::optional<size_t> Experiment::getLookupRowIndexFromRow(Row const &row, double tolerance) const {
   if (auto const lookupRow = m_lookupTable.findLookupRow(row, tolerance)) {
-    return m_lookupTable.getIndex(lookupRow.get());
+    return m_lookupTable.getIndex(lookupRow.value());
   }
-  return boost::none;
+  return std::nullopt;
 }
 
 bool operator!=(Experiment const &lhs, Experiment const &rhs) { return !operator==(lhs, rhs); }
@@ -89,6 +89,7 @@ bool operator==(Experiment const &lhs, Experiment const &rhs) {
          lhs.polarizationCorrections() == rhs.polarizationCorrections() &&
          lhs.floodCorrections() == rhs.floodCorrections() &&
          lhs.transmissionStitchOptions() == rhs.transmissionStitchOptions() &&
-         lhs.stitchParameters() == rhs.stitchParameters() && lhs.m_lookupTable == rhs.m_lookupTable;
+         lhs.stitchParameters() == rhs.stitchParameters() && lhs.m_lookupTable == rhs.m_lookupTable &&
+         lhs.diagnostics() == rhs.diagnostics();
 }
 } // namespace MantidQt::CustomInterfaces::ISISReflectometry

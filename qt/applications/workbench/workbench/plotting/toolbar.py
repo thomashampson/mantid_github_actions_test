@@ -9,6 +9,7 @@
 #
 from matplotlib.collections import LineCollection, PathCollection
 from matplotlib.contour import ContourSet
+from matplotlib.colors import LogNorm
 from qtpy import QtCore, QtGui, QtPrintSupport, QtWidgets
 
 from mantid.plots import MantidAxes
@@ -54,8 +55,8 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
 
     toolitems = (
         MantidNavigationTool("Home", "Reset axes limits", "mdi.home", "on_home_clicked", None),
-        MantidStandardNavigationTools.BACK,
-        MantidStandardNavigationTools.FORWARD,
+        MantidNavigationTool("Back", "Back to previous view", "mdi.arrow-left", "on_back_clicked", None),
+        MantidNavigationTool("Forward", "Forward to next view", "mdi.arrow-right", "on_forward_clicked", None),
         MantidStandardNavigationTools.SEPARATOR,
         MantidStandardNavigationTools.PAN,
         MantidStandardNavigationTools.ZOOM,
@@ -85,7 +86,7 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
         MantidNavigationTool("Fill Area", "Fill area under curves", "mdi.format-color-fill", "waterfall_fill_area", None),
         MantidStandardNavigationTools.SEPARATOR,
         MantidNavigationTool("Help", "Open plotting help documentation", "mdi.help", "launch_plot_help", None),
-        MantidNavigationTool("Crosshair", "Toggle crosshair", "mdi.plus", "toggle_crosshair", False),
+        MantidNavigationTool("Crosshair", "Toggle crosshair", "mdi.target", "toggle_crosshair", False),
         MantidNavigationTool("Hide", "Hide the plot", "mdi.eye", "hide_plot", None),
     )
 
@@ -102,6 +103,13 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
         else:
             self._actions["toggle_crosshair"].setChecked(enable)
         self.sig_crosshair_toggle_triggered.emit(enable)
+
+    def set_crosshair_enabled(self, on):
+        action = self._actions["toggle_crosshair"]
+        action.setEnabled(on)
+        action.setVisible(on)
+        # Show/hide the separator between this button and help button / waterfall options
+        self.toggle_separator_visibility(action, on)
 
     def hide_plot(self):
         self.sig_hide_plot_triggered.emit()
@@ -155,8 +163,81 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
 
     def on_home_clicked(self):
         self.sig_home_clicked.emit()
-        self.home()
+        self._home_wrapper()
         self.push_current()
+
+    def _home_wrapper(self):
+        """Wraps the call to home, editing the nav stack to enforce a colorbar minimum of >0 if it has a log scale."""
+        edit_stack = self.is_colormap(self.canvas.figure) and self._colorbar_is_log_scale(self.canvas.figure) and self._nav_stack._elements
+        if not edit_stack:
+            self.home()
+            return
+        orig_entry = self._nav_stack._elements[0].data
+        orig_limits = list(orig_entry.items())[1][1][0]
+        self._nav_stack._elements[0].data = {
+            k: self._recursive_replace(v, find=orig_limits, replace=(0.0001, orig_limits[1])) for k, v in orig_entry.items()
+        }
+        self.home()
+        self._nav_stack._elements[0].data = orig_entry
+
+    def _recursive_replace(self, item: dict, find, replace):
+        """Recurses through a structure of nested tuples, looking to replace a specified find object with a replace object"""
+        found = item == find
+        if found or not isinstance(item, tuple):
+            return replace if found else item
+        return tuple(self._recursive_replace(sub_item, find, replace) for sub_item in item)
+
+    def set_history_buttons(self):
+        """
+        Overrides the parent class' method to correctly set the status of backward and forward buttons.
+        Returns:
+            None
+        """
+        can_backward = self._nav_stack._pos > 0
+        can_forward = self._nav_stack._pos < len(self._nav_stack._elements) - 1
+        if "on_back_clicked" in self._actions:
+            self._actions["on_back_clicked"].setEnabled(can_backward)
+        if "on_forward_clicked" in self._actions:
+            self._actions["on_forward_clicked"].setEnabled(can_forward)
+
+    def on_back_clicked(self):
+        self.update_navigate_mpl_stack(nav_forward=False)
+
+    def on_forward_clicked(self):
+        self.update_navigate_mpl_stack(nav_forward=True)
+
+    def update_navigate_mpl_stack(self, nav_forward: bool):
+        """
+        This method navigates mpl stack either in backward or forward direction after updating it whenever the plot is
+        a colormap and the color bar is in Log scale.
+        Args:
+            nav_forward: True when navigating forward and False when navigating backward
+
+        Returns:
+            None
+        """
+        edit_stack = self.is_colormap(self.canvas.figure) and self._colorbar_is_log_scale(self.canvas.figure) and self._nav_stack._elements
+        if not edit_stack:
+            self._navigate_mpl_stack(nav_forward)
+        else:
+            if nav_forward:
+                next_pos = min(self._nav_stack._pos + 1, len(self._nav_stack._elements) - 1)
+            else:
+                next_pos = max(self._nav_stack._pos - 1, 0)
+            orig_next_entry = self._nav_stack._elements[next_pos].data
+            orig_limits = list(orig_next_entry.items())[1][1][0]
+            if orig_limits[0] <= 0:
+                self._nav_stack._elements[next_pos].data = {
+                    k: self._recursive_replace(v, find=orig_limits, replace=(0.0001, orig_limits[1])) for k, v in orig_next_entry.items()
+                }
+            self._navigate_mpl_stack(nav_forward)
+            self._nav_stack._elements[next_pos].data = orig_next_entry
+
+    def _navigate_mpl_stack(self, nav_forward):
+        if nav_forward:
+            self.forward()
+        else:
+            self.back()
 
     def waterfall_conversion(self, is_waterfall):
         self.sig_waterfall_conversion.emit(is_waterfall)
@@ -204,12 +285,12 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
     def adjust_for_3d_plots(self):
         self._actions["toggle_grid"].setChecked(True)
 
-        for action in ["back", "forward", "pan", "zoom"]:
+        for action in ["on_back_clicked", "on_forward_clicked", "pan", "zoom"]:
             toolbar_action = self._actions[action]
             toolbar_action.setEnabled(False)
             toolbar_action.setVisible(False)
 
-        action = self._actions["forward"]
+        action = self._actions["on_forward_clicked"]
         self.toggle_separator_visibility(action, False)
 
     def toggle_separator_visibility(self, action, enabled):
@@ -226,6 +307,11 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
         if figure_type(fig) not in [FigureType.Line, FigureType.Errorbar] or len(fig.get_axes()) > 1:
             self.set_fit_enabled(False)
             self.set_superplot_enabled(False)
+
+        # disable crosshair in 3D plots
+        if figure_type(fig) in [FigureType.Surface, FigureType.Wireframe, FigureType.Mesh]:
+            self.set_crosshair_enabled(False)
+
         for ax in fig.get_axes():
             for artist in ax.get_lines():
                 try:
@@ -280,15 +366,17 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
 
     def is_colormap(self, fig):
         """Identify as a single colour map if it has a axes, one with the plot and the other the colorbar"""
-        if figure_type(fig) in [FigureType.Image] and len(fig.get_axes()) == 2:
-            if (
-                len(fig.get_axes()[0].get_images()) == 1
-                and len(fig.get_axes()[1].get_images()) == 0
-                and self._is_colorbar(fig.get_axes()[1])
-            ):
+        if figure_type(fig) == FigureType.Image and len(fig.get_axes()) == 2:
+            if isinstance(fig.get_axes()[0], MantidAxes) and self._is_colorbar(fig.get_axes()[1]):
                 return True
-        else:
-            return False
+        return False
+
+    def _colorbar_is_log_scale(self, fig):
+        """Identify if a colorbar is logscale"""
+        if figure_type(fig) == FigureType.Image and len(fig.get_axes()) == 2:
+            if self._is_colorbar(fig.get_axes()[1]) and isinstance(fig.get_axes()[1]._colorbar.norm, LogNorm):
+                return True
+        return False
 
     @classmethod
     def _is_colorbar(cls, ax):
@@ -318,7 +406,7 @@ class WorkbenchNavigationToolbar(MantidNavigationToolbar):
                 current_ax_colour = col.get_edgecolor()
                 break
             elif isinstance(col, ContourSet):
-                current_ax_colour = col.get_edgecolor()[0]
+                current_ax_colour = col.get_edgecolor()[0] if len(col.get_edgecolor()) > 0 else col.get_facecolor()[0]
                 break
 
         # Current_ax_colour remains None and breaks the code
@@ -388,3 +476,6 @@ class ToolbarStateManager(object):
 
     def emit_sig_home_clicked(self):
         self._toolbar.sig_home_clicked.emit()
+
+    def update_navigate_mpl_stack(self, nav_forward: bool):
+        self._toolbar.update_navigate_mpl_stack(nav_forward)

@@ -10,12 +10,14 @@ set(EXPORT_FILES
     src/Exports/ConfigPropertyObserver.cpp
     src/Exports/DataItem.cpp
     src/Exports/HTTPStatus.cpp
-    src/Exports/IPropertyManager.cpp
     src/Exports/Property.cpp
+    src/Exports/IPropertyManager.cpp # export order: depends on `Direction` enum declared in `Property.cpp`
     src/Exports/IValidator.cpp
     src/Exports/IPropertySettings.cpp
     src/Exports/EnabledWhenProperty.cpp
     src/Exports/ErrorReporter.cpp
+    src/Exports/SetValueWhenProperty.cpp
+    src/Exports/SetDefaultWhenProperty.cpp
     src/Exports/VisibleWhenProperty.cpp
     src/Exports/PropertyWithValue.cpp
     src/Exports/ArrayProperty.cpp
@@ -49,6 +51,8 @@ set(EXPORT_FILES
     src/Exports/PropertyManager.cpp
     src/Exports/PropertyManagerDataService.cpp
     src/Exports/PropertyManagerProperty.cpp
+    src/Exports/PythonObjectProperty.cpp
+    src/Exports/PythonObjectTypeValidator.cpp
     src/Exports/PropertyHistory.cpp
     src/Exports/Memory.cpp
     src/Exports/ProgressBase.cpp
@@ -64,6 +68,7 @@ set(EXPORT_FILES
     src/Exports/RebinParamsValidator.cpp
     src/Exports/PhysicalConstants.cpp
     src/Exports/SpecialCoordinateSystem.cpp
+    src/Exports/SpinStateValidator.cpp
 )
 
 set(MODULE_DEFINITION ${CMAKE_CURRENT_BINARY_DIR}/kernel.cpp)
@@ -73,7 +78,8 @@ create_module(${MODULE_TEMPLATE} ${MODULE_DEFINITION} ${EXPORT_FILES})
 
 set(SRC_FILES
     src/Registry/MappingTypeHandler.cpp src/Registry/PropertyManagerFactory.cpp
-    src/Registry/PropertyWithValueFactory.cpp src/Registry/SequenceTypeHandler.cpp src/Registry/TypeRegistry.cpp
+    src/Registry/PropertyWithValueFactory.cpp src/Registry/PythonObjectTypeHandler.cpp
+    src/Registry/SequenceTypeHandler.cpp src/Registry/TypeRegistry.cpp
 )
 
 set(INC_FILES
@@ -81,38 +87,36 @@ set(INC_FILES
     inc/MantidPythonInterface/kernel/Registry/PropertyValueHandler.h
     inc/MantidPythonInterface/kernel/Registry/PropertyManagerFactory.h
     inc/MantidPythonInterface/kernel/Registry/PropertyWithValueFactory.h
+    inc/MantidPythonInterface/kernel/Registry/PythonObjectTypeHandler.h
     inc/MantidPythonInterface/kernel/Registry/SequenceTypeHandler.h
     inc/MantidPythonInterface/kernel/Registry/TypedPropertyValueHandler.h
     inc/MantidPythonInterface/kernel/Registry/TypeRegistry.h
 )
 
-# Generate the packagesetup module for the build & install package
-set(PACKAGESETUP_PY packagesetup)
-set(NEXUSLIB ${NEXUS_C_LIBRARIES})
-if(WIN32) # .lib -> .dll
-  string(REPLACE "/lib/" "/bin/" NEXUSLIB ${NEXUSLIB})
-  string(REPLACE ".lib" ".dll" NEXUSLIB ${NEXUSLIB})
-endif()
-
-# Build version
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/${PACKAGESETUP_PY}.py.in ${CMAKE_CURRENT_SOURCE_DIR}/${PACKAGESETUP_PY}.py)
-# Package version
-if(WIN32)
-  # NeXus library is in the same place relative to the Python library
-  get_filename_component(NEXUSLIB_FILE ${NEXUSLIB} NAME)
-  set(NEXUSLIB ../../${NEXUSLIB_FILE})
-endif()
-configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/${PACKAGESETUP_PY}.py.in ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGESETUP_PY}.install.py
-)
-
-# Add a precompiled header where they are supported
 list(APPEND ALL_FILES ${EXPORT_FILES} ${SRC_FILES})
-enable_precompiled_headers(inc/MantidPythonInterface/kernel/Registry/PrecompiledHeader.h ALL_FILES)
 
 # Create the target for this directory
 add_library(PythonKernelModule ${ALL_FILES} ${MODULE_DEFINITION} ${INC_FILES} ${PYTHON_INSTALL_FILES})
 add_library(Mantid::PythonKernelModule ALIAS PythonKernelModule)
+
+# Add a precompiled header
+target_precompile_headers(
+  PythonKernelModule
+  PRIVATE
+  <memory>
+  <string>
+  <boost/python/class.hpp>
+  <boost/python/copy_const_reference.hpp>
+  <boost/python/def.hpp>
+  <boost/python/default_call_policies.hpp>
+  <boost/python/dict.hpp>
+  <boost/python/enum.hpp>
+  <boost/python/make_constructor.hpp>
+  <boost/python/make_function.hpp>
+  <boost/python/overloads.hpp>
+  <boost/python/register_ptr_to_python.hpp>
+  <boost/python/return_value_policy.hpp>
+)
 
 set_python_properties(PythonKernelModule _kernel)
 
@@ -130,8 +134,3 @@ target_link_libraries(
 # Installation settings
 set_target_properties(PythonKernelModule PROPERTIES INSTALL_RPATH "${EXT_INSTALL_RPATH}")
 mtd_install_shared_library(TARGETS PythonKernelModule DESTINATION ${Python_SITELIB_RELPATH}/mantid/kernel)
-# packagesetup.py that will overwrite the ones from the built target
-mtd_install_files(
-  FILES ${CMAKE_CURRENT_BINARY_DIR}/${PACKAGESETUP_PY}.install.py INSTALL_DIRS ${Python_SITELIB_RELPATH}/mantid/kernel
-  RENAME ${PACKAGESETUP_PY}.py
-)

@@ -19,6 +19,8 @@ endif()
 option(ENABLE_OPENGL "Enable OpenGLbased rendering" ON)
 option(ENABLE_OPENCASCADE "Enable OpenCascade-based 3D visualisation" ON)
 option(USE_PYTHON_DYNAMIC_LIB "Dynamic link python libs" ON)
+# Build with MPI (Linux only)
+option(MPI_BUILD "Enable MPI options (Linux / RedHat only)" OFF)
 
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 make_directory(${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Testing)
@@ -82,8 +84,25 @@ if(BUILD_MANTIDFRAMEWORK OR BUILD_MANTIDQT)
   # The new interface is not available in Clang yet so we haven't migrated
   add_definitions(-D_SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING)
 
-  find_package(Poco 1.4.6 REQUIRED)
-  add_definitions(-DPOCO_ENABLE_CPP11)
+  function(strip_unicode_definitions target_name)
+    get_target_property(defs ${target_name} INTERFACE_COMPILE_DEFINITIONS)
+    if(defs)
+      list(REMOVE_ITEM defs UNICODE)
+      list(REMOVE_ITEM defs _UNICODE)
+      set_target_properties(${target_name} PROPERTIES INTERFACE_COMPILE_DEFINITIONS "${defs}")
+    endif()
+  endfunction()
+
+  find_package(Poco REQUIRED COMPONENTS Foundation Util XML Net Crypto NetSSL)
+
+  # Remove inherited UNICODE definitions
+  strip_unicode_definitions(Poco::Foundation)
+  strip_unicode_definitions(Poco::Util)
+  strip_unicode_definitions(Poco::XML)
+  strip_unicode_definitions(Poco::Net)
+  strip_unicode_definitions(Poco::NetSSL)
+  strip_unicode_definitions(Poco::Crypto)
+
   find_package(TBB REQUIRED)
   find_package(OpenSSL REQUIRED)
 endif()
@@ -91,7 +110,7 @@ endif()
 # if we are building the framework we will need these libraries.
 if(BUILD_MANTIDFRAMEWORK)
   find_package(GSL REQUIRED)
-  find_package(Nexus 4.3.1 REQUIRED)
+  find_package(HDF4 REQUIRED)
   find_package(MuParser REQUIRED)
   find_package(JsonCPP 0.7.0 REQUIRED)
   find_package(Eigen3 3.4 REQUIRED)
@@ -103,11 +122,10 @@ if(BUILD_MANTIDFRAMEWORK)
 
   find_package(
     HDF5 MODULE
-    COMPONENTS C CXX HL
+    COMPONENTS C CXX
     REQUIRED
   )
   set(HDF5_LIBRARIES hdf5::hdf5_cpp hdf5::hdf5)
-  set(HDF5_HL_LIBRARIES hdf5::hdf5_hl)
 endif()
 
 if(ENABLE_WORKBENCH)
@@ -173,12 +191,10 @@ endif()
 # ######################################################################################################################
 # Visibility Setting
 # ######################################################################################################################
-if(CMAKE_COMPILER_IS_GNUCXX)
-  set(CMAKE_CXX_VISIBILITY_PRESET
-      hidden
-      CACHE STRING ""
-  )
-endif()
+set(CMAKE_CXX_VISIBILITY_PRESET
+    hidden
+    CACHE STRING ""
+)
 
 # ######################################################################################################################
 # Bundles setting used for install commands if not set by something else e.g. Darwin
@@ -236,6 +252,15 @@ if(ENABLE_PRECOMMIT)
       )
     endif()
   endif()
+endif()
+
+# ######################################################################################################################
+# Look for MPI
+# ######################################################################################################################
+if(MPI_BUILD AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(MPI_ENABLED TRUE)
+  find_package(MPI REQUIRED)
+  find_package(Boost CONFIG REQUIRED COMPONENTS mpi)
 endif()
 
 # ######################################################################################################################

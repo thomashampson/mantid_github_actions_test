@@ -28,7 +28,7 @@ class LoadNMoldyn4Ascii1D(PythonAlgorithm):
         return "Simulation; Inelastic\\DataHandling"
 
     def summary(self):
-        return "Imports 1D dos and vac functions from an nMolDyn 4 output file," "convoluting it with a resolution function if required."
+        return "Imports 1D dos and vac functions from an nMolDyn 4 output file, convoluting it with a resolution function if required."
 
     def PyInit(self):
         self.declareProperty(FileProperty("Directory", "", action=FileAction.Directory), doc=("Path to directory containing dat files"))
@@ -103,7 +103,7 @@ class LoadNMoldyn4Ascii1D(PythonAlgorithm):
         x_axis = 0
         unit = ""
         header_data = [unit, func_name, x_axis]
-        with open(file_name, "rU") as f_handle:
+        with open(file_name, "r") as f_handle:
             while True:
                 line = f_handle.readline()
                 if not line:

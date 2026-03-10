@@ -232,17 +232,15 @@ class DGSPlannerGUI(QtWidgets.QWidget):
                 reply = QtWidgets.QMessageBox.warning(
                     self,
                     "Goniometer",
-                    "More than 10 goniometer settings. This might be long.\n" "Are you sure you want to proceed?",
+                    "More than 10 goniometer settings. This might be long.\nAre you sure you want to proceed?",
                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                     QtWidgets.QMessageBox.No,
                 )
                 if reply == QtWidgets.QMessageBox.No:
                     return
 
-            try:
+            if self.wg:
                 mantid.simpleapi.DeleteWorkspace(self.wg)
-            except:
-                pass
 
             instrumentName = self.masterDict["instrument"]
             if instrumentName == "DEMAND":
@@ -253,6 +251,7 @@ class DGSPlannerGUI(QtWidgets.QWidget):
             mantid.simpleapi.LoadEmptyInstrument(
                 mantid.api.ExperimentInfo.getInstrumentFilename(instrumentName), OutputWorkspace="__temp_instrument"
             )
+
             if self.masterDict["instrument"] == "HYSPEC":
                 mantid.simpleapi.AddSampleLog(Workspace="__temp_instrument", LogName="msd", LogText="1798.5", LogType="Number Series")
                 mantid.simpleapi.AddSampleLog(
@@ -289,6 +288,7 @@ class DGSPlannerGUI(QtWidgets.QWidget):
             if "maskFilename" in self.masterDict and len(self.masterDict["maskFilename"].strip()) > 0:
                 try:
                     __maskWS = mantid.simpleapi.Load(self.masterDict["maskFilename"])
+                    __maskWS, _ = mantid.simpleapi.ExtractMask(__maskWS)
                     mantid.simpleapi.MaskDetectors(Workspace="__temp_instrument", MaskedWorkspace=__maskWS)
                 except (ValueError, RuntimeError) as e:
                     reply = QtWidgets.QMessageBox.critical(
@@ -402,6 +402,8 @@ class DGSPlannerGUI(QtWidgets.QWidget):
             self.figure.add_subplot(self.trajfig)
             self.needToClear = False
         self.trajfig.pcolorfast(xx, yy, Z)
+        if mantid.config["Q.convention"] == "Crystallography":
+            self.trajfig.set_title("Using crystallographic convention")
 
         if self.aspectButton.isChecked():
             self.trajfig.set_aspect(1.0)

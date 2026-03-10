@@ -8,7 +8,9 @@
 #include "MantidAPI/IFileLoader.h"
 #include "MantidAPI/NexusFileLoader.h"
 
+#include <H5Cpp.h>
 #include <Poco/File.h>
+#include <algorithm>
 
 namespace Mantid::API {
 namespace {
@@ -29,8 +31,8 @@ template <typename T> struct DescriptorSetter {
   // general one does nothing
   void apply(std::shared_ptr<NexusFileLoader> & /*unused*/, std::shared_ptr<T> & /*unused*/) {}
 };
-template <> struct DescriptorSetter<Kernel::NexusHDF5Descriptor> {
-  void apply(std::shared_ptr<NexusFileLoader> &loader, const std::shared_ptr<Kernel::NexusHDF5Descriptor> &descriptor) {
+template <> struct DescriptorSetter<Nexus::NexusDescriptor> {
+  void apply(std::shared_ptr<NexusFileLoader> &loader, const std::shared_ptr<Nexus::NexusDescriptor> &descriptor) {
     loader->setFileInfo(descriptor);
   }
 };
@@ -45,8 +47,8 @@ template <> struct DescriptorSetter<Kernel::NexusHDF5Descriptor> {
  * was found
  */
 template <typename DescriptorType, typename FileLoaderType>
-const IAlgorithm_sptr searchForLoader(const std::string &filename, const std::multimap<std::string, int> &names,
-                                      Kernel::Logger &logger) {
+std::pair<IAlgorithm_sptr, int> searchForLoader(const std::string &filename,
+                                                const std::multimap<std::string, int> &names, Kernel::Logger &logger) {
   const auto &factory = AlgorithmFactory::Instance();
   IAlgorithm_sptr bestLoader;
   int maxConfidence(0);
@@ -81,7 +83,22 @@ const IAlgorithm_sptr searchForLoader(const std::string &filename, const std::mu
   if (nxsLoader)
     setdescriptor.apply(nxsLoader, descriptor);
 
-  return bestLoader;
+  return {bestLoader, maxConfidence};
+}
+
+/// @brief Check if a file is HDF4 by examining its four signature bytes
+/// @param filename name of file to check
+/// @return true if it is HDF4 according to signature
+bool isHDF4(std::string const &filename) {
+  // the HDF4 file signature, as per HDF's documentation
+  std::array<char, 4> constexpr hdf4_sig{0x0E, 0x03, 0x13, 0x01};
+  // read the signature in the first four bytes of this file
+  std::array<char, 4> signature;
+  std::ifstream file(filename, std::ios::binary);
+  if (!file.read(signature.data(), 4)) {
+    return false;
+  }
+  return signature == hdf4_sig;
 }
 } // namespace
 
@@ -112,32 +129,44 @@ void FileLoaderRegistryImpl::unsubscribe(const std::string &name, const int vers
  */
 const std::shared_ptr<IAlgorithm> FileLoaderRegistryImpl::chooseLoader(const std::string &filename) const {
   using Kernel::FileDescriptor;
-  using Kernel::NexusDescriptor;
-  using Kernel::NexusHDF5Descriptor;
+  using Kernel::LegacyNexusDescriptor;
+  using Nexus::NexusDescriptorLazy;
   m_log.debug() << "Trying to find loader for '" << filename << "'\n";
 
   IAlgorithm_sptr bestLoader;
-  if (NexusDescriptor::isReadable(filename)) {
-    m_log.debug() << filename << " looks like a Nexus file. Checking registered Nexus loaders\n";
 
-    // a large subset of NeXus files are actually HDF5 based
-    if (NexusHDF5Descriptor::isReadable(filename)) {
-      try {
-        bestLoader =
-            searchForLoader<NexusHDF5Descriptor, IFileLoader<NexusHDF5Descriptor>>(filename, m_names[NexusHDF5], m_log);
-      } catch (const std::invalid_argument &e) {
-        m_log.debug() << "Error in looking for HDF5 based NeXus files: " << e.what() << '\n';
-      }
-    }
+  if (H5::H5File::isHdf5(filename)) {
 
-    // try generic nexus loaders
-    if (!bestLoader) {
-      bestLoader = searchForLoader<NexusDescriptor, IFileLoader<NexusDescriptor>>(filename, m_names[Nexus], m_log);
+    // first, try search with Nexus loaders
+    std::pair<IAlgorithm_sptr, int> NexusResult =
+        searchForLoader<NexusDescriptorLazy, IFileLoader<NexusDescriptorLazy>>(filename, m_names[Nexus], m_log);
+    if (NexusResult.second < 80) {
+      // must also try LegacyNexusDescriptor algorithms because LoadMuonNexus can load both HDF4 and HDF5 files
+      // but only need to do this if confidence is less than 80, i.e. not loaded by LoadEventNexus,
+      // LoadNexusProcessed, LoadMuonNexusV2 or LoadMD
+      std::pair<IAlgorithm_sptr, int> LegacyNexusResult =
+          searchForLoader<LegacyNexusDescriptor, IFileLoader<LegacyNexusDescriptor>>(filename, m_names[LegacyNexus],
+                                                                                     m_log);
+      // select best loader of Nexus and Legacy
+      bestLoader = std::max({NexusResult, LegacyNexusResult}, [](const auto &a, const auto &b) {
+                     return a.second < b.second;
+                   }).first;
+    } else {
+      bestLoader = NexusResult.first;
     }
-  } else {
-    m_log.debug() << "Checking registered non-HDF loaders\n";
-    bestLoader = searchForLoader<FileDescriptor, IFileLoader<FileDescriptor>>(filename, m_names[Generic], m_log);
+  } else if (isHDF4(filename)) {
+    // If the file is HDF4, then it can only be loaded by the legacy nexus loaders
+    try {
+      bestLoader = searchForLoader<LegacyNexusDescriptor, IFileLoader<LegacyNexusDescriptor>>(
+                       filename, m_names[LegacyNexus], m_log)
+                       .first;
+    } catch (std::exception const &e) {
+      m_log.debug() << "Error in looking for NeXus files: " << e.what() << '\n';
+    }
   }
+
+  if (!bestLoader)
+    bestLoader = searchForLoader<FileDescriptor, IFileLoader<FileDescriptor>>(filename, m_names[Generic], m_log).first;
 
   if (!bestLoader) {
     throw Kernel::Exception::NotFoundError(filename, "Unable to find loader");
@@ -155,34 +184,36 @@ const std::shared_ptr<IAlgorithm> FileLoaderRegistryImpl::chooseLoader(const std
  */
 bool FileLoaderRegistryImpl::canLoad(const std::string &algorithmName, const std::string &filename) const {
   using Kernel::FileDescriptor;
-  using Kernel::NexusDescriptor;
-  using Kernel::NexusHDF5Descriptor;
+  using Kernel::LegacyNexusDescriptor;
+  using Nexus::NexusDescriptorLazy;
 
   // Check if it is in one of our lists
+  const bool legacynexus = (m_names[LegacyNexus].find(algorithmName) != m_names[LegacyNexus].end());
   const bool nexus = (m_names[Nexus].find(algorithmName) != m_names[Nexus].end());
-  const bool nexusHDF5 = (m_names[NexusHDF5].find(algorithmName) != m_names[NexusHDF5].end());
   const bool nonHDF = (m_names[Generic].find(algorithmName) != m_names[Generic].end());
 
-  if (!(nexus || nexusHDF5 || nonHDF))
+  if (!(legacynexus || nexus || nonHDF))
     throw std::invalid_argument("FileLoaderRegistryImpl::canLoad - Algorithm '" + algorithmName +
                                 "' is not registered as a loader.");
 
   std::multimap<std::string, int> names{{algorithmName, -1}};
   IAlgorithm_sptr loader;
-  if (nexus) {
-    if (NexusDescriptor::isReadable(filename)) {
-      loader = searchForLoader<NexusDescriptor, IFileLoader<NexusDescriptor>>(filename, names, m_log);
+  if (legacynexus) {
+    try {
+      loader = searchForLoader<LegacyNexusDescriptor, IFileLoader<LegacyNexusDescriptor>>(filename, names, m_log).first;
+    } catch (std::exception const &e) {
+      m_log.debug() << "Error in looking for NeXus files: " << e.what() << '\n';
     }
-  } else if (nexusHDF5) {
-    if (NexusHDF5Descriptor::isReadable(filename)) {
+  } else if (nexus) {
+    if (H5::H5File::isHdf5(filename)) {
       try {
-        loader = searchForLoader<NexusHDF5Descriptor, IFileLoader<NexusHDF5Descriptor>>(filename, names, m_log);
+        loader = searchForLoader<NexusDescriptorLazy, IFileLoader<NexusDescriptorLazy>>(filename, names, m_log).first;
       } catch (const std::invalid_argument &e) {
         m_log.debug() << "Error in looking for HDF5 based NeXus files: " << e.what() << '\n';
       }
     }
   } else if (nonHDF) {
-    loader = searchForLoader<FileDescriptor, IFileLoader<FileDescriptor>>(filename, names, m_log);
+    loader = searchForLoader<FileDescriptor, IFileLoader<FileDescriptor>>(filename, names, m_log).first;
   }
   return static_cast<bool>(loader);
 }

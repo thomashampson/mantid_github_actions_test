@@ -34,6 +34,7 @@ class VASPLoader(AbInitioLoader):
     def _ab_initio_program(self) -> str:
         return "VASP"
 
+    @AbInitioLoader.abinsdata_saver
     def read_vibrational_or_phonon_data(self, logger: Optional[Logger] = None) -> AbinsData:
         input_filename = self._clerk.get_input_filename()
 
@@ -56,10 +57,10 @@ class VASPLoader(AbInitioLoader):
             self._num_k = 1
 
         else:
-            raise ValueError('Cannot guess format from filename "{}". Expected' " *.xml or *OUTCAR*".format(input_filename))
+            raise ValueError('Cannot guess format from filename "{}". Expected *.xml or *OUTCAR*'.format(input_filename))
 
-        self.save_ab_initio_data(data=data)
-        return self._rearrange_data(data=data)
+        abins_data = self._rearrange_data(data=data)
+        return abins_data
 
     @classmethod
     def _read_outcar(cls, filename) -> Dict[str, Any]:
@@ -371,5 +372,5 @@ def _collapse_bools(bools: List[str]) -> bool:
         return False
     else:
         raise ValueError(
-            f"Found unsupported selective dynamics constraint {' '.join(bools)} " "in vasprun.xml; only 'T T T' or 'F F F' can be used."
+            f"Found unsupported selective dynamics constraint {' '.join(bools)} in vasprun.xml; only 'T T T' or 'F F F' can be used."
         )

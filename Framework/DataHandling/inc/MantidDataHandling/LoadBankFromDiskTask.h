@@ -10,10 +10,11 @@
 #include "MantidDataHandling/DllConfig.h"
 #include "MantidKernel/Task.h"
 #include "MantidKernel/ThreadScheduler.h"
+#include "MantidNexus/NexusFile_fwd.h"
 
 #include <cstdint>
 
-namespace NeXus {
+namespace Mantid::Nexus {
 class File;
 }
 
@@ -36,18 +37,18 @@ public:
   void run() override;
 
 private:
-  void loadPulseTimes(::NeXus::File &file);
-  std::unique_ptr<std::vector<uint64_t>> loadEventIndex(::NeXus::File &file);
-  void prepareEventId(::NeXus::File &file, int64_t &start_event, int64_t &stop_event,
+  void loadPulseTimes(Nexus::File &file);
+  std::unique_ptr<std::vector<uint64_t>> loadEventIndex(Nexus::File &file);
+  void prepareEventId(Nexus::File &file, uint64_t &start_event, uint64_t &stop_event,
                       const uint64_t &start_event_index);
-  std::unique_ptr<std::vector<uint32_t>> loadEventId(::NeXus::File &file);
-  std::unique_ptr<std::vector<float>> loadTof(::NeXus::File &file);
-  std::unique_ptr<std::vector<float>> loadEventWeights(::NeXus::File &file);
-  int64_t recalculateDataSize(const int64_t size);
+  std::unique_ptr<std::vector<uint32_t>> loadEventId(Nexus::File &file);
+  std::unique_ptr<std::vector<float>> loadTof(Nexus::File &file);
+  std::unique_ptr<std::vector<float>> loadEventWeights(Nexus::File &file);
+  uint64_t recalculateDataSize(const int64_t size);
 
   /// Algorithm being run
   DefaultEventLoader &m_loader;
-  /// NXS path to bank
+  /// NXS address to bank
   std::string entry_name;
   /// NXS type
   std::string entry_type;
@@ -63,9 +64,9 @@ private:
   std::string m_detIdFieldName;
   std::string m_timeOfFlightFieldName;
   /// Index to load start at in the file
-  std::vector<int64_t> m_loadStart;
+  Nexus::DimVector m_loadStart;
   /// How much to load in the file
-  std::vector<int64_t> m_loadSize;
+  Nexus::DimVector m_loadSize;
   /// Minimum pixel ID in this data
   uint32_t m_min_id;
   /// Maximum pixel ID in this data

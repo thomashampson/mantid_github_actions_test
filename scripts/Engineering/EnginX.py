@@ -21,12 +21,11 @@ class EnginX:
         prm_path: Optional[str] = None,
         ceria_run: Optional[str] = None,
         group: Optional[GROUP] = None,
-        calfile_path: Optional[str] = None,
+        groupingfile_path: Optional[str] = None,
         spectrum_num: Optional[str] = None,
     ) -> None:
         # init attributes
         self.calibration = CalibrationInfo()
-        self.van_run = vanadium_run
         self.focus_runs = focus_runs
         self.save_dir = save_dir
         # Load custom full inst calib if supplied (needs to be in ADS)
@@ -41,9 +40,9 @@ class EnginX:
         elif ceria_run and group:
             # make new calibration
             self.calibration.set_group(group)
-            self.calibration.set_calibration_paths("ENGINX", ceria_run)
-            if group == GROUP.CUSTOM and calfile_path:
-                self.calibration.set_cal_file(calfile_path)
+            self.calibration.set_calibration_paths("ENGINX", ceria_run, vanadium_run)
+            if group == GROUP.CUSTOM and groupingfile_path:
+                self.calibration.set_grouping_file(groupingfile_path)
             elif group == GROUP.CROPPED and spectrum_num:
                 self.calibration.set_spectra_list(spectrum_num)
 
@@ -56,10 +55,9 @@ class EnginX:
             )
 
     def focus(self, plot_output: bool) -> None:
-        if self.calibration.is_valid() and self.van_run:
+        if self.calibration.is_valid() and self.calibration.get_vanadium_path():
             focus_run(
                 self.focus_runs,
-                self.van_run,
                 plot_output,
                 rb_num=None,
                 calibration=self.calibration,

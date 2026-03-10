@@ -9,8 +9,8 @@
 #include "MantidAPI/SpectraAxis.h"
 #include "MantidAPI/WorkspaceFactory.h"
 #include "MantidDataObjects/GroupingWorkspace.h"
+
 #include "MantidKernel/IPropertyManager.h"
-#include "MantidKernel/System.h"
 
 using std::size_t;
 using namespace Mantid::API;
@@ -94,12 +94,14 @@ void GroupingWorkspace::makeDetectorIDToGroupVector(std::vector<int> &detIDToGro
   }
 }
 
-std::vector<int> GroupingWorkspace::getGroupIDs() const {
+std::vector<int> GroupingWorkspace::getGroupIDs(const bool includeUnsetGroup) const {
   // collect all the group numbers
   std::set<int> groupIDs;
   for (size_t wi = 0; wi < getNumberHistograms(); ++wi) {
     // Convert the Y value to a group number
     auto group = this->translateToGroupID(static_cast<int>(this->y(wi).front()));
+    if (!includeUnsetGroup && group == UNSET_GROUP)
+      continue;
     groupIDs.insert(group);
   }
   std::vector<int> output(groupIDs.begin(), groupIDs.end());
@@ -112,8 +114,8 @@ int GroupingWorkspace::getTotalGroups() const {
   return static_cast<int>(groups.size());
 }
 
-std::vector<int> GroupingWorkspace::getDetectorIDsOfGroup(const int groupID) const {
-  std::vector<int> detectorIDs;
+std::vector<detid_t> GroupingWorkspace::getDetectorIDsOfGroup(const int groupID) const {
+  std::vector<detid_t> detectorIDs;
   for (size_t wi = 0; wi < getNumberHistograms(); ++wi) {
     // Convert the Y value to a group number
     const auto group = this->translateToGroupID(static_cast<int>(this->y(wi).front()));
@@ -150,7 +152,7 @@ IPropertyManager::getValue<Mantid::DataObjects::GroupingWorkspace_sptr>(const st
 template <>
 DLLExport Mantid::DataObjects::GroupingWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::GroupingWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop =
+  auto const *prop =
       dynamic_cast<PropertyWithValue<Mantid::DataObjects::GroupingWorkspace_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();

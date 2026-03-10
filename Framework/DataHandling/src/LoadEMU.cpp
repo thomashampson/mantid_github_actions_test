@@ -94,9 +94,9 @@ void AddSinglePointTimeSeriesProperty(API::LogManager &logManager, const std::st
 // Utility functions for loading values with defaults
 // Single value properties only support int, double, string and bool
 template <typename Type>
-Type GetNeXusValue(const NeXus::NXEntry &entry, const std::string &path, const Type &defval, int32_t index) {
+Type GetNeXusValue(const Nexus::NXEntry &entry, const std::string &address, const Type &defval, int32_t index) {
   try {
-    NeXus::NXDataSetTyped<Type> dataSet = entry.openNXDataSet<Type>(path);
+    Nexus::NXDataSetTyped<Type> dataSet = entry.openNXDataSet<Type>(address);
     dataSet.load();
 
     return dataSet()[index];
@@ -106,10 +106,10 @@ Type GetNeXusValue(const NeXus::NXEntry &entry, const std::string &path, const T
 }
 // string and double are special cases
 template <>
-double GetNeXusValue<double>(const NeXus::NXEntry &entry, const std::string &path, const double &defval,
+double GetNeXusValue<double>(const Nexus::NXEntry &entry, const std::string &address, const double &defval,
                              int32_t index) {
   try {
-    NeXus::NXDataSetTyped<float> dataSet = entry.openNXDataSet<float>(path);
+    Nexus::NXFloat dataSet = entry.openNXFloat(address);
     dataSet.load();
 
     return dataSet()[index];
@@ -118,42 +118,39 @@ double GetNeXusValue<double>(const NeXus::NXEntry &entry, const std::string &pat
   }
 }
 template <>
-std::string GetNeXusValue<std::string>(const NeXus::NXEntry &entry, const std::string &path, const std::string &defval,
-                                       int32_t /*unused*/) {
+std::string GetNeXusValue<std::string>(const Nexus::NXEntry &entry, const std::string &address,
+                                       const std::string &defval, int32_t /*unused*/) {
 
   try {
-    NeXus::NXChar dataSet = entry.openNXChar(path);
-    dataSet.load();
-
-    return std::string(dataSet(), dataSet.dim0());
+    return entry.getString(address);
   } catch (std::runtime_error &) {
     return defval;
   }
 }
 
 template <typename T>
-void MapNeXusToProperty(NeXus::NXEntry &entry, const std::string &path, const T &defval, API::LogManager &logManager,
-                        const std::string &name, const T &factor, int32_t index) {
+void MapNeXusToProperty(const Nexus::NXEntry &entry, const std::string &address, const T &defval,
+                        API::LogManager &logManager, const std::string &name, const T &factor, int32_t index) {
 
-  T value = GetNeXusValue<T>(entry, path, defval, index);
+  T value = GetNeXusValue<T>(entry, address, defval, index);
   logManager.addProperty<T>(name, value * factor);
 }
 
 // sting is a special case
 template <>
-void MapNeXusToProperty<std::string>(NeXus::NXEntry &entry, const std::string &path, const std::string &defval,
+void MapNeXusToProperty<std::string>(Nexus::NXEntry const &entry, const std::string &address, const std::string &defval,
                                      API::LogManager &logManager, const std::string &name,
                                      const std::string & /*unused*/, int32_t index) {
 
-  std::string value = GetNeXusValue<std::string>(entry, path, defval, index);
+  std::string const value = GetNeXusValue<std::string>(entry, address, defval, index);
   logManager.addProperty<std::string>(name, value);
 }
 
 template <typename T>
-void MapNeXusToSeries(NeXus::NXEntry &entry, const std::string &path, const T &defval, API::LogManager &logManager,
+void MapNeXusToSeries(Nexus::NXEntry &entry, const std::string &address, const T &defval, API::LogManager &logManager,
                       const std::string &time, const std::string &name, const T &factor, int32_t index) {
 
-  auto value = GetNeXusValue<T>(entry, path, defval, index);
+  auto value = GetNeXusValue<T>(entry, address, defval, index);
   AddSinglePointTimeSeriesProperty<T>(logManager, time, name, value * factor);
 }
 
@@ -818,7 +815,6 @@ template <typename FD> void LoadEMU<FD>::exec(const std::string &hdfFile, const 
   Types::Core::time_duration duration =
       boost::posix_time::microseconds(static_cast<boost::int64_t>(eventCounter.duration() * 1.0e6));
   Types::Core::DateAndTime endTime(startTime + duration);
-  logManager.addProperty("start_time", startTime.toISO8601String());
   logManager.addProperty("end_time", endTime.toISO8601String());
   logManager.addProperty<double>("dur", eventCounter.duration());
 
@@ -832,10 +828,7 @@ template <typename FD> void LoadEMU<FD>::exec(const std::string &hdfFile, const 
 template <typename FD> void LoadEMU<FD>::setupDetectorMasks(const std::vector<bool> &roi) {
 
   // count total number of masked bins
-  size_t maskedBins = 0;
-  for (size_t i = 0; i != roi.size(); i++)
-    if (!roi[i])
-      maskedBins++;
+  size_t maskedBins = std::count_if(roi.begin(), roi.end(), [](bool v) { return !v; });
 
   if (maskedBins > 0) {
     // create list of masked bins
@@ -919,9 +912,7 @@ void LoadEMU<FD>::calibrateDopplerPhase(const std::vector<size_t> &eventCounts,
   // get the number of analysed events and initial doppler time
   auto startID = static_cast<size_t>(HORIZONTAL_TUBES * PIXELS_PER_TUBE);
   auto endID = static_cast<size_t>(DETECTOR_TUBES * PIXELS_PER_TUBE);
-  size_t numEvents = 0;
-  for (size_t i = startID; i < endID; i++)
-    numEvents += eventCounts[i];
+  size_t numEvents = std::accumulate(eventCounts.begin() + startID, eventCounts.begin() + endID, size_t{0});
   if (numEvents == 0)
     throw std::runtime_error("no analysed events for phase calibration");
   std::vector<double> nVel(numEvents);
@@ -986,10 +977,10 @@ void LoadEMU<FD>::calibrateDopplerPhase(const std::vector<size_t> &eventCounts,
 /// Convert the doppler time to TOF for all the events in \p eventVectors and
 /// time of flight range as \p minTOF and \p maxTOF.
 template <typename FD>
-void LoadEMU<FD>::dopplerTimeToTOF(std::vector<EventVector_pt> &eventVectors, double &minTOF, double &maxTOF) {
+void LoadEMU<FD>::dopplerTimeToTOF(std::vector<EventVector_pt> const &eventVectors, double &minTOF, double &maxTOF) {
 
   // get the doppler parameters and initialise TOD converter
-  auto instr = m_localWorkspace->getInstrument();
+  auto const instr = m_localWorkspace->getInstrument();
   double v2 = instr->getNumberParameter("AnalysedV2")[0];
   double l1 = instr->getNumberParameter("SourceSample")[0];
   ConvertTOF convTOF(m_dopplerAmpl * m_dopplerRun, m_dopplerFreq, m_dopplerPhase, l1, v2, m_detectorL2);
@@ -1102,8 +1093,8 @@ std::vector<bool> LoadEMU<FD>::createRoiVector(const std::string &selected, cons
 /// Load parameters from input \p hdfFile and save to the log manager, \p logm.
 template <typename FD> void LoadEMU<FD>::loadParameters(const std::string &hdfFile, API::LogManager &logm) {
 
-  NeXus::NXRoot root(hdfFile);
-  NeXus::NXEntry entry = root.openFirstEntry();
+  Nexus::NXRoot root(hdfFile);
+  Nexus::NXEntry entry = root.openFirstEntry();
 
   MapNeXusToProperty<std::string>(entry, "sample/name", "unknown", logm, "SampleName", "", 0);
   MapNeXusToProperty<std::string>(entry, "sample/description", "unknown", logm, "SampleDescription", "", 0);
@@ -1121,6 +1112,7 @@ template <typename FD> void LoadEMU<FD>::loadParameters(const std::string &hdfFi
   } else {
     m_startRun = startTime.toISO8601String();
   }
+  logm.addProperty("start_time", m_startRun);
 
   MapNeXusToSeries<double>(entry, "instrument/doppler/ctrl/amplitude", 75.0, logm, m_startRun, "DopplerAmplitude",
                            0.001, m_datasetIndex);
@@ -1145,8 +1137,8 @@ template <typename FD> void LoadEMU<FD>::loadParameters(const std::string &hdfFi
 /// time series to the log manager, \p logm.
 template <typename FD> void LoadEMU<FD>::loadEnvironParameters(const std::string &hdfFile, API::LogManager &logm) {
 
-  NeXus::NXRoot root(hdfFile);
-  NeXus::NXEntry entry = root.openFirstEntry();
+  Nexus::NXRoot root(hdfFile);
+  Nexus::NXEntry entry = root.openFirstEntry();
   auto time_str = logm.getPropertyValueAsType<std::string>("end_time");
 
   // load the environment variables for the dataset loaded
@@ -1171,7 +1163,7 @@ template <typename FD> void LoadEMU<FD>::loadInstrument() {
 
 // Instantiate base class for LoadEMU's
 template class LoadEMU<Kernel::FileDescriptor>;
-template class LoadEMU<Kernel::NexusDescriptor>;
+template class LoadEMU<Nexus::NexusDescriptorLazy>;
 
 // -------- EMU Hdf loader -----------------------
 
@@ -1191,17 +1183,16 @@ const std::string LoadEMUHdf::summary() const { return "Loads an EMU Hdf and lin
 
 /// Return the confidence as an integer value that this algorithm can
 /// load the file \p descriptor.
-int LoadEMUHdf::confidence(Kernel::NexusDescriptor &descriptor) const {
+int LoadEMUHdf::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   if (descriptor.extension() != ".hdf")
     return 0;
 
-  if (descriptor.pathExists("/entry1/site_name") && descriptor.pathExists("/entry1/instrument/doppler/ctrl/velocity") &&
-      descriptor.pathExists("/entry1/instrument/doppler/ctrl/amplitude") &&
-      descriptor.pathExists("/entry1/instrument/detector/daq_dirname") &&
-      descriptor.pathExists("/entry1/instrument/detector/dataset_number") &&
-      descriptor.pathExists("/entry1/data/hmm_total_t_ds0") && descriptor.pathExists("/entry1/data/hmm_total_t_ds1") &&
-      descriptor.pathExists("/entry1/data/hmm_total_xt_ds0") &&
-      descriptor.pathExists("/entry1/data/hmm_total_xt_ds1")) {
+  if (descriptor.isEntry("/entry1/site_name") && descriptor.isEntry("/entry1/instrument/doppler/ctrl/velocity") &&
+      descriptor.isEntry("/entry1/instrument/doppler/ctrl/amplitude") &&
+      descriptor.isEntry("/entry1/instrument/detector/daq_dirname") &&
+      descriptor.isEntry("/entry1/instrument/detector/dataset_number") &&
+      descriptor.isEntry("/entry1/data/hmm_total_t_ds0") && descriptor.isEntry("/entry1/data/hmm_total_t_ds1") &&
+      descriptor.isEntry("/entry1/data/hmm_total_xt_ds0") && descriptor.isEntry("/entry1/data/hmm_total_xt_ds1")) {
     return 80;
   } else {
     return 0;
@@ -1210,7 +1201,7 @@ int LoadEMUHdf::confidence(Kernel::NexusDescriptor &descriptor) const {
 
 /// Initialise the algorithm and declare the properties for the
 /// nexus descriptor.
-void LoadEMUHdf::init() { LoadEMU<Kernel::NexusDescriptor>::init(true); }
+void LoadEMUHdf::init() { LoadEMU<Nexus::NexusDescriptorLazy>::init(true); }
 
 /// Execute the algorithm. Establishes the filepath to the event file
 /// from the HDF link and the path provided and invokes the common
@@ -1238,8 +1229,8 @@ void LoadEMUHdf::exec() {
   // number from the hdf file, however if this is not a valid path then try
   // the basename with a '.bin' extension
   if (fs::is_directory(evtPath)) {
-    NeXus::NXRoot root(hdfFile);
-    NeXus::NXEntry entry = root.openFirstEntry();
+    Nexus::NXRoot root(hdfFile);
+    Nexus::NXEntry entry = root.openFirstEntry();
     auto eventDir = GetNeXusValue<std::string>(entry, "instrument/detector/daq_dirname", "./", 0);
     auto dataset = GetNeXusValue<int32_t>(entry, "instrument/detector/dataset_number", 0, m_datasetIndex);
     if (dataset < 0) {
@@ -1263,7 +1254,7 @@ void LoadEMUHdf::exec() {
     throw std::runtime_error(msg);
   }
 
-  LoadEMU<Kernel::NexusDescriptor>::exec(hdfFile, evtPath);
+  LoadEMU<Nexus::NexusDescriptorLazy>::exec(hdfFile, evtPath);
 }
 
 // -------- EMU Tar loader -----------------------

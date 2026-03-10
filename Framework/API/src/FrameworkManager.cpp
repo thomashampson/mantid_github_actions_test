@@ -20,8 +20,6 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 
-#include <nexus/NeXusFile.hpp>
-
 #include <Poco/ActiveResult.h>
 
 #include <clocale>
@@ -65,15 +63,6 @@ const char *PLUGINS_DIR_KEY = "framework.plugins.directory";
 const char *PLUGINS_EXCLUDE_KEY = "framework.plugins.exclude";
 } // namespace
 
-/** This is a function called every time NeXuS raises an error.
- * This swallows the errors and outputs nothing.
- */
-// Prevent clang-tidy trying to change the signature for ext. interface
-// NOLINTNEXTLINE(readability-non-const-parameter)
-void NexusErrorFunction(void *, char *) {
-  // Do nothing.
-}
-
 #ifdef __linux__
 /**
  * Print current backtrace to the given stream
@@ -99,7 +88,8 @@ void terminateHandler() {
   try {
     std::rethrow_exception(std::current_exception());
   } catch (const std::exception &exc) {
-    std::cerr << "  what(): " << exc.what() << "\n\n";
+    std::cerr << "  type: " << typeid(exc).name() << ";\n"
+              << "  what(): " << exc.what() << "\n\n";
   } catch (...) {
     std::cerr << "  what(): Unknown exception type. No more information "
                  "available\n\n";
@@ -134,7 +124,6 @@ FrameworkManagerImpl::FrameworkManagerImpl() {
   ConfigService::Instance();
   g_log.notice() << Mantid::welcomeMessage() << '\n';
   loadPlugins();
-  disableNexusOutput();
   setNumOMPThreadsToConfigValue();
 
   g_log.debug() << "FrameworkManager created.\n";
@@ -339,9 +328,6 @@ void FrameworkManagerImpl::setGlobalNumericLocaleToC() {
   // C as the locale.
   setlocale(LC_NUMERIC, "C");
 }
-
-/// Silence NeXus output
-void FrameworkManagerImpl::disableNexusOutput() { NXMSetError(nullptr, NexusErrorFunction); }
 
 /// Starts asynchronous tasks that are done as part of Start-up.
 void FrameworkManagerImpl::asynchronousStartupTasks() {

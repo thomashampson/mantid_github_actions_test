@@ -76,21 +76,21 @@ public:
    * @param peakNum :: index of the peak to get.
    * @return a reference to a Peak object.
    */
-  virtual Mantid::Geometry::IPeak &getPeak(int peakNum) = 0;
+  virtual Mantid::Geometry::IPeak &getPeak(size_t const peakNum) = 0;
 
   //---------------------------------------------------------------------------------------------
   /** Return a reference to the Peak (const version)
    * @param peakNum :: index of the peak to get.
    * @return a reference to a Peak object.
    */
-  virtual const Mantid::Geometry::IPeak &getPeak(int peakNum) const = 0;
+  virtual const Mantid::Geometry::IPeak &getPeak(size_t const peakNum) const = 0;
 
   //---------------------------------------------------------------------------------------------
   /** Return a pointer to the Peak
    * @param peakNum :: index of the peak to get.
    * @return a pointer to a Peak object.
    */
-  Mantid::Geometry::IPeak *getPeakPtr(const int peakNum) { return &this->getPeak(peakNum); }
+  Mantid::Geometry::IPeak *getPeakPtr(size_t const peakNum) { return &this->getPeak(peakNum); }
 
   //---------------------------------------------------------------------------------------------
   /** Create an instance of a Peak
@@ -167,7 +167,7 @@ public:
   virtual int peakInfoNumber(const Kernel::V3D &qLabFrame, bool labCoords) const = 0;
 
   //---------------------------------------------------------------------------------------------
-  virtual void saveNexus(::NeXus::File *file) const = 0;
+  virtual void saveNexus(Nexus::File *file) const = 0;
 
   std::string m_convention;
 

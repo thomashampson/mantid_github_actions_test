@@ -14,6 +14,7 @@ from matplotlib import colors
 from matplotlib.legend import Legend
 from matplotlib import colormaps
 from matplotlib.container import ErrorbarContainer
+from mantid.kernel import ConfigService
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -21,6 +22,46 @@ from matplotlib.container import ErrorbarContainer
 # Restrict zooming out of plots.
 ZOOM_LIMIT = 1e300
 
+MARKER_MAP = {
+    "square": "s",
+    "plus (filled)": "P",
+    "point": ".",
+    "tickdown": 3,
+    "triangle_right": ">",
+    "tickup": 2,
+    "hline": "_",
+    "vline": "|",
+    "pentagon": "p",
+    "tri_left": "3",
+    "caretdown": 7,
+    "caretright (centered at base)": 9,
+    "tickright": 1,
+    "caretright": 5,
+    "caretleft": 4,
+    "tickleft": 0,
+    "tri_up": "2",
+    "circle": "o",
+    "pixel": ",",
+    "caretleft (centered at base)": 8,
+    "diamond": "D",
+    "star": "*",
+    "hexagon1": "h",
+    "octagon": "8",
+    "hexagon2": "H",
+    "tri_right": "4",
+    "x (filled)": "X",
+    "thin_diamond": "d",
+    "tri_down": "1",
+    "triangle_left": "<",
+    "plus": "+",
+    "triangle_down": "v",
+    "triangle_up": "^",
+    "x": "x",
+    "caretup": 6,
+    "caretup (centered at base)": 10,
+    "caretdown (centered at base)": 11,
+    "None": "None",
+}
 # Use the correct draggable method based on the matplotlib version
 if hasattr(Legend, "set_draggable"):
     SET_DRAGGABLE_METHOD = "set_draggable"
@@ -172,7 +213,7 @@ def zoom_axis(ax, coord, x_or_y, factor):
     :param float factor: The factor by which to zoom in, a factor less than 1 zooms out
     """
     if x_or_y.lower() not in ["x", "y"]:
-        raise ValueError("Can only zoom on axis 'x' or 'y'. Found '{}'." "".format(x_or_y))
+        raise ValueError("Can only zoom on axis 'x' or 'y'. Found '{}'.".format(x_or_y))
     get_lims = getattr(ax, "get_{}lim".format(x_or_y.lower()))
     set_lims = getattr(ax, "set_{}lim".format(x_or_y.lower()))
 
@@ -243,3 +284,40 @@ def convert_color_to_hex(color):
     except (KeyError, TypeError):
         rgb = colors.colorConverter.to_rgb(color)
         return colors.rgb2hex(rgb)
+
+
+def get_plot_specific_properties(ws, plot_type, plot_kwargs):
+    """
+    Set plot specific properties from the workspace
+    :param ws:
+    :param ax:
+    :param errors:
+    :param plot_kwargs:
+    """
+
+    if plot_type in ["errorbar_x", "errorbar_y", "errorbar_xy"]:
+        plot_kwargs["linestyle"] = "None"
+        plot_kwargs["marker"] = MARKER_MAP[ConfigService.getString("plots.errorbar.MarkerStyle")]
+        plot_kwargs["markersize"] = float(ConfigService.getString("plots.errorbar.MarkerSize"))
+        if "capsize" not in plot_kwargs:
+            plot_kwargs["capsize"] = float(ConfigService.getString("plots.errorbar.Capsize"))
+        if "capthick" not in plot_kwargs:
+            plot_kwargs["capthick"] = float(ConfigService.getString("plots.errorbar.CapThickness"))
+        if "errorevery" not in plot_kwargs:
+            plot_kwargs["errorevery"] = int(ConfigService.getString("plots.errorbar.errorEvery"))
+        if "elinewidth" not in plot_kwargs:
+            plot_kwargs["elinewidth"] = float(ConfigService.getString("plots.errorbar.Width"))
+    else:
+        if plot_type == "marker":
+            plot_kwargs["linestyle"] = "None"
+            plot_kwargs["marker"] = MARKER_MAP[ws.getMarkerStyle()]
+            marker_size = ws.getMarkerSize()
+            plot_kwargs["markersize"] = (
+                marker_size if marker_size != 6 else float(ConfigService.getString("plots.markerworkspace.MarkerSize"))
+            )
+        plot_kwargs.pop("capsize", None)
+        plot_kwargs.pop("capthick", None)
+        plot_kwargs.pop("errorevery", None)
+        plot_kwargs.pop("elinewidth", None)
+
+    return plot_kwargs

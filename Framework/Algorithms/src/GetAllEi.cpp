@@ -349,12 +349,13 @@ void GetAllEi::exec() {
   auto result_ws = create<Workspace2D>(1, Points(nPeaks));
 
   HistogramX peaks_positions(peaks.size());
-  std::transform(peaks.cbegin(), peaks.cend(), peaks_positions.begin(), [](peakKeeper peak) { return peak.position; });
+  std::transform(peaks.cbegin(), peaks.cend(), peaks_positions.begin(),
+                 [](const peakKeeper &peak) { return peak.position; });
   auto &Signal = result_ws->mutableY(0);
-  std::transform(peaks.cbegin(), peaks.cend(), Signal.begin(), [](peakKeeper peak) { return peak.height; });
+  std::transform(peaks.cbegin(), peaks.cend(), Signal.begin(), [](const peakKeeper &peak) { return peak.height; });
 
   auto &Error = result_ws->mutableE(0);
-  std::transform(peaks.cbegin(), peaks.cend(), Error.begin(), [](peakKeeper peak) { return peak.sigma; });
+  std::transform(peaks.cbegin(), peaks.cend(), Error.begin(), [](const peakKeeper &peak) { return peak.sigma; });
 
   result_ws->setPoints(0, peaks_positions);
 
@@ -902,13 +903,13 @@ Kernel::Property *GetAllEi::getPLogForProperty(const API::MatrixWorkspace_sptr &
  *                        experiment start/end times.
  */
 double GetAllEi::getAvrgLogValue(const API::MatrixWorkspace_sptr &inputWS, const std::string &propertyName,
-                                 Kernel::TimeROI &timeroi) {
+                                 const Kernel::TimeROI &timeroi) {
 
   auto pIProperty = getPLogForProperty(inputWS, propertyName);
 
   // this will always provide a defined pointer as this has been verified in
   // validator.
-  auto pTimeSeries = dynamic_cast<Kernel::TimeSeriesProperty<double> *>(pIProperty);
+  const auto *pTimeSeries = dynamic_cast<Kernel::TimeSeriesProperty<double> *>(pIProperty);
 
   if (!pTimeSeries) {
     throw std::runtime_error("Could not retrieve a time series property for the property name " + propertyName);
@@ -1039,7 +1040,7 @@ void GetAllEi::findChopSpeedAndDelay(const API::MatrixWorkspace_sptr &inputWS, d
   chop_delay = std::fabs(this->getAvrgLogValue(inputWS, "ChopperDelayLog", timeroi));
 
   // process chopper delay in the units of degree (phase)
-  auto pProperty = getPLogForProperty(inputWS, "ChopperDelayLog");
+  const auto *pProperty = getPLogForProperty(inputWS, "ChopperDelayLog");
   if (!pProperty)
     throw std::runtime_error("ChopperDelayLog has been removed from workspace "
                              "during the algorithm execution");
@@ -1091,7 +1092,7 @@ bool check_time_series_property(const GetAllEi *algo, const API::MatrixWorkspace
   }
   try {
     Kernel::Property *pProp = inputWS->run().getProperty(LogName);
-    auto pTSProp = dynamic_cast<Kernel::TimeSeriesProperty<double> *>(pProp);
+    const auto *pTSProp = dynamic_cast<Kernel::TimeSeriesProperty<double> *>(pProp);
     if (!pTSProp) {
       if (fail)
         result[prop_name] = "Workspace contains " + err_type + LogName + " But its type is not a timeSeries property";

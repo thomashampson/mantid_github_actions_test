@@ -7,6 +7,7 @@
 #include "MantidKernel/V3D.h"
 #include "MantidKernel/Matrix.h"
 #include "MantidKernel/Quat.h"
+#include "MantidNexus/NexusFile.h"
 #include <algorithm>
 #include <boost/version.hpp>
 #include <sstream>
@@ -18,8 +19,6 @@ using boost::math::gcd;
 #include <boost/integer/common_factor.hpp>
 using boost::integer::gcd;
 #endif
-
-#include <nexus/NeXusFile.hpp>
 
 namespace {
 /** transform vector into form, used to describe directions in crystallogaphical
@@ -402,8 +401,8 @@ std::istream &operator>>(std::istream &IX, V3D &A)
  * @param file :: open NeXus file
  * @param name :: name of the data to create
  */
-void V3D::saveNexus(::NeXus::File *file, const std::string &name) const {
-  file->makeData(name, ::NeXus::FLOAT64, 3, true);
+void V3D::saveNexus(Nexus::File *file, const std::string &name) const {
+  file->makeData(name, NXnumtype::FLOAT64, 3, true);
   file->putData(m_pt.data());
   file->closeData();
 }
@@ -413,7 +412,7 @@ void V3D::saveNexus(::NeXus::File *file, const std::string &name) const {
  * @param file :: open NeXus file
  * @param name :: name of the data to open
  */
-void V3D::loadNexus(::NeXus::File *file, const std::string &name) {
+void V3D::loadNexus(Nexus::File *file, const std::string &name) {
   std::vector<double> data;
   file->readData(name, data);
   if (data.size() != 3)
@@ -499,7 +498,7 @@ V3D V3D::directionAngles(bool inDegrees) const {
   Vector maximum absolute integer value
   @return maxCoeff()
 */
-int V3D::maxCoeff() {
+int V3D::maxCoeff() const {
   int MaxOrder = 0;
   if (std::abs(static_cast<int>(m_pt[0])) > MaxOrder)
     MaxOrder = std::abs(static_cast<int>(m_pt[0]));

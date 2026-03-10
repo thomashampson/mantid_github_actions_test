@@ -8,8 +8,8 @@
 
 #include "MantidAPI/IFileLoader.h"
 #include "MantidDataHandling/DllConfig.h"
-#include "MantidKernel/NexusDescriptor.h"
-#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusClasses_fwd.h"
+#include "MantidNexus/NexusDescriptorLazy.h"
 
 namespace Mantid {
 namespace DataHandling {
@@ -17,11 +17,11 @@ namespace DataHandling {
 /**
   Loads an ILL IN16B nexus file into a Mantid workspace.
 */
-class MANTID_DATAHANDLING_DLL LoadILLIndirect2 : public API::IFileLoader<Kernel::NexusDescriptor> {
+class MANTID_DATAHANDLING_DLL LoadILLIndirect2 : public API::IFileLoader<Nexus::NexusDescriptorLazy> {
 public:
   LoadILLIndirect2();
   /// Returns a confidence value that this algorithm can load a file
-  int confidence(Kernel::NexusDescriptor &descriptor) const override;
+  int confidence(Nexus::NexusDescriptorLazy &descriptor) const override;
 
   /// Algorithm's version for identification. @see Algorithm::version
   int version() const override { return 2; }
@@ -36,15 +36,15 @@ private:
   void init() override;
   void exec() override;
 
-  void loadDataDetails(NeXus::NXEntry &entry);
+  void loadDataDetails(const Nexus::NXEntry &entry);
   void initWorkSpace();
-  void setInstrumentName(const NeXus::NXEntry &firstEntry, const std::string &instrumentNamePath);
-  std::string getDataPath(const NeXus::NXEntry &entry);
+  void setInstrumentName(const Nexus::NXEntry &firstEntry, const std::string &instrumentNameAddress);
+  std::string getDataAddress(const Nexus::NXEntry &entry);
   void loadNexusEntriesIntoProperties(const std::string &nexusfilename);
-  void loadDataIntoWorkspace(NeXus::NXEntry &entry);
-  void loadDiffractionData(NeXus::NXEntry &entry);
+  void loadDataIntoWorkspace(const Nexus::NXEntry &entry);
+  void loadDiffractionData(Nexus::NXEntry &entry);
   void moveComponent(const std::string &, double);
-  void moveSingleDetectors(const NeXus::NXEntry &entry);
+  void moveSingleDetectors(const Nexus::NXEntry &entry);
   void rotateTubes();
   std::string getInstrumentFileName();
 
@@ -53,15 +53,15 @@ private:
   std::string m_instrumentName; ///< Name of the instrument
 
   // Variables describing the data in the detector
-  size_t m_numberOfTubes;           // number of tubes - X
-  size_t m_numberOfPixelsPerTube;   // number of pixels per tube - Y
-  size_t m_numberOfChannels;        // time channels - Z
-  size_t m_numberOfSimpleDetectors; // number of simple detector
-  size_t m_numberOfMonitors;        // number of monitors
-  std::set<int> m_activeSDIndices;  // set of Single Detector indices,
-                                    // that were actually active
-  bool m_bats;                      // A flag marking the BATS mode
-  size_t m_firstTubeAngleRounded;   // A flag holding the rounded angle of the first tube
+  size_t m_numberOfTubes;              // number of tubes - X
+  size_t m_numberOfPixelsPerTube;      // number of pixels per tube - Y
+  size_t m_numberOfChannels;           // time channels - Z
+  size_t m_numberOfSimpleDetectors;    // number of simple detector
+  size_t m_numberOfMonitors;           // number of monitors
+  std::set<int32_t> m_activeSDIndices; // set of Single Detector indices,
+                                       // that were actually active
+  bool m_bats;                         // A flag marking the BATS mode
+  size_t m_firstTubeAngleRounded;      // A flag holding the rounded angle of the first tube
 
   std::vector<std::string> m_supportedInstruments;
   std::string m_loadOption;

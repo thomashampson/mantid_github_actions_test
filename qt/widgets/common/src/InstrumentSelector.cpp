@@ -35,7 +35,7 @@ InstrumentSelector::InstrumentSelector(QWidget *parent, bool init)
   if (init) {
     fillWithInstrumentsFromFacility();
 
-    Mantid::Kernel::ConfigServiceImpl &config = Mantid::Kernel::ConfigService::Instance();
+    Mantid::Kernel::ConfigServiceImpl const &config = Mantid::Kernel::ConfigService::Instance();
     config.addObserver(m_changeObserver);
   }
 
@@ -57,7 +57,7 @@ InstrumentSelector::~InstrumentSelector() {
  * widget
  * @returns A list of supported techniques
  */
-QStringList InstrumentSelector::getTechniques() const { return m_techniques; }
+const QStringList &InstrumentSelector::getTechniques() const { return m_techniques; }
 
 /**
  * Returns if the list of instruments will be refeshed when the facility

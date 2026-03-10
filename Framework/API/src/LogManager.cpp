@@ -6,13 +6,12 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidAPI/LogManager.h"
 #include "MantidKernel/Cache.h"
+#include "MantidKernel/Exception.h"
 #include "MantidKernel/PropertyManager.h"
 #include "MantidKernel/PropertyNexus.h"
 #include "MantidKernel/TimeROI.h"
 #include "MantidKernel/TimeSeriesProperty.h"
-
-#include <nexus/NeXusFile.hpp>
-#include <numeric>
+#include "MantidNexus/NexusFile.h"
 
 namespace Mantid::API {
 
@@ -81,7 +80,9 @@ bool convertPropertyToDouble(const Property *property, double &value, const Math
 
 /// Name of the log entry containing the proton charge when retrieved using
 /// getProtonCharge
-const char *LogManager::PROTON_CHARGE_LOG_NAME = "gd_prtn_chrg";
+const std::string LogManager::PROTON_CHARGE_LOG_NAME = "gd_prtn_chrg";
+const std::string LogManager::PROTON_CHARGE_UNFILTERED_LOG_NAME = LogManager::PROTON_CHARGE_LOG_NAME + "_unfiltered";
+
 //----------------------------------------------------------------------
 // Public member functions
 //----------------------------------------------------------------------
@@ -215,13 +216,12 @@ const DateAndTime LogManager::getFirstPulseTime() const {
   const DateAndTime reference("1991-01-01T00:00:00");
   const std::vector<DateAndTime> &times = log->timesAsVector();
   const size_t maxSkip{100};
-  size_t index;
   const size_t maxIndex = std::min(static_cast<size_t>(log->realSize()), maxSkip);
-  for (index = 0; index < maxIndex; index++) {
-    if (times[index] >= reference)
-      return times[index];
+  const auto it = std::find_if(times.cbegin(), times.cbegin() + maxIndex,
+                               [&reference](const auto &time) { return time >= reference; });
+  if (it != times.cbegin() + maxIndex) {
+    return *it;
   }
-
   return times[maxIndex - 1];
 }
 
@@ -586,7 +586,7 @@ void LogManager::setTimeROI(const Kernel::TimeROI &timeroi) {
  * @param keepOpen :: do not close group on exit to allow overloading and child
  * classes writing to the same group
  */
-void LogManager::saveNexus(::NeXus::File *file, const std::string &group, bool keepOpen) const {
+void LogManager::saveNexus(Nexus::File *file, const std::string &group, bool keepOpen) const {
   file->makeGroup(group, "NXgroup", true);
   file->putAttr("version", 1);
 
@@ -612,14 +612,12 @@ void LogManager::saveNexus(::NeXus::File *file, const std::string &group, bool k
  * @param file :: open NeXus file
  * @param group :: name of the group to open. Pass an empty string to NOT open a
  * group
- * @param fileInfo :: The corresponding Nexus HDF5 file descriptor
  * @param prefix :: The prefix of the provided file
  * @param keepOpen :: do not close group on exit to allow overloading and child
  * classes reading from the same group
  * load any NXlog in the current open group.
  */
-void LogManager::loadNexus(::NeXus::File * /*file*/, const std::string & /*group*/,
-                           const Mantid::Kernel::NexusHDF5Descriptor & /*fileInfo*/, const std::string & /*prefix*/,
+void LogManager::loadNexus(Nexus::File * /*file*/, std::string const & /*group*/, std::string const & /*prefix*/,
                            bool /*keepOpen*/) {
   throw std::runtime_error("LogManager::loadNexus should not be used");
 }
@@ -633,7 +631,7 @@ void LogManager::loadNexus(::NeXus::File * /*file*/, const std::string & /*group
  * classes reading from the same group
  * load any NXlog in the current open group.
  */
-void LogManager::loadNexus(::NeXus::File *file, const std::string &group, bool keepOpen) {
+void LogManager::loadNexus(Nexus::File *file, const std::string &group, bool keepOpen) {
   if (!group.empty()) {
     file->openGroup(group, "NXgroup");
   }
@@ -646,13 +644,10 @@ void LogManager::loadNexus(::NeXus::File *file, const std::string &group, bool k
   }
 }
 
-void LogManager::loadNexus(::NeXus::File *file, const Mantid::Kernel::NexusHDF5Descriptor &fileInfo,
-                           const std::string &prefix) {
+void LogManager::loadNexus(Nexus::File *file, std::string const &prefix) {
 
   // Only load from NXlog entries
-  const auto &allEntries = fileInfo.getAllEntries();
-  auto itNxLogEntries = allEntries.find("NXlog");
-  const auto nxLogEntries = (itNxLogEntries != allEntries.end()) ? itNxLogEntries->second : std::set<std::string>{};
+  auto const nxLogEntries = file->getEntriesByClass("NXlog");
 
   const auto levels = std::count(prefix.begin(), prefix.end(), '/');
 
@@ -673,7 +668,7 @@ void LogManager::loadNexus(::NeXus::File *file, const Mantid::Kernel::NexusHDF5D
     }
     const std::string nameClass = absoluteEntryName.substr(absoluteEntryName.find_last_of('/') + 1);
 
-    auto prop = PropertyNexus::loadProperty(file, nameClass, fileInfo, prefix);
+    auto prop = PropertyNexus::loadProperty(file, nameClass, prefix);
     if (prop) {
       // get TimeROI
       if (prop->name() == Kernel::TimeROI::NAME) {
@@ -692,13 +687,12 @@ void LogManager::loadNexus(::NeXus::File *file, const Mantid::Kernel::NexusHDF5D
 }
 
 //--------------------------------------------------------------------------------------------
-/** Load the object from an open NeXus file. Avoid multiple expensive calls to
- * getEntries().
+/** Load the object from an open NeXus file. Avoid multiple expensive calls to getEntries().
  * @param file :: open NeXus file
  * @param entries :: The entries available in the current place in the file.
  * load any NXlog in the current open group.
  */
-void LogManager::loadNexus(::NeXus::File *file, const std::map<std::string, std::string> &entries) {
+void LogManager::loadNexus(Nexus::File *file, const std::map<std::string, std::string> &entries) {
 
   for (const auto &name_class : entries) {
     // NXLog types are the main one.
@@ -738,19 +732,6 @@ std::string LogManager::getInvalidValuesFilterLogName(const std::string &logName
 /// returns true if the log has a matching invalid values log filter
 bool LogManager::hasInvalidValuesFilter(const std::string &logName) const {
   return hasProperty(getInvalidValuesFilterLogName(logName));
-}
-
-/// returns the invalid values log if the log has a matching invalid values log filter
-Kernel::TimeSeriesProperty<bool> *LogManager::getInvalidValuesFilter(const std::string &logName) const {
-  try {
-    auto log = getLogData(getInvalidValuesFilterLogName(logName));
-    if (auto tsp = dynamic_cast<TimeSeriesProperty<bool> *>(log)) {
-      return tsp;
-    }
-  } catch (Exception::NotFoundError &) {
-    // do nothing, just drop through tto the return line below
-  }
-  return nullptr;
 }
 
 bool LogManager::operator==(const LogManager &other) const {

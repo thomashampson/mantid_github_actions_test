@@ -11,11 +11,12 @@
 #include "MantidAPI/WorkspaceGroup.h"
 #include "MantidAPI/WorkspaceHistory.h"
 #include "MantidAlgorithms/PolarizationCorrections/PolarizationCorrectionsHelpers.h"
-#include "MantidAlgorithms/PolarizationCorrections/SpinStateValidator.h"
 #include "MantidDataObjects/Workspace2D.h"
 #include "MantidDataObjects/WorkspaceCreation.h"
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/ListValidator.h"
+#include "MantidKernel/SpinStateHelpers.h"
+#include "MantidKernel/SpinStateValidator.h"
 #include "MantidKernel/StringTokenizer.h"
 
 #include <Eigen/Dense>
@@ -329,13 +330,14 @@ void PolarizationCorrectionWildes::init() {
       std::make_unique<API::WorkspaceProperty<API::WorkspaceGroup>>(Prop::OUTPUT_WS, "", Kernel::Direction::Output),
       "A group of polarization efficiency corrected workspaces.");
 
-  const auto flipperConfigValidator = std::make_shared<SpinStateValidator>(std::unordered_set<int>{1, 2, 3, 4}, true);
+  const auto flipperConfigValidator =
+      std::make_shared<Kernel::SpinStateValidator>(std::unordered_set<int>{1, 2, 3, 4}, true);
   declareProperty(Prop::FLIPPERS,
                   std::string(FlipperConfigurations::OFF_OFF) + ", " + FlipperConfigurations::OFF_ON + ", " +
                       FlipperConfigurations::ON_OFF + ", " + FlipperConfigurations::ON_ON,
                   flipperConfigValidator, "Flipper configurations of the input workspaces.");
   const auto spinStateValidator =
-      std::make_shared<SpinStateValidator>(std::unordered_set<int>{0, 2, 4}, false, '+', '-', true);
+      std::make_shared<Kernel::SpinStateValidator>(std::unordered_set<int>{0, 2, 4}, false, "+", "-", true);
   declareProperty(Prop::SPIN_STATES, "", spinStateValidator, "The order of the spin states in the output workspace.");
   declareProperty(
       std::make_unique<API::WorkspaceProperty<API::MatrixWorkspace>>(Prop::EFFICIENCIES, "", Kernel::Direction::Input),
@@ -351,7 +353,7 @@ void PolarizationCorrectionWildes::init() {
  */
 void PolarizationCorrectionWildes::exec() {
   const std::string flipperProperty = getProperty(Prop::FLIPPERS);
-  const auto flippers = PolarizationCorrectionsHelpers::splitSpinStateString(flipperProperty);
+  const auto flippers = Kernel::SpinStateHelpers::splitSpinStateString(flipperProperty);
   // Check if the input flipper configuration includes an analyser
   const bool hasAnalyser = flippers.front().size() > 1;
   const auto inputs = mapInputsToDirections(flippers);
@@ -410,14 +412,14 @@ std::map<std::string, std::string> PolarizationCorrectionWildes::validateInputs(
     }
   }
   const std::vector<std::string> inputs = getProperty(Prop::INPUT_WS);
-  const auto flipperConfig = PolarizationCorrectionsHelpers::splitSpinStateString(getPropertyValue(Prop::FLIPPERS));
+  const auto flipperConfig = Kernel::SpinStateHelpers::splitSpinStateString(getPropertyValue(Prop::FLIPPERS));
   const auto flipperCount = flipperConfig.size();
   if (inputs.size() != flipperCount) {
     issues[Prop::FLIPPERS] = "The number of flipper configurations (" + std::to_string(flipperCount) +
                              ") does not match the number of input workspaces (" + std::to_string(inputs.size()) + ")";
   }
   // SpinStates checks.
-  const auto spinStates = PolarizationCorrectionsHelpers::splitSpinStateString(getPropertyValue(Prop::SPIN_STATES));
+  const auto spinStates = Kernel::SpinStateHelpers::splitSpinStateString(getPropertyValue(Prop::SPIN_STATES));
   if (inputs.size() == 1 && !spinStates.empty()) {
     issues[Prop::SPIN_STATES] = "Output workspace order cannot be set for direct beam calculations.";
   } else if (!spinStates.empty()) {
@@ -529,7 +531,7 @@ API::WorkspaceGroup_sptr PolarizationCorrectionWildes::groupOutput(const Workspa
 
   std::vector<std::string> names;
   if (!spinStateOrder.empty()) {
-    names.resize(PolarizationCorrectionsHelpers::splitSpinStateString(spinStateOrder).size());
+    names.resize(Kernel::SpinStateHelpers::splitSpinStateString(spinStateOrder).size());
   }
 
   if (outputs.ppWS) {
@@ -582,8 +584,8 @@ void PolarizationCorrectionWildes::addSpinStateOutput(std::vector<std::string> &
     names.emplace_back(baseName + "_" + spinState);
     API::AnalysisDataService::Instance().addOrReplace(names.back(), ws);
   } else {
-    const auto &maybeIndex = PolarizationCorrectionsHelpers::indexOfWorkspaceForSpinState(
-        PolarizationCorrectionsHelpers::splitSpinStateString(spinStateOrder), spinState);
+    const auto &maybeIndex = Kernel::SpinStateHelpers::indexOfWorkspaceForSpinState(
+        Kernel::SpinStateHelpers::splitSpinStateString(spinStateOrder), spinState);
     if (!maybeIndex.has_value()) {
       throw std::invalid_argument("Required spin state (" + spinState + ") not found in spin state order (" +
                                   spinStateOrder + ").");
@@ -655,12 +657,17 @@ PolarizationCorrectionWildes::directBeamCorrections(const WorkspaceMap &inputs, 
   WorkspaceMap outputs;
   outputs.ppWS = createWorkspaceWithHistory(inputs.ppWS);
   const size_t nHisto = inputs.ppWS->getNumberHistograms();
-  for (size_t wsIndex = 0; wsIndex != nHisto; ++wsIndex) {
+  // cppcheck-suppress unreadVariable
+  const bool threadSafe = Kernel::threadSafe(*inputs.ppWS, *outputs.ppWS);
+  PARALLEL_FOR_IF(threadSafe)
+  for (int wsIndex = 0; wsIndex < static_cast<int>(nHisto); ++wsIndex) {
+    PARALLEL_START_INTERRUPT_REGION
     const auto &ppY = inputs.ppWS->y(wsIndex);
     const auto &ppE = inputs.ppWS->e(wsIndex);
     auto &ppYOut = outputs.ppWS->mutableY(wsIndex);
     auto &ppEOut = outputs.ppWS->mutableE(wsIndex);
-    for (size_t binIndex = 0; binIndex < ppY.size(); ++binIndex) {
+    PARALLEL_FOR_IF(threadSafe)
+    for (int binIndex = 0; binIndex < static_cast<int>(ppY.size()); ++binIndex) {
       const auto P1 = efficiencies.P1->y()[binIndex];
       const auto P2 = efficiencies.P2->y()[binIndex];
       const double f = 1. - P1 - P2 + 2. * P1 * P2;
@@ -673,7 +680,9 @@ PolarizationCorrectionWildes::directBeamCorrections(const WorkspaceMap &inputs, 
       const auto errorSum = std::sqrt(e1 + e2 + e3);
       ppEOut[binIndex] = errorSum;
     }
+    PARALLEL_END_INTERRUPT_REGION
   }
+  PARALLEL_CHECK_INTERRUPT_REGION
   return outputs;
 }
 
@@ -694,7 +703,11 @@ PolarizationCorrectionWildes::analyzerlessCorrections(const WorkspaceMap &inputs
   outputs.mmWS = createWorkspaceWithHistory(inputs.mmWS);
   outputs.ppWS = createWorkspaceWithHistory(inputs.ppWS);
   const size_t nHisto = inputs.mmWS->getNumberHistograms();
-  for (size_t wsIndex = 0; wsIndex != nHisto; ++wsIndex) {
+  // cppcheck-suppress unreadVariable
+  const bool threadSafe = Kernel::threadSafe(*inputs.mmWS, *inputs.ppWS, *outputs.mmWS, *outputs.ppWS);
+  PARALLEL_FOR_IF(threadSafe)
+  for (int wsIndex = 0; wsIndex < static_cast<int>(nHisto); ++wsIndex) {
+    PARALLEL_START_INTERRUPT_REGION
     const auto &mmY = inputs.mmWS->y(wsIndex);
     const auto &mmE = inputs.mmWS->e(wsIndex);
     const auto &ppY = inputs.ppWS->y(wsIndex);
@@ -703,7 +716,8 @@ PolarizationCorrectionWildes::analyzerlessCorrections(const WorkspaceMap &inputs
     auto &mmEOut = outputs.mmWS->mutableE(wsIndex);
     auto &ppYOut = outputs.ppWS->mutableY(wsIndex);
     auto &ppEOut = outputs.ppWS->mutableE(wsIndex);
-    for (size_t binIndex = 0; binIndex < mmY.size(); ++binIndex) {
+    PARALLEL_FOR_IF(threadSafe)
+    for (int binIndex = 0; binIndex < static_cast<int>(mmY.size()); ++binIndex) {
       const auto F1 = efficiencies.F1->y()[binIndex];
       const auto P1 = efficiencies.P1->y()[binIndex];
       Eigen::Matrix2d F1m;
@@ -736,7 +750,9 @@ PolarizationCorrectionWildes::analyzerlessCorrections(const WorkspaceMap &inputs
       ppEOut[binIndex] = errorSum[0];
       mmEOut[binIndex] = errorSum[1];
     }
+    PARALLEL_END_INTERRUPT_REGION
   }
+  PARALLEL_CHECK_INTERRUPT_REGION
   return outputs;
 }
 
@@ -814,7 +830,12 @@ PolarizationCorrectionWildes::fullCorrections(const WorkspaceMap &inputs, const 
   const auto P2 = efficiencies.P2->y();
   const auto P2E = efficiencies.P2->e();
   const size_t nHisto = inputs.mmWS->getNumberHistograms();
-  for (size_t wsIndex = 0; wsIndex != nHisto; ++wsIndex) {
+  // cppcheck-suppress unreadVariable
+  const bool threadSafe = Kernel::threadSafe(*inputs.mmWS, *inputs.mpWS, *inputs.pmWS, *inputs.ppWS, *outputs.mmWS,
+                                             *outputs.mpWS, *outputs.pmWS, *outputs.ppWS);
+  PARALLEL_FOR_IF(threadSafe)
+  for (int wsIndex = 0; wsIndex < static_cast<int>(nHisto); ++wsIndex) {
+    PARALLEL_START_INTERRUPT_REGION
     const auto &mmY = inputs.mmWS->y(wsIndex);
     const auto &mmE = inputs.mmWS->e(wsIndex);
     const auto &mpY = inputs.mpWS->y(wsIndex);
@@ -831,7 +852,8 @@ PolarizationCorrectionWildes::fullCorrections(const WorkspaceMap &inputs, const 
     auto &pmEOut = outputs.pmWS->mutableE(wsIndex);
     auto &ppYOut = outputs.ppWS->mutableY(wsIndex);
     auto &ppEOut = outputs.ppWS->mutableE(wsIndex);
-    for (size_t binIndex = 0; binIndex < mmY.size(); ++binIndex) {
+    PARALLEL_FOR_IF(threadSafe)
+    for (int binIndex = 0; binIndex < static_cast<int>(mmY.size()); ++binIndex) {
       Eigen::Vector4d corrected;
       Eigen::Vector4d errors;
       fourInputsCorrectedAndErrors(corrected, errors, ppY[binIndex], ppE[binIndex], pmY[binIndex], pmE[binIndex],
@@ -847,7 +869,9 @@ PolarizationCorrectionWildes::fullCorrections(const WorkspaceMap &inputs, const 
       mpEOut[binIndex] = errors[2];
       mmEOut[binIndex] = errors[3];
     }
+    PARALLEL_END_INTERRUPT_REGION
   }
+  PARALLEL_CHECK_INTERRUPT_REGION
   return outputs;
 }
 
@@ -894,12 +918,17 @@ void PolarizationCorrectionWildes::threeInputsSolve01(WorkspaceMap &inputs, cons
   const auto &P1 = efficiencies.P1->y();
   const auto &P2 = efficiencies.P2->y();
   const auto nHisto = inputs.pmWS->getNumberHistograms();
-  for (size_t wsIndex = 0; wsIndex != nHisto; ++wsIndex) {
+  // cppcheck-suppress unreadVariable
+  const bool threadSafe = Kernel::threadSafe(*inputs.mmWS, *inputs.mpWS, *inputs.pmWS, *inputs.ppWS);
+  PARALLEL_FOR_IF(threadSafe)
+  for (int wsIndex = 0; wsIndex < static_cast<int>(nHisto); ++wsIndex) {
+    PARALLEL_START_INTERRUPT_REGION
     const auto &I00 = inputs.ppWS->y(wsIndex);
     auto &I01 = inputs.pmWS->mutableY(wsIndex);
     const auto &I10 = inputs.mpWS->y(wsIndex);
     const auto &I11 = inputs.mmWS->y(wsIndex);
-    for (size_t binIndex = 0; binIndex != I00.size(); ++binIndex) {
+    PARALLEL_FOR_IF(threadSafe)
+    for (int binIndex = 0; binIndex < static_cast<int>(I00.size()); ++binIndex) {
       const auto f1 = F1[binIndex];
       const auto f2 = F2[binIndex];
       const auto p1 = P1[binIndex];
@@ -912,7 +941,9 @@ void PolarizationCorrectionWildes::threeInputsSolve01(WorkspaceMap &inputs, cons
           (-p1 + f1 * (-1. + 2. * p1) + p2);
       // The errors are left to zero.
     }
+    PARALLEL_END_INTERRUPT_REGION
   }
+  PARALLEL_CHECK_INTERRUPT_REGION
 }
 
 /**
@@ -928,12 +959,17 @@ void PolarizationCorrectionWildes::threeInputsSolve10(WorkspaceMap &inputs, cons
   const auto &P1 = efficiencies.P1->y();
   const auto &P2 = efficiencies.P2->y();
   const auto nHisto = inputs.mpWS->getNumberHistograms();
-  for (size_t wsIndex = 0; wsIndex != nHisto; ++wsIndex) {
+  // cppcheck-suppress unreadVariable
+  const bool threadSafe = Kernel::threadSafe(*inputs.mmWS, *inputs.mpWS, *inputs.pmWS, *inputs.ppWS);
+  PARALLEL_FOR_IF(threadSafe)
+  for (int wsIndex = 0; wsIndex < static_cast<int>(nHisto); ++wsIndex) {
+    PARALLEL_START_INTERRUPT_REGION
     const auto &I00 = inputs.ppWS->y(wsIndex);
     const auto &I01 = inputs.pmWS->y(wsIndex);
     auto &I10 = inputs.mpWS->mutableY(wsIndex);
     const auto &I11 = inputs.mmWS->y(wsIndex);
-    for (size_t binIndex = 0; binIndex != I00.size(); ++binIndex) {
+    PARALLEL_FOR_IF(threadSafe)
+    for (int binIndex = 0; binIndex < static_cast<int>(I00.size()); ++binIndex) {
       const auto f1 = F1[binIndex];
       const auto f2 = F2[binIndex];
       const auto p1 = P1[binIndex];
@@ -946,7 +982,9 @@ void PolarizationCorrectionWildes::threeInputsSolve10(WorkspaceMap &inputs, cons
           (p1 - p2 + f2 * (-1. + 2. * p2));
       // The errors are left to zero.
     }
+    PARALLEL_END_INTERRUPT_REGION
   }
+  PARALLEL_CHECK_INTERRUPT_REGION
 }
 
 /**
@@ -968,7 +1006,11 @@ void PolarizationCorrectionWildes::twoInputsSolve01And10(WorkspaceMap &fullInput
   const auto &P2 = efficiencies.P2->y();
   const auto &P2E = efficiencies.P2->e();
   const auto nHisto = inputs.mmWS->getNumberHistograms();
-  for (size_t wsIndex = 0; wsIndex != nHisto; ++wsIndex) {
+  // cppcheck-suppress unreadVariable
+  const bool threadSafe = Kernel::threadSafe(*inputs.mmWS, *inputs.ppWS, *fullInputs.pmWS, *fullInputs.mpWS);
+  PARALLEL_FOR_IF(threadSafe)
+  for (int wsIndex = 0; wsIndex < static_cast<int>(nHisto); ++wsIndex) {
+    PARALLEL_START_INTERRUPT_REGION
     const auto &I00 = inputs.ppWS->y(wsIndex);
     const auto &E00 = inputs.ppWS->e(wsIndex);
     const auto &I11 = inputs.mmWS->y(wsIndex);
@@ -977,7 +1019,8 @@ void PolarizationCorrectionWildes::twoInputsSolve01And10(WorkspaceMap &fullInput
     auto &E01 = fullInputs.pmWS->mutableE(wsIndex);
     auto &I10 = fullInputs.mpWS->mutableY(wsIndex);
     auto &E10 = fullInputs.mpWS->mutableE(wsIndex);
-    for (size_t binIndex = 0; binIndex != I00.size(); ++binIndex) {
+    PARALLEL_FOR_IF(threadSafe)
+    for (int binIndex = 0; binIndex < static_cast<int>(I00.size()); ++binIndex) {
       const auto i00 = I00[binIndex];
       const auto i11 = I11[binIndex];
       const auto f1 = F1[binIndex];
@@ -1000,6 +1043,8 @@ void PolarizationCorrectionWildes::twoInputsSolve01And10(WorkspaceMap &fullInput
       E10[binIndex] = twoInputsErrorEstimate10(i00, E00[binIndex], i11, E11[binIndex], p1, P1E[binIndex], p2,
                                                P2E[binIndex], f1, F1E[binIndex], f2, F2E[binIndex]);
     }
+    PARALLEL_END_INTERRUPT_REGION
   }
+  PARALLEL_CHECK_INTERRUPT_REGION
 }
 } // namespace Mantid::Algorithms

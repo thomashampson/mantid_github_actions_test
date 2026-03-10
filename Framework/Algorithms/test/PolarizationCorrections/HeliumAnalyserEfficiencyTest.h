@@ -1,310 +1,217 @@
 // Mantid Repository : https://github.com/mantidproject/mantid
 //
-// Copyright &copy; 2024 ISIS Rutherford Appleton Laboratory UKRI,
+// Copyright &copy; 2025 ISIS Rutherford Appleton Laboratory UKRI,
 //   NScD Oak Ridge National Laboratory, European Spallation Source,
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 
 #pragma once
-
 #include "MantidAPI/AlgorithmManager.h"
+#include "MantidAPI/AnalysisDataService.h"
 #include "MantidAPI/ITableWorkspace.h"
 #include "MantidAPI/MatrixWorkspace.h"
-#include "MantidAPI/WorkspaceFactory.h"
+#include "MantidAPI/WorkspaceGroup.h"
 #include "MantidAlgorithms/PolarizationCorrections/HeliumAnalyserEfficiency.h"
-#include <boost/format.hpp>
+#include "PolarizationCorrectionsTestUtils.h"
 #include <cmath>
 #include <cxxtest/TestSuite.h>
 
 using namespace Mantid;
 using namespace Mantid::Algorithms;
 using namespace Mantid::API;
+using namespace PolCorrTestUtils;
+
+struct PolarizationTestParameters {
+  PolarizationTestParameters() = default;
+  PolarizationTestParameters(const double tauIni, const double polIni, const double pxdIni)
+      : Tau(tauIni), polInitial(polIni), pxd(pxdIni) {}
+  double Tau{DEFAULT_LIFETIME};
+  double polInitial{DEFAULT_INI_POL};
+  double pxd{DEFAULT_PXD};
+  double pxdError{0};
+  std::vector<double> outPolarizations{};
+  std::vector<MatrixWorkspace_sptr> outEfficiencies{};
+};
 
 class HeliumAnalyserEfficiencyTest : public CxxTest::TestSuite {
 public:
+  void setUp() override {
+    m_parameters = TestWorkspaceParameters();
+    m_parameters.updateSpectra(1, 1.75, 8, .5);
+    m_polParameters = PolarizationTestParameters();
+  }
   void tearDown() override { AnalysisDataService::Instance().clear(); }
 
-  void testName() {
+  void test_name() {
     HeliumAnalyserEfficiency alg;
-    TS_ASSERT_EQUALS(alg.name(), "HeliumAnalyserEfficiency");
+    TS_ASSERT_EQUALS(alg.name(), HE_EFF_ALG);
   }
 
-  void testInit() {
+  void test_init() {
     HeliumAnalyserEfficiency alg;
     alg.initialize();
     TS_ASSERT(alg.isInitialized());
   }
 
-  void testInputWorkspaceNotAGroupThrows() {
+  void test_input_workspace_not_a_group_throws() {
     // Should accept a group workspace containing four workspaces, corresponding to the four spin configurations
-    std::vector<double> x{1, 2, 3, 4, 5};
-    std::vector<double> y{1, 4, 9, 16, 25};
-    MatrixWorkspace_sptr ws1 = generateWorkspace("ws1", x, y);
-    auto heliumAnalyserEfficiency = AlgorithmManager::Instance().create("HeliumAnalyserEfficiency");
-    heliumAnalyserEfficiency->initialize();
-    heliumAnalyserEfficiency->setProperty("OutputWorkspace", "P");
-    TS_ASSERT_THROWS(heliumAnalyserEfficiency->setProperty("InputWorkspace", ws1), std::invalid_argument &);
-    TS_ASSERT_THROWS(heliumAnalyserEfficiency->execute(), const std::runtime_error &);
+    MatrixWorkspace_sptr test = generateFunctionDefinedWorkspace(m_parameters);
+    const auto alg = prepareHeEffAlgorithm({m_parameters.testName});
+    TSM_ASSERT_THROWS("InputWorkspaces has to be a group", alg->execute(), const std::runtime_error &);
   }
 
-  void testInputWorkspaceWithWrongSizedGroupThrows() {
-    // Should accept a group workspace containing four workspaces, corresponding to the four spin configurations
-    std::vector<double> x{1, 2, 3, 4, 5};
-    std::vector<double> y{1, 4, 9, 16, 25};
-    MatrixWorkspace_sptr ws1 = generateWorkspace("ws1", x, y);
-    MatrixWorkspace_sptr ws2 = generateWorkspace("ws2", x, y);
-    MatrixWorkspace_sptr ws3 = generateWorkspace("ws3", x, y);
-    auto groupWs = groupWorkspaces("grp", std::vector<MatrixWorkspace_sptr>{ws1, ws2, ws3});
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(groupWs, "P");
-    TS_ASSERT_THROWS(heliumAnalyserEfficiency->execute(), const std::runtime_error &);
+  void test_input_workspace_wrong_size_group_throws() {
+    // The units of the input workspace should be wavelength
+    const auto groupNames = generateEfficienciesFromLifetimeAndInitialPolarization();
+    AnalysisDataService::Instance().remove("T0_11");
+    const auto alg = prepareHeEffAlgorithm(groupNames);
+    TS_ASSERT_THROWS_EQUALS(alg->execute(), const std::runtime_error &e, std::string(e.what()),
+                            "Some invalid Properties found: \n InputWorkspaces: Error in workspace T0 : The "
+                            "number of periods within the input workspace is not an allowed value.");
   }
 
-  void testInvalidSpinStateFormatThrowsError() {
-    auto heliumAnalyserEfficiency = AlgorithmManager::Instance().create("HeliumAnalyserEfficiency");
+  void test_invalid_spin_throws() {
+    auto heliumAnalyserEfficiency = AlgorithmManager::Instance().create(HE_EFF_ALG);
     TS_ASSERT_THROWS(heliumAnalyserEfficiency->setProperty("SpinStates", "bad"), std::invalid_argument &);
     TS_ASSERT_THROWS(heliumAnalyserEfficiency->setProperty("SpinStates", "10,01"), std::invalid_argument &);
     TS_ASSERT_THROWS(heliumAnalyserEfficiency->setProperty("SpinStates", "00,00,11,11"), std::invalid_argument &);
     TS_ASSERT_THROWS(heliumAnalyserEfficiency->setProperty("SpinStates", "02,20,22,00"), std::invalid_argument &);
   }
 
-  void testNonWavelengthInput() {
-    // The units of the input workspace should be wavelength
-    MantidVec e;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", e, "TOF");
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "out");
+  void test_tau_is_not_fit_for_one_input_workspace() {
+    // Fitting with one input workspace is equivalent to calculating helium efficiency at t=0
+    const auto groupNames = generateEfficienciesFromLifetimeAndInitialPolarization();
+    const auto alg = prepareHeEffAlgorithm(groupNames);
 
-    TS_ASSERT_THROWS_EQUALS(
-        heliumAnalyserEfficiency->execute(), std::runtime_error const &e, std::string(e.what()),
-        "Some invalid Properties found: \n InputWorkspace: All input workspaces must be in units of Wavelength.");
+    alg->execute();
+    TS_ASSERT(alg->isExecuted());
+    const auto groupOut = AnalysisDataService::Instance().retrieveWS<WorkspaceGroup>(OUTPUT_NAME);
+    TS_ASSERT_EQUALS(groupOut->getNumberOfEntries(), 1);
+    TS_ASSERT_DELTA(m_polParameters.polInitial, m_polParameters.outPolarizations.at(0), 1e-4);
   }
 
-  void testInputWorkspaceNotSingleSpectrumThrowsError() {
-    MantidVec e;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", e, "Wavelength", 10, 0.2, 2);
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "out");
-
-    TS_ASSERT_THROWS_EQUALS(
-        heliumAnalyserEfficiency->execute(), std::runtime_error const &e, std::string(e.what()),
-        "Some invalid Properties found: \n InputWorkspace: All input workspaces must contain a single histogram.");
-  }
-
-  void testInputWorkspaceNotHistogramDataThrowsError() {
-    MantidVec e;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", e, "Wavelength");
-
-    MatrixWorkspace_sptr ws = std::dynamic_pointer_cast<MatrixWorkspace>(wsGrp->getItem(0));
-    auto convert = AlgorithmManager::Instance().create("ConvertToPointData");
-    convert->initialize();
-    convert->setProperty("InputWorkspace", ws);
-    convert->setProperty("OutputWorkspace", ws->getName());
-    convert->execute();
-
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "out");
-
-    TS_ASSERT_THROWS_EQUALS(
-        heliumAnalyserEfficiency->execute(), std::runtime_error const &e, std::string(e.what()),
-        "Some invalid Properties found: \n InputWorkspace: All input workspaces must be histogram data.");
-  }
-
-  void testZeroPdError() {
-    compareOutputValues(0, {0.4845053416, 0.6550113464, 0.6525155755, 0.5478694489, 0.4142358259});
-  }
-
-  void testNonZeroPdError() {
-    compareOutputValues(1000, {14.8320754089, 20.6772556357, 20.7518789689, 17.4738260412, 13.2301633100});
-  }
-
-  void testSmallNumberOfBins() {
-    // With less than 3 bins it's not possible to perform the error calculation correctly, because the
-    // number of parameters exceeds the number of data points.
-    MantidVec e;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", e, "Wavelength", 2);
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "P");
-    heliumAnalyserEfficiency->execute();
-    TS_ASSERT_EQUALS(true, heliumAnalyserEfficiency->isExecuted());
-  }
-
-  void testCorrectNumberOfOutputBins() {
-    MantidVec e;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", e, "Wavelength");
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "E");
-    heliumAnalyserEfficiency->setProperty("StartX", 4.0);
-    heliumAnalyserEfficiency->setProperty("EndX", 6.0);
-    heliumAnalyserEfficiency->setProperty("IgnoreFitQualityError", true);
-    heliumAnalyserEfficiency->execute();
-    TS_ASSERT(heliumAnalyserEfficiency->isExecuted());
-    MatrixWorkspace_sptr eff = AnalysisDataService::Instance().retrieveWS<MatrixWorkspace>("E");
-    MatrixWorkspace_sptr firstWs = std::dynamic_pointer_cast<MatrixWorkspace>(wsGrp->getItem(0));
-    // The output number of wavelength bins should match those from the input.
-    TS_ASSERT_EQUALS(firstWs->blocksize(), eff->blocksize());
-  }
-
-  void testFitCurvesOutputWhenOptionalPropertySet() {
-    // GIVEN
-    MantidVec e;
-    const WorkspaceGroup_sptr &wsGrp = createExampleGroupWorkspace("wsGrp", e, "Wavelength");
-    auto alg = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "E");
-
-    // WHEN
-    alg->setPropertyValue("OutputFitCurves", "__unused_for_child");
+  void test_child_algorithm_exec() {
+    const auto groupNames = generateEfficienciesFromLifetimeAndInitialPolarization();
+    const auto alg = prepareHeEffAlgorithm(groupNames);
     alg->setChild(true);
+
     alg->execute();
 
-    // THEN
     TS_ASSERT(alg->isExecuted());
-    const MatrixWorkspace_sptr &outputWs = alg->getProperty("OutputWorkspace");
-    const MatrixWorkspace_sptr &fitWs = alg->getProperty("OutputFitCurves");
-    TS_ASSERT_EQUALS(outputWs->getNumberHistograms(), 1);
-    TS_ASSERT_EQUALS(fitWs->getNumberHistograms(), 3);
+    const WorkspaceGroup_sptr groupOut = alg->getProperty("OutputWorkspace");
+    TS_ASSERT_EQUALS(groupOut->getNumberOfEntries(), 1);
+    const auto wsOut = std::dynamic_pointer_cast<MatrixWorkspace>(groupOut->getItem(0));
+    TS_ASSERT_EQUALS(wsOut->getNumberHistograms(), 1);
   }
 
-  void testParametersTableOutputWhenOptionalPropertySet() {
-    // GIVEN
-    MantidVec e;
-    const WorkspaceGroup_sptr &wsGrp = createExampleGroupWorkspace("wsGrp", e, "Wavelength");
-    auto alg = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "E");
+  void test_order_of_time_differences_does_not_matter() {
+    const std::vector<std::vector<double>> delays = {{0, 10, 20}, {10, 20, 0}, {20, 0, 10}};
+    for (const auto &delayVec : delays) {
+      const auto groupNames = generateEfficienciesFromLifetimeAndInitialPolarization(delayVec);
+      const auto alg =
+          prepareHeEffAlgorithm(groupNames, OUTPUT_NAME, SPIN_STATE, OUTPUT_TABLE_NAME, OUTPUT_CURVES_NAME);
 
-    // WHEN
-    alg->setPropertyValue("OutputFitParameters", "__unused_for_child");
-    alg->setChild(true);
-    alg->execute();
-
-    // THEN
-    TS_ASSERT(alg->isExecuted());
-    const MatrixWorkspace_sptr &outputWs = alg->getProperty("OutputWorkspace");
-    const ITableWorkspace_sptr &paramsWs = alg->getProperty("OutputFitParameters");
-    TS_ASSERT_EQUALS(outputWs->getNumberHistograms(), 1);
-    const std::vector<std::string> &expectedColumns = {"Name", "Value", "Error"};
-    TS_ASSERT_EQUALS(paramsWs->getColumnNames(), expectedColumns);
+      alg->execute();
+      TS_ASSERT(alg->isExecuted());
+      assertOutputNames(groupNames.size());
+      assertOutputs(groupNames.size());
+    }
   }
 
-  void testChildAlgorithmExecutesSuccessfully() {
-    MantidVec e;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", e);
+  void test_fit_with_different_lifetimes_and_delays() {
+    const std::vector<double> delays = {0, 10, 20};
+    const std::vector<double> lifetimes = {1, 100, 500};
+    for (const auto &tau : lifetimes) {
+      m_polParameters.Tau = tau;
+      const auto groupNames = generateEfficienciesFromLifetimeAndInitialPolarization(delays);
+      const auto alg =
+          prepareHeEffAlgorithm(groupNames, OUTPUT_NAME, SPIN_STATE, OUTPUT_TABLE_NAME, OUTPUT_CURVES_NAME);
 
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "E");
-    heliumAnalyserEfficiency->setChild(true);
-
-    heliumAnalyserEfficiency->execute();
-
-    TS_ASSERT(heliumAnalyserEfficiency->isExecuted());
-
-    MatrixWorkspace_sptr outputWorkspace = heliumAnalyserEfficiency->getProperty("OutputWorkspace");
-
-    TS_ASSERT_EQUALS(outputWorkspace->getNumberHistograms(), 1);
-    TS_ASSERT_EQUALS(outputWorkspace->dataY(0).size(), e.size());
+      alg->execute();
+      TS_ASSERT(alg->isExecuted());
+      assertOutputNames(groupNames.size());
+      assertOutputs(groupNames.size());
+    }
   }
 
 private:
-  IAlgorithm_sptr createHeliumAnalyserEfficiencyAlgorithm(WorkspaceGroup_sptr inputWs,
-                                                          const std::string &outputWsName) {
-    auto heliumAnalyserEfficiency = AlgorithmManager::Instance().create("HeliumAnalyserEfficiency");
-    heliumAnalyserEfficiency->initialize();
-    heliumAnalyserEfficiency->setProperty("InputWorkspace", inputWs->getName());
-    heliumAnalyserEfficiency->setProperty("OutputWorkspace", outputWsName);
-    return heliumAnalyserEfficiency;
+  IAlgorithm_sptr prepareHeEffAlgorithm(const std::vector<std::string> &inputWorkspaces,
+                                        const std::string &outputName = OUTPUT_NAME,
+                                        const std::string &spinState = SPIN_STATE,
+                                        const std::string &outputFitParameters = "",
+                                        const std::string &outputFitCurves = "") {
+    const auto heAlgorithm = AlgorithmManager::Instance().create(HE_EFF_ALG);
+    heAlgorithm->initialize();
+    heAlgorithm->setProperty("InputWorkspaces", inputWorkspaces);
+    heAlgorithm->setProperty("SpinStates", spinState);
+    heAlgorithm->setProperty("OutputWorkspace", outputName);
+
+    heAlgorithm->setProperty("OutputFitParameters", outputFitParameters);
+    heAlgorithm->setProperty("OutputFitCurves", outputFitCurves);
+    return heAlgorithm;
   }
 
-  WorkspaceGroup_sptr createExampleGroupWorkspace(const std::string &name, MantidVec &expectedEfficiency,
-                                                  const std::string &xUnit = "Wavelength", const size_t numBins = 5,
-                                                  const double examplePHe = 0.2, const int nSpec = 1) {
-    std::vector<double> x(numBins);
-    std::vector<double> yNsf(numBins);
-    std::vector<double> ySf(numBins);
-    for (size_t i = 0; i < numBins; ++i) {
-      x[i] = 2.0 + static_cast<double>(i) * 8.0 / static_cast<double>(numBins);
-      yNsf[i] = 0.9 * std::exp(-0.0733 * x[i] * 12 * (1 - examplePHe));
-      ySf[i] = 0.9 * std::exp(-0.0733 * x[i] * 12 * (1 + examplePHe));
+  std::vector<std::string> generateEfficienciesFromLifetimeAndInitialPolarization(const std::vector<double> &delays = {
+                                                                                      0}) {
+    std::vector<double> polarizations;
+    std::transform(delays.cbegin(), delays.cend(), std::back_inserter(polarizations), [&](const double delay) {
+      return m_polParameters.polInitial * std::exp(-delay / m_polParameters.Tau);
+    });
+    m_polParameters.outPolarizations = polarizations;
+    m_polParameters.outEfficiencies = std::vector<MatrixWorkspace_sptr>(delays.size());
+    std::vector<std::string> names(delays.size(), "T");
+    const double mu = LAMBDA_CONVERSION_FACTOR * m_polParameters.pxd;
+
+    for (size_t index = 0; index < delays.size(); index++) {
+      const auto phe = polarizations.at(index);
+      const auto effFunc = fillFuncStr({mu * phe}, EFFICIENCY_FUNC_STR);
+      const auto yNsfFunc = fillFuncStr({mu * (1 - phe)}, SPIN_TEST_FUNC_STR);
+      const auto ySfFunc = fillFuncStr({mu * (1 + phe)}, SPIN_TEST_FUNC_STR);
+      m_parameters.delay = delays.at(index);
+      const std::string groupIndexStr = std::to_string(index);
+      names.at(index) += groupIndexStr;
+      (void)createPolarizedTestGroup(names.at(index), m_parameters,
+                                     std::vector({yNsfFunc, ySfFunc, ySfFunc, yNsfFunc}));
+      m_parameters.updateNameAndFunc("eff" + groupIndexStr, effFunc);
+      m_polParameters.outEfficiencies.at(index) = generateFunctionDefinedWorkspace(m_parameters);
     }
-    std::vector<MatrixWorkspace_sptr> wsVec(4);
-    wsVec[0] = generateWorkspace("ws0", x, yNsf, xUnit, nSpec);
-    wsVec[1] = generateWorkspace("ws1", x, ySf, xUnit, nSpec);
-    wsVec[2] = generateWorkspace("ws2", x, ySf, xUnit, nSpec);
-    wsVec[3] = generateWorkspace("ws3", x, yNsf, xUnit, nSpec);
+    return names;
+  }
 
-    const auto histPoints = wsVec[0]->histogram(0).points();
-    const auto &wavelengthPoints = histPoints.rawData();
-    expectedEfficiency.resize(wavelengthPoints.size());
-    for (size_t i = 0; i < wavelengthPoints.size(); ++i) {
-      yNsf[i] = 0.9 * std::exp(-0.0733 * wavelengthPoints[i] * 12 * (1 - examplePHe));
-      ySf[i] = 0.9 * std::exp(-0.0733 * wavelengthPoints[i] * 12 * (1 + examplePHe));
-      expectedEfficiency[i] = yNsf[i] / (yNsf[i] + ySf[i]);
+  void assertOutputNames(const size_t HeFitSize = 1) {
+    const auto adsNames = AnalysisDataService::Instance().getObjectNames();
+    std::vector<std::string> expectedNamesCurves = {OUTPUT_CURVES_NAME + "_decay_curves_0"};
+    auto basenames = std::vector<std::string>(HeFitSize, OUTPUT_CURVES_NAME + "_He3_polarization_curves_");
+    std::for_each(basenames.begin(), basenames.end(), [n = 0](auto &name) mutable { name += std::to_string(n++); });
+    expectedNamesCurves.insert(expectedNamesCurves.cend(), basenames.cbegin(), basenames.cend());
+    TS_ASSERT(AnalysisDataService::Instance().doesExist(OUTPUT_CURVES_NAME));
+    TS_ASSERT(std::ranges::includes(adsNames, expectedNamesCurves));
+  }
+
+  void assertOutputs(const size_t HeFitSize = 1) {
+
+    // Assert Efficiencies
+    const auto groupOut = AnalysisDataService::Instance().retrieveWS<WorkspaceGroup>(OUTPUT_NAME);
+    TS_ASSERT_EQUALS(groupOut->getNumberOfEntries(), HeFitSize);
+    for (size_t index = 0; index < HeFitSize; index++) {
+      const auto ws = std::dynamic_pointer_cast<MatrixWorkspace>(groupOut->getItem(index));
+      const auto &y = ws->dataY(0);
+      TS_ASSERT_DELTA(y, m_polParameters.outEfficiencies.at(index)->dataY(0), DELTA);
     }
 
-    return groupWorkspaces(name, wsVec);
-  }
+    // Assert Polarization parameters
+    const auto polTable = AnalysisDataService::Instance().retrieveWS<ITableWorkspace>(OUTPUT_TABLE_NAME);
+    const auto values = polTable->getColumn("Value")->numeric_fill();
+    TS_ASSERT_DELTA(std::vector<double>(values.cbegin(), values.cbegin() + HeFitSize), m_polParameters.outPolarizations,
+                    DELTA);
 
-  MatrixWorkspace_sptr generateWorkspace(const std::string &name, const std::vector<double> &x,
-                                         const std::vector<double> &y, const std::string &xUnit = "Wavelength",
-                                         const int nSpec = 1) {
-    auto createWorkspace = AlgorithmManager::Instance().create("CreateWorkspace");
-    createWorkspace->initialize();
-    createWorkspace->setProperty("DataX", x);
-    createWorkspace->setProperty("DataY", y);
-    createWorkspace->setProperty("UnitX", xUnit);
-    createWorkspace->setProperty("NSpec", nSpec);
-    createWorkspace->setProperty("OutputWorkspace", name);
-    createWorkspace->execute();
-
-    auto convertToHistogram = AlgorithmManager::Instance().create("ConvertToHistogram");
-    convertToHistogram->initialize();
-    convertToHistogram->setProperty("InputWorkspace", name);
-    convertToHistogram->setProperty("OutputWorkspace", name);
-    convertToHistogram->execute();
-
-    MatrixWorkspace_sptr ws = AnalysisDataService::Instance().retrieveWS<MatrixWorkspace>(name);
-    return ws;
-  }
-
-  WorkspaceGroup_sptr groupWorkspaces(const std::string &name, const std::vector<MatrixWorkspace_sptr> &wsToGroup) {
-    auto groupWorkspace = AlgorithmManager::Instance().create("GroupWorkspaces");
-    groupWorkspace->initialize();
-    std::vector<std::string> wsToGroupNames(wsToGroup.size());
-    std::transform(wsToGroup.cbegin(), wsToGroup.cend(), wsToGroupNames.begin(),
-                   [](MatrixWorkspace_sptr w) { return w->getName(); });
-    groupWorkspace->setProperty("InputWorkspaces", wsToGroupNames);
-    groupWorkspace->setProperty("OutputWorkspace", name);
-    groupWorkspace->execute();
-    WorkspaceGroup_sptr group = AnalysisDataService::Instance().retrieveWS<WorkspaceGroup>(name);
-    return group;
-  }
-
-  MatrixWorkspace_sptr generateFunctionDefinedWorkspace(const std::string &name, const std::string &func) {
-    auto createSampleWorkspace = AlgorithmManager::Instance().create("CreateSampleWorkspace");
-    createSampleWorkspace->initialize();
-    createSampleWorkspace->setProperty("WorkspaceType", "Histogram");
-    createSampleWorkspace->setProperty("OutputWorkspace", name);
-    createSampleWorkspace->setProperty("Function", "User Defined");
-    createSampleWorkspace->setProperty("UserDefinedFunction", "name=UserFunction,Formula=" + func);
-    createSampleWorkspace->setProperty("XUnit", "Wavelength");
-    createSampleWorkspace->setProperty("XMin", "1");
-    createSampleWorkspace->setProperty("XMax", "8");
-    createSampleWorkspace->setProperty("BinWidth", "1");
-    createSampleWorkspace->execute();
-
-    MatrixWorkspace_sptr result = AnalysisDataService::Instance().retrieveWS<MatrixWorkspace>(name);
-    return result;
-  }
-
-  void compareOutputValues(const double pdError, const MantidVec &expectedErrorValues) {
-    MantidVec expectedEfficiencies;
-    auto wsGrp = createExampleGroupWorkspace("wsGrp", expectedEfficiencies);
-    auto heliumAnalyserEfficiency = createHeliumAnalyserEfficiencyAlgorithm(wsGrp, "E");
-    heliumAnalyserEfficiency->setProperty("PXDError", pdError);
-    heliumAnalyserEfficiency->execute();
-
-    TS_ASSERT(heliumAnalyserEfficiency->isExecuted());
-
-    MatrixWorkspace_sptr efficiency = AnalysisDataService::Instance().retrieveWS<MatrixWorkspace>(
-        heliumAnalyserEfficiency->getPropertyValue("OutputWorkspace"));
-    const auto efficiencies = efficiency->dataY(0);
-    const auto error = efficiency->dataE(0);
-
-    TS_ASSERT_EQUALS(expectedEfficiencies.size(), efficiencies.size());
-    TS_ASSERT_EQUALS(expectedErrorValues.size(), error.size());
-    for (size_t i = 0; i < error.size(); ++i) {
-      TS_ASSERT_DELTA(expectedEfficiencies[i], efficiencies[i], 1e-7);
-      TS_ASSERT_DELTA(expectedErrorValues[i], error[i], 1e-7);
+    // Assert Decay Parameters
+    if (HeFitSize > 1) {
+      TS_ASSERT_DELTA(values.at(HeFitSize + 1), m_polParameters.polInitial, DELTA);
+      TS_ASSERT_DELTA(values.at(HeFitSize + 2), m_polParameters.Tau, DELTA);
     }
   }
+
+  TestWorkspaceParameters m_parameters{};
+  PolarizationTestParameters m_polParameters{};
 };

@@ -5,6 +5,7 @@ add_subdirectory(WorkflowAlgorithms)
 set(TEST_PY_FILES
     AbinsBasicTest.py
     Abins2BasicTest.py
+    Abins2DBasicTest.py
     AbinsAdvancedParametersTest.py
     AlignComponentsTest.py
     AngularAutoCorrelationsSingleAxisTest.py
@@ -12,6 +13,7 @@ set(TEST_PY_FILES
     AnstoCommonFractionalTest.py
     AnstoCommonSearchTest.py
     ApplyDetectorScanEffCorrTest.py
+    AssertSpinStateOrderTest.py
     BinWidthAtXTest.py
     CalculateEfficiencyCorrectionTest.py
     CalculateFluxTest.py
@@ -29,6 +31,8 @@ set(TEST_PY_FILES
     CreateLeBailFitInputTest.py
     CorrectTOFTest.py
     CreateCacheFilenameTest.py
+    CreateGroupingByComponentTest.py
+    CreatePoleFigureTableWorkspaceTest.py
     CreateWorkspaceTest.py
     CropWorkspaceForMDNormTest.py
     CylinderPaalmanPingsCorrection2Test.py
@@ -54,11 +58,13 @@ set(TEST_PY_FILES
     FindGlobalBMatrixTest.py
     FindMultipleUMatricesTest.py
     FindSXPeaksConvolveTest.py
+    FindUBFromScatteringPlaneTest.py
     FitIncidentSpectrumTest.py
     FractionalIndexingTest.py
     GenerateGroupingSNSInelasticTest.py
     GenerateLogbookTest.py
     GetEiT0atSNSTest.py
+    GetIPTSTest.py
     GroupBySampleChangerPositionTest.py
     HB2AReduceTest.py
     HB3AAdjustSampleNormTest.py
@@ -95,6 +101,7 @@ set(TEST_PY_FILES
     MatchSpectraTest.py
     MaskAngleTest.py
     MaskBTPTest.py
+    MaskDetectorsIfTest.py
     MaskWorkspaceToCalFileTest.py
     MatchPeaksTest.py
     MeanTest.py
@@ -109,6 +116,9 @@ set(TEST_PY_FILES
     PDConvertReciprocalSpaceTest.py
     PeakMatchingTest.py
     RebinRaggedTest.py
+    RefineSingleCrystalGoniometerTest.py
+    ReorientUnitCellTest.py
+    PoldiAutoCorrelation6Test.py
     ReflectometryReductionOneLiveDataTest.py
     ReflectometrySliceEventWorkspaceTest.py
     RetrieveRunInfoTest.py
@@ -136,6 +146,7 @@ set(TEST_PY_FILES
     SymmetriseMDHistoTest.py
     UpdatePeakParameterTableValueTest.py
     SANSSubtractTest.py
+    TimeDifferenceTest.py
     TOFTOFCropWorkspaceTest.py
     TOFTOFMergeRunsTest.py
     ExportSampleLogsToCSVFileTest.py
@@ -155,6 +166,7 @@ set(TEST_PY_FILES
     LoadCIFTest.py
     SaveYDATest.py
     SaveP2DTest.py
+    peakdata_utilsTest.py
 )
 
 check_tests_valid(${CMAKE_CURRENT_SOURCE_DIR} ${TEST_PY_FILES})

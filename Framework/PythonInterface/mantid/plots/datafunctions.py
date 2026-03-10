@@ -404,7 +404,7 @@ def get_bin_indices(workspace):
         return indices
 
 
-def get_bins(workspace, bin_index, withDy=False):
+def get_bins(workspace, bin_index, withDy=False, withDx=False):
     """
     Extract a requested bin from each spectrum, except if they correspond to monitors
 
@@ -416,6 +416,7 @@ def get_bins(workspace, bin_index, withDy=False):
     indices = get_bin_indices(workspace)
     x_values, y_values = [], []
     dy = [] if withDy else None
+    dx = [] if withDx else None
     for row_index in indices:
         y_data = workspace.readY(int(row_index))
         if bin_index < len(y_data):
@@ -423,7 +424,9 @@ def get_bins(workspace, bin_index, withDy=False):
             y_values.append(y_data[bin_index])
             if withDy:
                 dy.append(workspace.readE(int(row_index))[bin_index])
-    dx = None
+            if withDx:
+                dx.append(workspace.readDx(int(row_index))[bin_index])
+
     return x_values, y_values, dy, dx
 
 
@@ -836,7 +839,8 @@ def get_sample_log(workspace, **kwargs):
             try:
                 t0 = run["proton_charge"].times.astype("datetime64[us]")[0]
             except:
-                pass  # TODO: Maybe raise a warning?
+                mantid.kernel.logger.warning("Workspace has no proton_charge log")
+                pass
 
         if ShowTimeROI:
             x = (times - t0).astype(float) * 1e3
@@ -1250,7 +1254,7 @@ def line_colour_fill(ax):
     ax.get_figure().canvas.draw()
 
 
-def update_colorbar_scale(figure, image, scale, vmin, vmax):
+def update_colorbar_scale(figure, image, scale, vmin, vmax, linthresh=None):
     """ "
     Updates the colorbar to the scale and limits given.
 
@@ -1259,6 +1263,7 @@ def update_colorbar_scale(figure, image, scale, vmin, vmax):
     :param scale: The norm scale of the colorbar, this should be a matplotlib colormap norm type
     :param vmin: the minimum value on the colorbar
     :param vmax: the maximum value on the colorbar
+    :param linthresh: if using a SymLog norm scale, the width of the linear region.
     """
     if vmin <= 0 and scale == LogNorm:
         vmin = 0.0001  # Avoid 0 log scale error
@@ -1268,7 +1273,11 @@ def update_colorbar_scale(figure, image, scale, vmin, vmax):
         vmax = 1  # Avoid 0 log scale error
         mantid.kernel.logger.warning("Scale is set to logarithmic so non-positive max value has been changed to 1.")
 
-    image.set_norm(scale(vmin=vmin, vmax=vmax))
+    scale_args = {"vmin": vmin, "vmax": vmax}
+    if linthresh:
+        scale_args["linthresh"] = linthresh
+
+    image.set_norm(scale(**scale_args))
 
     if image.colorbar:
         colorbar = image.colorbar
@@ -1278,7 +1287,7 @@ def update_colorbar_scale(figure, image, scale, vmin, vmax):
             if locator.tick_values(vmin=vmin, vmax=vmax).size == 0:
                 locator = LogLocator()
                 mantid.kernel.logger.warning(
-                    "Minor ticks on colorbar scale cannot be shown " "as the range between min value and max value is too large"
+                    "Minor ticks on colorbar scale cannot be shown as the range between min value and max value is too large"
                 )
             colorbar.set_ticks(locator)
 

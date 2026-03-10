@@ -154,8 +154,8 @@ void PropertyManager::filterByProperty(Mantid::Kernel::LogFilter *logFilter,
       if (this->existsProperty(PropertyManager::getInvalidValuesFilterLogName(propName))) {
 
         // add the filter to the passed in filters
-        auto filterProp = getPointerToProperty(PropertyManager::getInvalidValuesFilterLogName(propName));
-        auto tspFilterProp = dynamic_cast<TimeSeriesProperty<bool> *>(filterProp);
+        auto const *filterProp = getPointerToProperty(PropertyManager::getInvalidValuesFilterLogName(propName));
+        auto const *tspFilterProp = dynamic_cast<TimeSeriesProperty<bool> const *>(filterProp);
         if (!tspFilterProp)
           break;
         logFilter->addFilter(*tspFilterProp);
@@ -186,9 +186,9 @@ PropertyManager *PropertyManager::cloneInTimeROI(const Kernel::TimeROI &timeROI)
   PropertyManager *newMgr = new PropertyManager();
   newMgr->m_orderedProperties.reserve(m_orderedProperties.size());
   // We need to do a deep copy of the property pointers here
-  for (const auto &prop : m_orderedProperties) {
+  for (auto const *prop : m_orderedProperties) {
     std::unique_ptr<Property> newProp;
-    if (const auto tsp = dynamic_cast<const ITimeSeriesProperty *>(prop))
+    if (auto const *tsp = dynamic_cast<ITimeSeriesProperty const *>(prop))
       newProp = std::unique_ptr<Property>(tsp->cloneInTimeROI(timeROI));
     else
       newProp = std::unique_ptr<Property>(prop->clone());
@@ -535,7 +535,7 @@ size_t PropertyManager::propertyCount() const { return m_orderedProperties.size(
  *  @throw Exception::NotFoundError if the named property is unknown
  */
 std::string PropertyManager::getPropertyValue(const std::string &name) const {
-  Property *p = getPointerToProperty(name); // throws NotFoundError if property not in vector
+  Property const *p = getPointerToProperty(name); // throws NotFoundError if property not in vector
   return p->value();
 }
 
@@ -565,12 +565,8 @@ std::string PropertyManager::asString(bool withDefaultValues) const {
   ::Json::Value jsonMap;
   const auto count = static_cast<int>(propertyCount());
   for (int i = 0; i < count; ++i) {
-    Property *p = getPointerToPropertyOrdinal(i);
-    bool is_enabled = true;
-    if (p->getSettings()) {
-      is_enabled = p->getSettings()->isEnabled(this);
-    }
-    if (p->isValueSerializable() && (withDefaultValues || !p->isDefault()) && is_enabled) {
+    Property const *p = getPointerToPropertyOrdinal(i);
+    if (isPropertyEnabled(p->name()) && p->isValueSerializable() && (withDefaultValues || !p->isDefault())) {
       jsonMap[p->name()] = p->valueAsJson();
     }
   }
@@ -702,7 +698,7 @@ void PropertyManager::removeProperty(const std::string &name, const bool delprop
  */
 std::unique_ptr<Property> PropertyManager::takeProperty(const size_t index) {
   try {
-    auto property = m_orderedProperties[index];
+    auto const *property = m_orderedProperties[index];
     const std::string key = createKey(property->name());
     auto propertyPtr = std::move(m_properties[key]);
     m_properties.erase(key);

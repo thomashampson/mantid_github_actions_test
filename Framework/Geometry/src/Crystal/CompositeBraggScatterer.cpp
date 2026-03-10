@@ -81,7 +81,7 @@ BraggScatterer_sptr CompositeBraggScatterer::getScatterer(size_t i) const {
 }
 
 /// Returns the scatterers.
-std::vector<BraggScatterer_sptr> CompositeBraggScatterer::getScatterers() const { return m_scatterers; }
+const std::vector<BraggScatterer_sptr> &CompositeBraggScatterer::getScatterers() const { return m_scatterers; }
 
 /// Removes the i-th scatterer from the composite or throws an std::out_of_range
 /// exception.
@@ -186,7 +186,7 @@ void CompositeBraggScatterer::redeclareProperties() {
   }
 
   // Remove unused properties
-  for (auto &property : propertyUseCount) {
+  for (auto const &property : propertyUseCount) {
     if (property.second == 0) {
       removeProperty(property.first);
     }

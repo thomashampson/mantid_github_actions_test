@@ -25,6 +25,7 @@ public:
     ON_CALL(*this, getPolarizationCorrectionOption()).WillByDefault(testing::Return("None"));
     ON_CALL(*this, getFloodCorrectionType()).WillByDefault(testing::Return("Workspace"));
     ON_CALL(*this, getDebugOption()).WillByDefault(testing::Return(false));
+    ON_CALL(*this, getDiagnosticsOption()).WillByDefault(testing::Return(false));
     ON_CALL(*this, getIncludePartialBins()).WillByDefault(testing::Return(false));
   }
   MOCK_METHOD1(subscribe, void(ExperimentViewSubscriber *));
@@ -45,6 +46,8 @@ public:
   MOCK_METHOD0(disableIncludePartialBins, void());
   MOCK_CONST_METHOD0(getDebugOption, bool());
   MOCK_METHOD1(setDebugOption, void(bool));
+  MOCK_CONST_METHOD0(getDiagnosticsOption, bool());
+  MOCK_METHOD1(setDiagnosticsOption, void(bool));
   MOCK_CONST_METHOD0(getLookupTable, std::vector<LookupRow::ValueArray>());
   MOCK_METHOD1(setLookupTable, void(std::vector<LookupRow::ValueArray>));
   MOCK_METHOD2(showLookupRowAsInvalid, void(int row, int column));
@@ -76,6 +79,8 @@ public:
   MOCK_METHOD0(disablePolarizationCorrections, void());
   MOCK_METHOD0(enablePolarizationEfficiencies, void());
   MOCK_METHOD0(disablePolarizationEfficiencies, void());
+  MOCK_METHOD(void, enableFredrikzeSpinStateOrder, (), (override));
+  MOCK_METHOD(void, disableFredrikzeSpinStateOrder, (), (override));
   MOCK_METHOD0(enableFloodCorrectionInputs, void());
   MOCK_METHOD0(disableFloodCorrectionInputs, void());
   MOCK_CONST_METHOD0(getTransmissionStartOverlap, double());
@@ -98,6 +103,8 @@ public:
   MOCK_CONST_METHOD0(getPolarizationEfficienciesFilePath, std::string());
   MOCK_METHOD1(setPolarizationEfficienciesWorkspace, void(std::string const &));
   MOCK_METHOD1(setPolarizationEfficienciesFilePath, void(std::string const &));
+  MOCK_METHOD(std::string, getFredrikzeSpinStateOrder, (), (const, override));
+  MOCK_METHOD(void, setFredrikzeSpinStateOrder, (std::string const &), (override));
   MOCK_CONST_METHOD0(getFloodCorrectionType, std::string());
   MOCK_METHOD1(setFloodCorrectionType, void(std::string const &));
   MOCK_METHOD0(setFloodCorrectionWorkspaceMode, void());

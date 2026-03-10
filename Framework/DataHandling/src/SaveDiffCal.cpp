@@ -12,9 +12,7 @@
 #include "MantidNexus/H5Util.h"
 
 #include <H5Cpp.h>
-#include <Poco/File.h>
-#include <Poco/Path.h>
-
+#include <filesystem>
 namespace Mantid::DataHandling {
 
 using Mantid::API::FileProperty;
@@ -30,7 +28,7 @@ using Mantid::DataObjects::MaskWorkspace_const_sptr;
 using Mantid::Kernel::Direction;
 
 using namespace H5;
-using namespace NeXus;
+using namespace Nexus;
 
 // Register the algorithm into the AlgorithmFactory
 DECLARE_ALGORITHM(SaveDiffCal)
@@ -273,11 +271,11 @@ void SaveDiffCal::exec() {
 
   // delete the file if it already exists
   std::string filename = getProperty("Filename");
-  if (Poco::File(filename).exists()) {
-    Poco::File(filename).remove();
+  if (std::filesystem::exists(filename)) {
+    std::filesystem::remove(filename);
   }
 
-  H5File file(filename, H5F_ACC_EXCL);
+  H5File file(filename, H5F_ACC_EXCL, Nexus::H5Util::defaultFileAcc());
 
   auto calibrationGroup = H5Util::createGroupNXS(file, "calibration", "NXentry");
 
@@ -333,7 +331,7 @@ void SaveDiffCal::exec() {
     }
   }
   if (!instrumentSource.empty()) {
-    instrumentSource = Poco::Path(instrumentSource).getFileName();
+    instrumentSource = std::filesystem::path(instrumentSource).filename().string();
   }
 
   // add the instrument information

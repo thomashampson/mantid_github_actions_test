@@ -11,6 +11,7 @@
 
 #include "MantidAPI/AnalysisDataService.h"
 #include "MantidAPI/MatrixWorkspace.h"
+#include "MantidAPI/PolSANSWorkspaceValidator.h"
 #include "MantidAPI/WorkspaceGroup.h"
 #include "MantidAlgorithms/ConvertUnits.h"
 #include "MantidAlgorithms/CreateSampleWorkspace.h"
@@ -18,7 +19,7 @@
 #include "MantidAlgorithms/PolarizationCorrections/FlipperEfficiency.h"
 #include "MantidKernel/ConfigService.h"
 
-namespace {} // namespace
+#include "PolarizationCorrectionsTestUtils.h"
 
 using Mantid::Algorithms::ConvertUnits;
 using Mantid::Algorithms::CreateSampleWorkspace;
@@ -26,10 +27,14 @@ using Mantid::Algorithms::FlipperEfficiency;
 using Mantid::Algorithms::GroupWorkspaces;
 using Mantid::API::MatrixWorkspace_sptr;
 using Mantid::Kernel::ConfigService;
+using namespace PolCorrTestUtils;
 
 class FlipperEfficiencyTest : public CxxTest::TestSuite {
 public:
-  void setUp() override { m_defaultSaveDirectory = ConfigService::Instance().getString("defaultsave.directory"); }
+  void setUp() override {
+    m_defaultSaveDirectory = ConfigService::Instance().getString("defaultsave.directory");
+    m_parameters = TestWorkspaceParameters();
+  }
 
   void tearDown() override {
     ConfigService::Instance().setString("defaultsave.directory", m_defaultSaveDirectory);
@@ -55,7 +60,7 @@ public:
 
   void test_saving_absolute() {
     auto const temp_filename = std::filesystem::temp_directory_path() /= "something.nxs";
-    auto const &group = createTestingWorkspace("testWs");
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
     auto alg = initialize_alg(group, false);
     alg->setPropertyValue("OutputFilePath", temp_filename.string());
     alg->execute();
@@ -67,7 +72,7 @@ public:
     auto tempDir = std::filesystem::temp_directory_path();
     ConfigService::Instance().setString("defaultsave.directory", tempDir.string());
     std::string const &filename = "something.nxs";
-    auto const &group = createTestingWorkspace("testWs");
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
     auto alg = initialize_alg(group, false);
     alg->setPropertyValue("OutputFilePath", filename);
     alg->execute();
@@ -78,7 +83,7 @@ public:
 
   void test_saving_no_ext() {
     auto const temp_filename = std::filesystem::temp_directory_path() /= "something";
-    auto const &group = createTestingWorkspace("testWs");
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
     auto alg = initialize_alg(group, false);
     alg->setPropertyValue("OutputFilePath", temp_filename.string());
     alg->execute();
@@ -89,8 +94,18 @@ public:
 
   /// Validation Tests
 
+  void test_input_workspace_has_correct_validator() {
+    auto alg = std::make_unique<FlipperEfficiency>();
+    alg->initialize();
+    auto prop = dynamic_cast<Mantid::API::WorkspaceProperty<Mantid::API::WorkspaceGroup> *>(
+        alg->getPointerToProperty("InputWorkspace"));
+    TS_ASSERT(prop);
+    auto validator = std::dynamic_pointer_cast<Mantid::API::PolSANSWorkspaceValidator>(prop->getValidator());
+    TS_ASSERT(validator);
+  }
+
   void test_no_workspaces_or_file_output_fails() {
-    auto const &group = createTestingWorkspace("testWs");
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
     auto alg = initialize_alg(group, false);
     TS_ASSERT_THROWS_EQUALS(
         alg->execute(), std::runtime_error const &e, std::string(e.what()),
@@ -98,42 +113,10 @@ public:
         "provided.\n OutputWorkspace: Either an output workspace or output file must be provided.")
   }
 
-  void test_invalid_group_size_is_captured() {
-    auto const &group = createTestingWorkspace("testWs");
-    group->removeItem(0);
-    auto alg = initialize_alg(group);
-    TS_ASSERT_THROWS_EQUALS(alg->execute(), std::runtime_error const &e, std::string(e.what()),
-                            "Some invalid Properties found: \n InputWorkspace: The input group must contain a "
-                            "workspace for all four spin states.")
-  }
-
-  void test_non_wavelength_workspace_is_captured() {
-    auto const &group = createTestingWorkspace("testWs", 1.0, true);
-    auto alg = initialize_alg(group);
-    TS_ASSERT_THROWS_EQUALS(
-        alg->execute(), std::runtime_error const &e, std::string(e.what()),
-        "Some invalid Properties found: \n InputWorkspace: All input workspaces must be in units of Wavelength.")
-  }
-
-  void test_non_group_workspace_is_captured() {
-    auto const &group = createTestingWorkspace("testWs", 1.0);
-    auto alg = initialize_alg(group);
-    TS_ASSERT_THROWS_EQUALS(alg->setProperty("InputWorkspace", group->getItem(0)), std::invalid_argument const &e,
-                            std::string(e.what()), "Enter a name for the Input/InOut workspace")
-  }
-
-  void test_invalid_workspace_length_is_captured() {
-    auto const &group = createTestingWorkspace("testWs", 1.0, false, 2);
-    auto alg = initialize_alg(group);
-    TS_ASSERT_THROWS_EQUALS(
-        alg->execute(), std::runtime_error const &e, std::string(e.what()),
-        "Some invalid Properties found: \n InputWorkspace: All input workspaces must contain only a single spectrum.")
-  }
-
   /// Calculation Tests
 
   void test_normal_perfect_calculation_occurs() {
-    auto const &group = createTestingWorkspace("testWs");
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
     auto alg = initialize_alg(group);
     alg->execute();
 
@@ -149,8 +132,44 @@ public:
     }
   }
 
+  void test_normal_perfect_calculation_flipper_analyser() {
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
+    auto alg = initialize_alg(group);
+    alg->setProperty("Flipper", "Analyzer");
+    alg->execute();
+
+    MatrixWorkspace_sptr const outWs = alg->getProperty("OutputWorkspace");
+    TS_ASSERT_EQUALS(outWs->getNumberHistograms(),
+                     std::dynamic_pointer_cast<Mantid::API::MatrixWorkspace>(group->getItem(0))->getNumberHistograms())
+    auto const &outY = outWs->dataY(0);
+    auto const &outE = outWs->dataE(0);
+    auto const numBins = outY.size();
+    for (size_t i = 0; i < numBins; ++i) {
+      TS_ASSERT_EQUALS(1.0, outY[i])
+      TS_ASSERT_DELTA(0.4216370213557839, outE[i], 1e-8);
+    }
+  }
+
+  void test_flipper_polariser_and_analyser_eff_have_same_values_for_equal_amplitudes() {
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, FLIPPER_AMPS);
+    auto alg = initialize_alg(group);
+    alg->setProperty("Flipper", "Analyzer");
+    alg->execute();
+    MatrixWorkspace_sptr const outWsA = alg->getProperty("OutputWorkspace");
+
+    alg->setProperty("Flipper", "Polarizer");
+    alg->execute();
+    MatrixWorkspace_sptr const outWsP = alg->getProperty("OutputWorkspace");
+
+    auto const &outYA = outWsA->dataY(0);
+    auto const &outYP = outWsP->dataY(0);
+    TS_ASSERT_DELTA(outYA, outYP, 1e-8);
+  }
+
   void test_normal_typical_calculation_occurs() {
-    auto const &group = createTestingWorkspace("testWs", 0.9);
+    auto flipAmps{FLIPPER_AMPS};
+    flipAmps[0] *= 0.9;
+    auto const &group = createPolarizedTestGroup("testWs", m_parameters, flipAmps);
     auto alg = initialize_alg(group);
     alg->execute();
 
@@ -167,59 +186,10 @@ public:
   }
 
 private:
+  //  default flipper configuration on alg: 11, 10, 01, 00
+  const std::vector<double> FLIPPER_AMPS = {4.0, 1.0, 1.0, 4.0};
   std::string m_defaultSaveDirectory;
-
-  Mantid::API::WorkspaceGroup_sptr createTestingWorkspace(std::string const &outName,
-                                                          double const flipAmplitudeMultiplier = 1.0,
-                                                          bool const TOFWs = false, int const numBanks = 1) {
-
-    CreateSampleWorkspace makeWsAlg;
-    makeWsAlg.initialize();
-    makeWsAlg.setPropertyValue("Function", "User Defined");
-    if (TOFWs) {
-      makeWsAlg.setPropertyValue("XUnit", "TOF");
-    } else {
-      makeWsAlg.setPropertyValue("XUnit", "wavelength");
-    }
-    makeWsAlg.setProperty("NumBanks", numBanks);
-    makeWsAlg.setProperty("BankPixelWidth", 1);
-    makeWsAlg.setProperty("XMin", 1.45);
-    makeWsAlg.setProperty("XMax", 9.50);
-    makeWsAlg.setProperty("BinWidth", 0.1);
-
-    double const FLIPPER_OFF_PARA_AMP = 4;
-    double const ANTI_AMP = 1;
-    double const flipperOnParaAmp = FLIPPER_OFF_PARA_AMP * flipAmplitudeMultiplier;
-
-    makeWsAlg.setPropertyValue("UserDefinedFunction",
-                               "name=UserFunction, Formula=x*0+" + std::to_string(FLIPPER_OFF_PARA_AMP));
-    makeWsAlg.setPropertyValue("OutputWorkspace", outName + "_00");
-    makeWsAlg.execute();
-
-    makeWsAlg.setPropertyValue("UserDefinedFunction",
-                               "name=UserFunction, Formula=x*0+" + std::to_string(flipperOnParaAmp));
-    makeWsAlg.setPropertyValue("OutputWorkspace", outName + "_11");
-    makeWsAlg.execute();
-
-    makeWsAlg.setPropertyValue("UserDefinedFunction", "name=UserFunction, Formula=x*0+" + std::to_string(ANTI_AMP));
-    makeWsAlg.setPropertyValue("OutputWorkspace", outName + "_10");
-    makeWsAlg.execute();
-
-    makeWsAlg.setPropertyValue("UserDefinedFunction", "name=UserFunction, Formula=x*0+" + std::to_string(ANTI_AMP));
-    makeWsAlg.setPropertyValue("OutputWorkspace", outName + "_01");
-    makeWsAlg.execute();
-
-    GroupWorkspaces groupAlg;
-    groupAlg.initialize();
-    groupAlg.setChild(true);
-    std::vector<std::string> const &input{outName + "_01", outName + "_11", outName + "_00", outName + "_10"};
-    groupAlg.setProperty("InputWorkspaces", input);
-    groupAlg.setPropertyValue("OutputWorkspace", outName);
-    groupAlg.execute();
-    TS_ASSERT(groupAlg.isExecuted());
-
-    return groupAlg.getProperty("OutputWorkspace");
-  }
+  TestWorkspaceParameters m_parameters;
 
   std::unique_ptr<FlipperEfficiency> initialize_alg(Mantid::API::WorkspaceGroup_sptr const &inputWorkspace,
                                                     bool const setOutput = true) {

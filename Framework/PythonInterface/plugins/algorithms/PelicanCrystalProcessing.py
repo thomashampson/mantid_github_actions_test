@@ -44,7 +44,7 @@ class PelicanCrystalProcessing(DataProcessorAlgorithm):
         mandatoryInputRuns.add(StringArrayMandatoryValidator())
         self.declareProperty(
             StringArrayProperty("SampleRuns", values=[], validator=mandatoryInputRuns),
-            doc="Comma separated range of sample runs,\n" " eg [cycle::] 7333-7341,7345",
+            doc="Comma separated range of sample runs,\neg [cycle::] 7333-7341,7345",
         )
 
         self.declareProperty(
@@ -131,7 +131,7 @@ class PelicanCrystalProcessing(DataProcessorAlgorithm):
         self._progress = Progress(self, start=0.0, end=1.0, nreports=steps)
         # grouped = []
 
-        saveFolder = scratch_folder if scratch_folder else config["defaultsave.directory"]
+        saveFolder = scratch_folder or config["defaultsave.directory"]
         for srun in single_runs:
             self._progress.report("Processing run {}, ".format(srun.run))
 

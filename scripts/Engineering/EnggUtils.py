@@ -48,6 +48,9 @@ class GROUP(Enum):
     TEXTURE30 = "Texture30", [1, 2]
 
 
+TEXTURE_GROUPS = (GROUP.TEXTURE20, GROUP.TEXTURE30, GROUP.CUSTOM)  # lookup table for some texture specific behaviour
+
+
 def plot_tof_vs_d_from_calibration(diag_ws, ws_foc, dspacing, calibration):
     """
     Plot fitted TOF vs expected d-spacing from diagnostic workspaces output from mantid.PDCalibration
@@ -211,7 +214,7 @@ def create_new_calibration(calibration, rb_num, plot_output, save_dir, full_cali
     calib_dirs = [path.join(save_dir, "Calibration", "")]
     if rb_num:
         calib_dirs.append(path.join(save_dir, "User", rb_num, "Calibration", ""))
-        if calibration.group == GROUP.TEXTURE20 or calibration.group == GROUP.TEXTURE30:
+        if calibration.group in TEXTURE_GROUPS:
             calib_dirs.pop(0)  # only save to RB directory to limit number files saved
 
     for calib_dir in calib_dirs:
@@ -237,7 +240,7 @@ def write_prm_file(ws_foc, prm_savepath, spec_nums=None):
     with open(path.join(CALIB_DIR, "template_ENGINX_prm_header.prm")) as fheader:
         lines = fheader.readlines()
     lines[1] = lines[1].replace("2", f"{nspec}")  # replace with nspectra in header
-    lines[13] = lines[13].replace("241391", f'{ws_foc.run().get("run_number").value}')  # replace run num
+    lines[13] = lines[13].replace("241391", f"{ws_foc.run().get('run_number').value}")  # replace run num
     # add blocks
     si = ws_foc.spectrumInfo()
     inst = ws_foc.getInstrument()
@@ -273,13 +276,13 @@ def load_existing_calibration_files(calibration):
         msg = f"Could not open GSAS calibration file: {prm_filepath}"
         logger.warning(msg)
         return None
+    calibration.load_relevant_calibration_files()
     try:
         # read diff constants from prm
         write_diff_consts_to_table_from_prm(prm_filepath)
     except RuntimeError:
         logger.error(f"Invalid file selected: {prm_filepath}")
         return None
-    calibration.load_relevant_calibration_files()
     return prm_filepath
 
 
@@ -315,10 +318,8 @@ def run_calibration(ceria_ws, calibration, full_instrument_cal_ws):
     """
     Creates Engineering calibration files with PDCalibration
     :param ceria_ws: The workspace with the ceria data.
-    :param bank: The bank to crop to, both if none.
-    :param calfile: The custom calibration file to crop to, not used if none.
-    :param spectrum_numbers: The spectrum numbers to crop to, no crop if none.
-    :return: dict containing calibrated diffractometer constants, and copy of the raw ceria workspace
+    :param calibration: CalibrationInfo object with details of calibration and grouping
+    :param full_instrument_cal_ws: The workspace with the full instrument calibration
     """
 
     # initial process of ceria ws
@@ -330,6 +331,10 @@ def run_calibration(ceria_ws, calibration, full_instrument_cal_ws):
     grp_ws = calibration.get_group_ws()  # (creates if doesn't exist)
     focused_ceria = mantid.DiffractionFocussing(InputWorkspace=ceria_ws, GroupingWorkspace=grp_ws)
     mantid.ApplyDiffCal(InstrumentWorkspace=focused_ceria, ClearCalibration=True)  # DIFC of detector in middle of bank
+
+    ws_van_foc, van_run = process_vanadium(calibration, full_instrument_cal_ws, extra_suffix="CALIBRATION")
+    focused_ceria = _apply_vanadium_norm(focused_ceria, ws_van_foc)
+
     focused_ceria = mantid.ConvertUnits(InputWorkspace=focused_ceria, Target="TOF")
 
     # Run mantid.PDCalibration to fit peaks in TOF
@@ -429,7 +434,7 @@ def read_diff_constants_from_prm(file_path):
     """
     diff_consts = []  # one list per component (e.g. bank)
     with open(file_path) as f:
-        for line in f.readlines():
+        for line in f:
             if "ICONS" in line:
                 # If formatted correctly the line should be in the format INS bank ICONS difc difa tzero
                 elements = line.split()
@@ -446,11 +451,10 @@ def _generate_table_workspace_name(bank_num):
 # Focus model functions
 
 
-def focus_run(sample_paths, vanadium_path, plot_output, rb_num, calibration, save_dir, full_calib):
+def focus_run(sample_paths, plot_output, rb_num, calibration, save_dir, full_calib):
     """
     Focus some data using the current calibration.
     :param sample_paths: The paths to the data to be focused.
-    :param vanadium_path: Path to the vanadium file from the current calibration
     :param plot_output: True if the output should be plotted.
     :param rb_num: Number to signify the user who is running this focus
     :param calibration: CalibrationInfo object that holds all info needed about ROI and instrument
@@ -464,33 +468,43 @@ def focus_run(sample_paths, vanadium_path, plot_output, rb_num, calibration, sav
 
     # check if full instrument calibration exists, if not load it
     # load, focus and process vanadium (retrieve from ADS if exists)
-    ws_van_foc, van_run = process_vanadium(vanadium_path, calibration, full_calib)
+    ws_van_foc, van_run = process_vanadium(calibration, full_calib)
 
     # directories for saved focused data
-    focus_dirs = [path.join(save_dir, "Focus")]
+    calib_is_texture = calibration.group in TEXTURE_GROUPS
+    focus_sub_dir = path.join("Focus", calibration.get_foc_ws_suffix()) if calib_is_texture else "Focus"
+    focus_dirs = [path.join(save_dir, focus_sub_dir)]
     if rb_num:
-        focus_dirs.append(path.join(save_dir, "User", rb_num, "Focus"))
-        if calibration.group == GROUP.TEXTURE20 or calibration.group == GROUP.TEXTURE30:
+        focus_dir = path.join(save_dir, "User", rb_num, focus_sub_dir)
+        if calib_is_texture:
             focus_dirs.pop(0)  # only save to RB directory to limit number files saved
+        focus_dirs.append(focus_dir)
 
     # Loop over runs and focus
     focused_files_list = []
     focused_files_gsas2_list = []
+    focused_files_combined_list = []
     output_workspaces = []  # List of focused workspaces to plot.
     for sample_path in sample_paths:
         ws_sample = _load_run_and_convert_to_dSpacing(sample_path, calibration.get_instrument(), full_calib)
         if ws_sample:
             # None returned if no proton charge
             ws_foc = _focus_run_and_apply_roi_calibration(ws_sample, calibration)
+            _check_ws_foc_and_ws_van_foc(ws_foc, ws_van_foc)
             ws_foc = _apply_vanadium_norm(ws_foc, ws_van_foc)
-            _save_output_files(focus_dirs, ws_foc, calibration, van_run, rb_num)
+            # add grouping to log data
+            ws_foc.getRun().addProperty("Grouping", calibration.get_foc_ws_suffix(), False)
+            # save files, extract the combined paths
+            _, _, combined_paths = _save_output_files(focus_dirs, ws_foc, calibration, van_run, rb_num)
             # convert units to TOF and save again
             ws_foc = mantid.ConvertUnits(InputWorkspace=ws_foc, OutputWorkspace=ws_foc.name(), Target="TOF")
-            nxs_paths, gss_path = _save_output_files(focus_dirs, ws_foc, calibration, van_run, rb_num)
+            nxs_paths, gss_path, _ = _save_output_files(focus_dirs, ws_foc, calibration, van_run, rb_num)
             focused_files_list.extend(nxs_paths)  # list of .nsx paths for that sample using last dir in focus_dirs
             print(type(gss_path), len(gss_path))
             focused_files_gsas2_list.extend(gss_path)
             print(type(focused_files_gsas2_list), len(focused_files_gsas2_list))
+            focused_files_combined_list.extend(combined_paths)
+            print(type(focused_files_combined_list), len(focused_files_combined_list))
             output_workspaces.append(ws_foc.name())
 
     # Plot the output
@@ -499,22 +513,54 @@ def focus_run(sample_paths, vanadium_path, plot_output, rb_num, calibration, sav
         if plot_output:
             _plot_focused_workspaces(output_workspaces)
 
-    return focused_files_list, focused_files_gsas2_list
+    return focused_files_list, focused_files_gsas2_list, focused_files_combined_list
 
 
-def process_vanadium(vanadium_path, calibration, full_calib):
-    van_run = path_handling.get_run_number_from_path(vanadium_path, calibration.get_instrument())
+def _get_difc(ws, ind):
+    return ws.spectrumInfo().diffractometerConstants(ind)[UnitParams.difc]
+
+
+def _check_ws_foc_and_ws_van_foc(ws_foc, ws_van_foc):
+    try:
+        num_foc, num_van = ws_foc.getNumberHistograms(), ws_van_foc.getNumberHistograms()
+        assert num_foc == num_van
+        if num_foc == num_van:
+            for ind in range(num_foc):
+                # check each grouping difcs is same within 3 dp, stop if any fail
+                assert abs(_get_difc(ws_foc, ind) - _get_difc(ws_van_foc, ind)) < 1e-3
+    except AssertionError:
+        error_msg = f"The calibration of {ws_van_foc} does not match {ws_foc}. Ensure the vanadium calibration file loaded is correct."
+        logger.error(error_msg)
+        raise AssertionError(error_msg)
+
+
+def process_vanadium(calibration, full_calib, extra_suffix=None):
+    van_run = path_handling.get_run_number_from_path(calibration.get_vanadium_path(), calibration.get_instrument())
     van_foc_name = CURVES_PREFIX + calibration.get_group_suffix()
+    if extra_suffix is not None:
+        van_foc_name += extra_suffix
     if ADS.doesExist(van_foc_name):
+        if calibration.group == GROUP.CUSTOM or calibration.group == GROUP.CROPPED:
+            logger.warning(
+                f"Focussed Vanadium Data: '{van_foc_name}' has been loaded from the ADS from a previous focussing run. "
+                f"If the custom calibration has not changed, this is not a problem. "
+                f"If the calibration has changed, check that the different groupings are not giving the same calibration file name. "
+                f"If they are, it is recommended that you rename them or clear the previous "
+                f"Focussed Vanadium Data from the ADS before you rerun Focus. "
+            )
         ws_van_foc = ADS.retrieve(van_foc_name)
     else:
         if ADS.doesExist(van_run):
             ws_van = ADS.retrieve(van_run)  # will exist if have only changed the ROI
         else:
-            ws_van = _load_run_and_convert_to_dSpacing(vanadium_path, calibration.get_instrument(), full_calib)
+            ws_van = _load_run_and_convert_to_dSpacing(calibration.get_vanadium_path(), calibration.get_instrument(), full_calib)
             if not ws_van:
-                raise RuntimeError(f"vanadium run {van_run} has no proton_charge - " f"please supply a valid vanadium run to focus.")
-        ws_van_foc = _focus_run_and_apply_roi_calibration(ws_van, calibration, ws_foc_name=van_foc_name)
+                raise RuntimeError(f"vanadium run {van_run} has no proton_charge - please supply a valid vanadium run to focus.")
+        if calibration.get_calibration_table() is not None:
+            ws_van_foc = _focus_run_and_apply_roi_calibration(ws_van, calibration, ws_foc_name=van_foc_name)
+        else:
+            van_foc_name += "_precalib"
+            ws_van_foc = _focus_run(ws_van, calibration, ws_foc_name=van_foc_name)
         ws_van_foc = _smooth_vanadium(ws_van_foc)
     return ws_van_foc, van_run
 
@@ -549,14 +595,24 @@ def _load_run_and_convert_to_dSpacing(filepath, instrument, full_calib):
 
 
 def _focus_run_and_apply_roi_calibration(ws, calibration, ws_foc_name=None):
+    ws_foc = _focus_run(ws, calibration, ws_foc_name)
+    ws_foc = _apply_roi_calibration(ws_foc, calibration)
+    return ws_foc
+
+
+def _focus_run(ws, calibration, ws_foc_name=None):
     if not ws_foc_name:
         ws_foc_name = ws.name() + "_" + FOCUSED_OUTPUT_WORKSPACE_NAME + calibration.get_foc_ws_suffix()
     ws_foc = mantid.DiffractionFocussing(InputWorkspace=ws, OutputWorkspace=ws_foc_name, GroupingWorkspace=calibration.get_group_ws())
     mantid.ApplyDiffCal(InstrumentWorkspace=ws_foc, ClearCalibration=True)
-    ws_foc = mantid.ConvertUnits(InputWorkspace=ws_foc, OutputWorkspace=ws_foc.name(), Target="TOF")
-    mantid.ApplyDiffCal(InstrumentWorkspace=ws_foc, CalibrationWorkspace=calibration.get_calibration_table())
-    ws_foc = mantid.ConvertUnits(InputWorkspace=ws_foc, OutputWorkspace=ws_foc.name(), Target="dSpacing")
     return ws_foc
+
+
+def _apply_roi_calibration(focused_ws, calibration):
+    focused_ws = mantid.ConvertUnits(InputWorkspace=focused_ws, OutputWorkspace=focused_ws.name(), Target="TOF")
+    mantid.ApplyDiffCal(InstrumentWorkspace=focused_ws, CalibrationWorkspace=calibration.get_calibration_table())
+    focused_ws = mantid.ConvertUnits(InputWorkspace=focused_ws, OutputWorkspace=focused_ws.name(), Target="dSpacing")
+    return focused_ws
 
 
 def _smooth_vanadium(van_ws_foc):
@@ -565,7 +621,9 @@ def _smooth_vanadium(van_ws_foc):
 
 def _apply_vanadium_norm(sample_ws_foc, van_ws_foc):
     # divide by curves - automatically corrects for solid angle, det efficiency and lambda dep. flux
-    sample_ws_foc = mantid.CropWorkspace(InputWorkspace=sample_ws_foc, OutputWorkspace=sample_ws_foc.name(), XMin=0.45)
+    sample_ws_foc = mantid.CropWorkspaceRagged(
+        InputWorkspace=sample_ws_foc, OutputWorkspace=sample_ws_foc.name(), XMin=0.45, XMax=float("inf")
+    )
     van_ws_foc_rb = mantid.RebinToWorkspace(
         WorkspaceToRebin=van_ws_foc, WorkspaceToMatch=sample_ws_foc, OutputWorkspace=VAN_CURVE_REBINNED_NAME
     )  # copy so as not to lose data
@@ -599,6 +657,17 @@ def _save_output_files(focus_dirs, sample_ws_foc, calibration, van_run, rb_num=N
         mantid.SaveFocusedXYE(
             InputWorkspace=sample_ws_foc, Filename=path.join(focus_dir, ascii_fname + ".abc"), SplitFiles=False, Format="TOPAS"
         )
+        # for dSpacing save all spectra in single nxs
+        combined_paths = []
+        if xunit_suffix == "dSpacing":
+            combined_dir = path.join(focus_dir, "CombinedFiles")
+            filename = _generate_output_file_name(
+                calibration.get_instrument(), sample_run_no, van_run, foc_suffix, xunit_suffix, ext=".nxs"
+            )
+            combined_path = path.join(combined_dir, filename)
+            mantid.SaveNexus(InputWorkspace=sample_ws_foc, Filename=combined_path)
+            combined_paths.append(combined_path)
+
         # Save nxs per spectrum
         nxs_paths = []
         mantid.AddSampleLog(Workspace=sample_ws_foc, LogName="Vanadium Run", LogText=van_run)
@@ -611,7 +680,7 @@ def _save_output_files(focus_dirs, sample_ws_foc, calibration, van_run, rb_num=N
             nxs_path = path.join(focus_dir, filename)
             mantid.SaveNexus(InputWorkspace=sample_ws_foc, Filename=nxs_path, WorkspaceIndexList=[ispec])
             nxs_paths.append(nxs_path)
-    return nxs_paths, gss_paths  # from last focus_dir only
+    return nxs_paths, gss_paths, combined_paths  # from last focus_dir only
 
 
 def _generate_output_file_name(inst, sample_run_no, van_run_no, suffix, xunit, ext=""):
@@ -702,7 +771,7 @@ def get_ws_indices_from_input_properties(workspace, bank, detector_indices):
         indices = get_ws_indices_for_bank(workspace, bank)
         if not indices:
             raise RuntimeError(
-                "Unable to find a meaningful list of workspace indices for the " "bank passed: %s. Please check the inputs." % bank
+                "Unable to find a meaningful list of workspace indices for the bank passed: %s. Please check the inputs." % bank
             )
         return indices
     elif detector_indices:
@@ -714,7 +783,7 @@ def get_ws_indices_from_input_properties(workspace, bank, detector_indices):
             )
         return indices
     else:
-        raise ValueError("You have not given any value for the properties 'Bank' and 'DetectorIndices' " "One of them is required")
+        raise ValueError("You have not given any value for the properties 'Bank' and 'DetectorIndices' One of them is required")
 
 
 def parse_spectrum_indices(workspace, spectrum_numbers):
@@ -800,7 +869,7 @@ def get_detector_ids_for_bank(bank):
     # PropertyWithValue<GroupingWorkspace> not working (GitHub issue 13437)
     # => cannot run as child and get outputworkspace property properly
     if not ADS.doesExist(group_name):
-        raise RuntimeError("LoadDetectorsGroupingFile did not run correctly. Could not " "find its output workspace: " + group_name)
+        raise RuntimeError("LoadDetectorsGroupingFile did not run correctly. Could not find its output workspace: " + group_name)
     grouping = ADS.retrieve(group_name)
 
     detector_ids = set()
@@ -936,6 +1005,12 @@ def convert_to_TOF(parent, ws):
     alg.setProperty("Target", "TOF")
     alg.execute()
     return alg.getProperty("OutputWorkspace").value
+
+
+def convert_TOFerror_to_derror(diff_consts, tof_error, d):
+    difc = diff_consts[UnitParams.difc]
+    difa = diff_consts[UnitParams.difa] if UnitParams.difa in diff_consts else 0
+    return tof_error / (2 * difa * d + difc)
 
 
 def crop_data(parent, ws, indices):

@@ -7,8 +7,8 @@
 #pragma once
 
 #include "MantidAPI/Algorithm.h"
+#include "MantidAPI/DllConfig.h"
 #include "MantidAPI/WorkspaceGroup_fwd.h"
-#include "MantidKernel/System.h"
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,7 +54,7 @@ private:
                                          VecWSGroupType &vecWorkspaceGroups) const;
 
   /// Copy input workspace properties to spawned algorithm.
-  void copyInputWorkspaceProperties(IAlgorithm *targetAlg, IAlgorithm *sourceAlg, const int &periodNumber) const;
+  void copyInputWorkspaceProperties(IAlgorithm *targetAlg, IAlgorithm const *sourceAlg, const int &periodNumber) const;
 
   /// Create an input workspace string from the workspace groups.
   std::string createFormattedInputWorkspaceNames(const size_t &periodIndex,

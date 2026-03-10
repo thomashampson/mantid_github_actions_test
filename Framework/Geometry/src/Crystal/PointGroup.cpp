@@ -9,7 +9,6 @@
 #include "MantidGeometry/Crystal/SymmetryElementFactory.h"
 #include "MantidGeometry/Crystal/SymmetryOperationFactory.h"
 #include "MantidKernel/Logger.h"
-#include "MantidKernel/System.h"
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
@@ -77,7 +76,7 @@ PointGroup::PointGroup(const std::string &symbolHM, const Group &group, const st
 }
 
 /// Hermann-Mauguin symbol
-std::string PointGroup::getSymbol() const { return m_symbolHM; }
+const std::string &PointGroup::getSymbol() const { return m_symbolHM; }
 
 bool PointGroup::isEquivalent(const Kernel::V3D &hkl, const Kernel::V3D &hkl2) const {
   auto hklEquivalents = getAllEquivalents(hkl);

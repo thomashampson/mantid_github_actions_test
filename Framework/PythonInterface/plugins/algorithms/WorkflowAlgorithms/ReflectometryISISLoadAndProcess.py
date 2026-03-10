@@ -35,6 +35,7 @@ class Prop:
     GROUP_TOF = "GroupTOFWorkspaces"
     RELOAD = "ReloadInvalidWorkspaces"
     DEBUG = "Debug"
+    DIAGNOSTICS = "Diagnostics"
     HIDE_INPUT = "HideInputWorkspaces"
     OUTPUT_WS = "OutputWorkspace"
     OUTPUT_WS_BINNED = "OutputWorkspaceBinned"
@@ -152,7 +153,7 @@ class ReflectometryISISLoadAndProcess(DataProcessorAlgorithm):
         # Add property for the input runs
         self.declareProperty(
             StringArrayProperty(Prop.RUNS, values=[], validator=mandatoryInputRuns),
-            doc="A list of run numbers or workspace names for the input runs. " "Multiple runs will be summed before reduction.",
+            doc="A list of run numbers or workspace names for the input runs. Multiple runs will be summed before reduction.",
         )
         # Add properties from child algorithm
         properties = [
@@ -232,14 +233,12 @@ class ReflectometryISISLoadAndProcess(DataProcessorAlgorithm):
         # Add input transmission run properties
         self.declareProperty(
             StringArrayProperty(Prop.FIRST_TRANS_RUNS, values=[]),
-            doc="A list of run numbers or workspace names for the first transmission run. "
-            "Multiple runs will be summed before reduction.",
+            doc="A list of run numbers or workspace names for the first transmission run. Multiple runs will be summed before reduction.",
         )
         self.setPropertyGroup(Prop.FIRST_TRANS_RUNS, "Transmission")
         self.declareProperty(
             StringArrayProperty(Prop.SECOND_TRANS_RUNS, values=[]),
-            doc="A list of run numbers or workspace names for the second transmission run. "
-            "Multiple runs will be summed before reduction.",
+            doc="A list of run numbers or workspace names for the second transmission run. Multiple runs will be summed before reduction.",
         )
         self.setPropertyGroup(Prop.SECOND_TRANS_RUNS, "Transmission")
         # Add properties copied from child algorithm
@@ -249,6 +248,7 @@ class ReflectometryISISLoadAndProcess(DataProcessorAlgorithm):
     def _declareOutputProperties(self):
         properties = [
             Prop.DEBUG,
+            Prop.DIAGNOSTICS,
             "MomentumTransferMin",
             "MomentumTransferStep",
             "MomentumTransferMax",
@@ -278,6 +278,16 @@ class ReflectometryISISLoadAndProcess(DataProcessorAlgorithm):
             "",
             "A workspace or file name containing the polarization efficiency factors for either "
             "the Wildes or Fredrikze correction methods.",
+            Direction.Input,
+        )
+        self.declareProperty(
+            "FredrikzePolarizationSpinStateOrder",
+            "",
+            "The spin state order of the workspaces in the workspace group to be passed to "
+            'PolarizationCorrectionsFredrikze. See the "Spin State Configurations" -> '
+            '"InputSpinStates" section of the PolarizationCorrectionsFredrikze v1 documentation for '
+            "more details. This is only applied to Fredrikze corrections. Wildes flipper "
+            "configurations are taken from the instrument's parameter file.",
             Direction.Input,
         )
 
@@ -639,6 +649,7 @@ class ReflectometryISISLoadAndProcess(DataProcessorAlgorithm):
         efficiencies_ws = self._loadPolarizationCorrectionWorkspace()
         if efficiencies_ws:
             alg.setProperty("PolarizationEfficiencies", efficiencies_ws)
+        alg.setProperty("FredrikzePolarizationSpinStateOrder", self.getPropertyValue("FredrikzePolarizationSpinStateOrder"))
         alg.execute()
         return alg
 
@@ -657,6 +668,9 @@ class ReflectometryISISLoadAndProcess(DataProcessorAlgorithm):
 
     def _isDebug(self):
         return not self.getProperty(Prop.DEBUG).isDefault
+
+    def _isDiagnostics(self):
+        return not self.getProperty(Prop.DIAGNOSTICS).isDefault
 
     def _finalize(self, child_alg):
         """Set our output properties from the results in the given child algorithm"""

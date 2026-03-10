@@ -24,10 +24,9 @@
 #include "MantidKernel/OptionalBool.h"
 #include "MantidKernel/Strings.h"
 
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <cxxtest/TestSuite.h>
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -82,31 +81,27 @@ public:
     TS_ASSERT_EQUALS(ws2D->getNumberHistograms(), 2584);
 
     const auto &fileFinder = Mantid::API::FileFinder::Instance();
-    const std::string originalFilePath = fileFinder.getFullPath("HET_Definition.xml");
+    const auto originalFilePath = fileFinder.getFullPath("HET_Definition.xml");
 
-    const std::string tmpDir = Poco::Path::temp();
+    const std::filesystem::path tmpDir = std::filesystem::temp_directory_path();
     auto generateFiles = [&tmpDir, &originalFilePath](const std::string &name) {
-      Poco::Path tmpFilePath(tmpDir, name);
+      std::filesystem::path tmpFilePath = tmpDir / name;
 
-      Poco::File originalFile(originalFilePath);
-      originalFile.copyTo(tmpFilePath.toString());
+      std::filesystem::copy_file(originalFilePath, tmpFilePath);
 
-      Poco::File tmpFile(tmpFilePath);
-      return tmpFile;
+      return tmpFilePath;
     };
 
     auto runAlg = [&generateFiles, &loader, &ws2D](const std::string &name, const std::string &expected) {
-      auto fileHandle = generateFiles(name);
-      const std::string path = fileHandle.path();
-
-      loader.setPropertyValue("Filename", path);
+      auto filePath = generateFiles(name);
+      loader.setPropertyValue("Filename", filePath.string());
       loader.setProperty("RewriteSpectraMap", OptionalBool(true));
       loader.setProperty("Workspace", ws2D);
 
       loader.execute();
       TS_ASSERT(loader.isExecuted());
 
-      fileHandle.remove();
+      std::filesystem::remove(filePath);
 
       MatrixWorkspace_sptr output = loader.getProperty("Workspace");
       const std::string loadedName = output->getInstrument()->getName();

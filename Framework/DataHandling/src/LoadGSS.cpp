@@ -20,7 +20,6 @@
 #include "MantidGeometry/Instrument/Detector.h"
 #include "MantidKernel/UnitFactory.h"
 
-#include <Poco/File.h>
 #include <boost/regex.hpp>
 #include <fstream>
 #include <sstream>
@@ -446,7 +445,7 @@ API::MatrixWorkspace_sptr LoadGSS::loadGSASFile(const std::string &filename, boo
 //----------------------------------------------------------------------------------------------
 /** Convert a string containing number and unit to double
  */
-double LoadGSS::convertToDouble(std::string inputstring) {
+double LoadGSS::convertToDouble(const std::string &inputstring) {
   std::string temps;
   auto isize = static_cast<int>(inputstring.size());
   for (int i = 0; i < isize; i++) {

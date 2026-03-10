@@ -194,7 +194,7 @@ PoldiFitPeaks2D::getIntegratedPeakCollection(const PoldiPeakCollection_sptr &raw
      * except cloning the collection, to make behavior consistent, since
      * integrating also results in a new peak collection.
      */
-    return rawPeakCollection->clone();
+    return rawPeakCollection->clonePeakCollection();
   }
 
   /* If no profile function is specified, it's not possible to get integrated
@@ -229,7 +229,7 @@ PoldiFitPeaks2D::getIntegratedPeakCollection(const PoldiPeakCollection_sptr &raw
     profileFunction->setHeight(peak->intensity());
     profileFunction->setFwhm(peak->fwhm(PoldiPeak::AbsoluteD));
 
-    PoldiPeak_sptr integratedPeak = peak->clone();
+    PoldiPeak_sptr integratedPeak = peak->clonePeak();
     integratedPeak->setIntensity(UncertainValue(profileFunction->intensity()));
     integratedPeakCollection->addPeak(integratedPeak);
   }
@@ -267,7 +267,7 @@ PoldiFitPeaks2D::getNormalizedPeakCollection(const PoldiPeakCollection_sptr &pea
     PoldiPeak_sptr peak = peakCollection->peak(i);
     double calculatedIntensity = m_timeTransformer->calculatedTotalIntensity(peak->d());
 
-    PoldiPeak_sptr normalizedPeak = peak->clone();
+    PoldiPeak_sptr normalizedPeak = peak->clonePeak();
     normalizedPeak->setIntensity(peak->intensity() / calculatedIntensity);
     normalizedPeakCollection->addPeak(normalizedPeak);
   }
@@ -340,7 +340,7 @@ PoldiPeakCollection_sptr PoldiFitPeaks2D::getCountPeakCollection(const PoldiPeak
     PoldiPeak_sptr peak = peakCollection->peak(i);
     double calculatedIntensity = m_timeTransformer->calculatedTotalIntensity(peak->d());
 
-    PoldiPeak_sptr countPeak = peak->clone();
+    PoldiPeak_sptr countPeak = peak->clonePeak();
     countPeak->setIntensity(peak->intensity() * calculatedIntensity);
 
     countPeakCollection->addPeak(countPeak);
@@ -574,7 +574,7 @@ std::string PoldiFitPeaks2D::getRefinedStartingCell(const std::string &initialCe
   latticeFunction->setUnitCell(cell);
 
   // Remove errors from d-values
-  PoldiPeakCollection_sptr clone = peakCollection->clone();
+  PoldiPeakCollection_sptr clone = peakCollection->clonePeakCollection();
   for (size_t i = 0; i < clone->peakCount(); ++i) {
     PoldiPeak_sptr peak = clone->peak(i);
 
@@ -592,6 +592,8 @@ std::string PoldiFitPeaks2D::getRefinedStartingCell(const std::string &initialCe
   fit->setProperty("Function", std::static_pointer_cast<IFunction>(latticeFunction));
   fit->setProperty("InputWorkspace", peakTable);
   fit->setProperty("CostFunction", "Unweighted least squares");
+  // NOTE: Defaulting IgnoreInvalidData to true since this algorithm is to be replaced
+  fit->setProperty("IgnoreInvalidData", true);
   fit->execute();
 
   Geometry::UnitCell refinedCell = latticeFunction->getUnitCell();
@@ -962,6 +964,7 @@ IAlgorithm_sptr PoldiFitPeaks2D::calculateSpectrum(const std::vector<PoldiPeakCo
   fit->setProperty("MaxIterations", maxIterations);
 
   fit->setProperty("Minimizer", "Levenberg-MarquardtMD");
+  fit->setProperty("IgnoreInvalidData", true);
 
   // Setting the level to Notice to avoid problems with Levenberg-MarquardtMD.
   int oldLogLevel = g_log.getLevel();

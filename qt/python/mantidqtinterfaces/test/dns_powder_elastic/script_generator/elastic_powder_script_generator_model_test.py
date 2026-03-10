@@ -30,7 +30,7 @@ class DNSElasticPowderScriptGeneratorModelTest(unittest.TestCase):
     def setUpClass(cls):
         cls.parent = mock.Mock()
         cls.model = DNSElasticPowderScriptGeneratorModel(cls.parent)
-        cls.sample_data = mock.create_autospec(DNSElasticDataset)
+        cls.sample_data = mock.create_autospec(DNSElasticDataset, instance=True)
         cls.model._sample_data = cls.sample_data
         cls.sample_data.data_dic = get_fake_elastic_data_dic()
         cls.sample_data.create_subtract.return_value = ["knso_x_sf"]
@@ -42,7 +42,7 @@ class DNSElasticPowderScriptGeneratorModelTest(unittest.TestCase):
         cls.sample_data.two_theta.nbins = 5
         cls.sample_data.banks = [1, 2, 3]
         cls.sample_data.script_name = "123.txt"
-        cls.standard_data = mock.create_autospec(DNSElasticDataset)
+        cls.standard_data = mock.create_autospec(DNSElasticDataset, instance=True)
         cls.model._standard_data = cls.standard_data
         cls.standard_data.data_dic = get_elastic_standard_data_dic()
         cls.standard_data.format_dataset.return_value = "123456"
@@ -239,9 +239,7 @@ class DNSElasticPowderScriptGeneratorModelTest(unittest.TestCase):
         )
         self.assertEqual(
             test_v[1],
-            "from mantidqtinterfaces.dns_powder_elastic.scripts."
-            "md_powder_elastic import "
-            "vanadium_correction, flipping_ratio_correction",
+            "from mantidqtinterfaces.dns_powder_elastic.scripts.md_powder_elastic import vanadium_correction, flipping_ratio_correction",
         )
         self.assertEqual(
             test_v[2],
@@ -336,9 +334,7 @@ class DNSElasticPowderScriptGeneratorModelTest(unittest.TestCase):
         test_v = self.model._get_vana_correction_string()
         self.assertEqual(
             test_v,
-            "    vanadium_correction(workspace, binning, vana_set=sta"
-            "ndard_data['vana'], ignore_vana_fields=True, sum_vana_sf_nsf=Tr"
-            "ue)",
+            "    vanadium_correction(workspace, binning, vana_set=standard_data['vana'], ignore_vana_fields=True, sum_vana_sf_nsf=True)",
         )
 
     def test_get_sample_corrections_lines(self):

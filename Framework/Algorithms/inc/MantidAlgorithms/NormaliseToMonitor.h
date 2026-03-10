@@ -8,6 +8,7 @@
 
 #include "MantidAPI/Algorithm.h"
 #include "MantidAlgorithms/DllConfig.h"
+#include "MantidKernel/EmptyValues.h"
 #include "MantidKernel/IPropertyManager.h"
 #include "MantidKernel/IPropertySettings.h"
 #include "MantidKernel/cow_ptr.h"
@@ -111,7 +112,7 @@ private:
   double m_integrationMin = EMPTY_DBL();
   /// The upper bound of the integration range
   double m_integrationMax = EMPTY_DBL();
-  bool m_scanInput;
+  bool m_scanInput = false;
   std::vector<size_t> m_workspaceIndexes;
 };
 
@@ -130,7 +131,7 @@ public:
   bool isEnabled(const Mantid::Kernel::IPropertyManager *algo) const override;
   bool isConditionChanged(const Mantid::Kernel::IPropertyManager *algo,
                           const std::string &changedPropName = "") const override;
-  void applyChanges(const Mantid::Kernel::IPropertyManager *algo, Kernel::Property *const pProp) override;
+  bool applyChanges(const Mantid::Kernel::IPropertyManager *algo, const std::string &propName) const override;
 
   // interface needs it but if indeed proper clone used -- do not know.
   IPropertySettings *clone() const override {

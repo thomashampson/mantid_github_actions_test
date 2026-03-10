@@ -9,9 +9,10 @@
 //----------------------------------------------------------------------
 // Includes
 //----------------------------------------------------------------------
-#include "MantidAPI/Algorithm.h"
+#include "MantidAPI/IFileLoader.h"
 #include "MantidDataHandling/DllConfig.h"
 #include "MantidHistogramData/Histogram.h"
+#include "MantidKernel/FileDescriptor.h"
 
 namespace Mantid {
 namespace DataHandling {
@@ -31,7 +32,7 @@ data.</li>
 @author Roman Tolchenov, Tessella plc
 @date 3/07/09
 */
-class MANTID_DATAHANDLING_DLL LoadSpec final : public API::Algorithm {
+class MANTID_DATAHANDLING_DLL LoadSpec : public API::IFileLoader<Kernel::FileDescriptor> {
 public:
   LoadSpec();
   const std::string name() const override { return "LoadSpec"; }
@@ -42,8 +43,10 @@ public:
   }
 
   int version() const override { return 1; }
-  const std::vector<std::string> seeAlso() const override { return {"LoadSNSspec"}; }
   const std::string category() const override { return "DataHandling\\Text"; }
+
+  /// Returns a confidence value that this algorithm can load a file
+  int confidence(Kernel::FileDescriptor &descriptor) const override;
 
 private:
   void init() override;

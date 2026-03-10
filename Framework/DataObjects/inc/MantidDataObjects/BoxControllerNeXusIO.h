@@ -9,8 +9,7 @@
 #include "MantidAPI/BoxController.h"
 #include "MantidAPI/IBoxControllerIO.h"
 #include "MantidDataObjects/DllConfig.h"
-#include "MantidKernel/DiskBuffer.h"
-#include <nexus/NeXusFile.hpp>
+#include "MantidNexus/NexusFile.h"
 
 #include <mutex>
 
@@ -59,7 +58,7 @@ public:
   // Auxiliary functions (non-virtual, used for testing)
   int64_t getNDataColums() const { return m_BlockSize[1]; }
   // get pointer to the Nexus file --> compatribility testing only.
-  ::NeXus::File *getFile() { return m_File.get(); }
+  Nexus::File *getFile() { return m_File.get(); }
 
   /**@brief The version of the "event_data" Nexus dataset
    *
@@ -90,7 +89,7 @@ public:
    * @brief Number of data items in Nexus dataset "data_event" associated
    * with the particular event data version.
    */
-  int64_t dataEventCount(void) const;
+  uint64_t dataEventCount(void) const;
 
   /**
    * @brief Insert goniometer info in a block of event data, if necessary
@@ -117,7 +116,7 @@ private:
   /// truncated to 64 bytes)
   std::string m_fileName;
   /// the file Handler responsible for Nexus IO operations;
-  std::unique_ptr<::NeXus::File> m_File;
+  std::unique_ptr<Nexus::File> m_File;
   /// identifier if the file open only for reading or is  in read/write
   bool m_ReadOnly;
   /// The size of the events block which can be written in the neXus array at
@@ -128,10 +127,10 @@ private:
   //------
   /// the start of the current data block to read from. It related to current
   /// physical representation of the data in NeXus file
-  std::vector<int64_t> m_BlockStart;
+  Nexus::DimVector m_BlockStart;
   /// the vector, which describes the event specific data size, namely how many
   /// column an event is composed into and this class reads/writres
-  std::vector<int64_t> m_BlockSize;
+  Nexus::DimVector m_BlockSize;
   /// lock Nexus file operations as Nexus is not thread safe
   mutable std::mutex m_fileMutex;
 

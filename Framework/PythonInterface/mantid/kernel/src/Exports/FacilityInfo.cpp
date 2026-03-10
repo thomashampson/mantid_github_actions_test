@@ -28,7 +28,7 @@ void export_FacilityInfo() {
       .def("delimiter", &FacilityInfo::delimiter, arg("self"), return_value_policy<copy_const_reference>(),
            "Returns the delimiter between the instrument name and the run "
            "number.")
-      .def("extensions", &FacilityInfo::extensions, arg("self"),
+      .def("extensions", &FacilityInfo::extensions, arg("self"), return_value_policy<copy_const_reference>(),
            "Returns the list of file extensions that are considered as "
            "instrument data files.")
       .def("preferredExtension", &FacilityInfo::preferredExtension, arg("self"),
@@ -43,7 +43,8 @@ void export_FacilityInfo() {
            "Returns a list of instruments of this facility as defined in the "
            "Facilities.xml file")
       .def("instruments",
-           (std::vector<InstrumentInfo>(FacilityInfo::*)(const std::string &) const) & FacilityInfo::instruments,
+           // cppcheck-suppress cstyleCast
+           (std::vector<InstrumentInfo> (FacilityInfo::*)(const std::string &) const) & FacilityInfo::instruments,
            (arg("self"), arg("technique")), "Returns a list of instruments of given technique")
       .def("instrument", &FacilityInfo::instrument, (arg("self"), arg("instrumentName")),
            return_value_policy<copy_const_reference>(), "Returns the instrument with the given name");

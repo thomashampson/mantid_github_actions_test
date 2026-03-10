@@ -9,6 +9,7 @@ CONDA_DEFAULT_ENV_PREFIX=${CONDA_PREFIX}
 
 conda config --add channels conda-forge
 conda config --add channels mantid
+conda config --add channels neutrons
 conda config --set always_yes true
 
 # checking
@@ -28,7 +29,7 @@ BUILD=$(echo ${package} | sed -n 's/.*mantid-framework-\(.*\)-\(.*\)\.tar.bz2/\2
 mkdir -p ${CONDA_PREFIX}/conda-bld/linux-64
 cp ${package} ${CONDA_PREFIX}/conda-bld/linux-64
 set -e
-conda index ${CONDA_PREFIX}/conda-bld
+rattler-index fs ${CONDA_PREFIX}/conda-bld
 
 # install
 source activate mantid-systemtests

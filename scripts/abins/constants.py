@@ -225,6 +225,9 @@ HZ2INV_CM_DECOMPOSITION = math.frexp(HZ2INV_CM)
 # Conversion factor from VASP internal units
 VASP_FREQ_TO_THZ = 15.633302
 
+# Bohr conversion for Molden import
+BOHR_TO_ANGSTROM = 0.5291772109039775
+
 # Energy units
 MILLI_EV_TO_WAVENUMBER = 8.06554465
 
@@ -267,7 +270,8 @@ T_THRESHOLD = 1e-12
 MAX_ORDER = 4  # max quantum order event
 
 ALL_SUPPORTED_AB_INITIO_PROGRAMS = ["CRYSTAL", "CASTEP", "DMOL3", "GAUSSIAN", "VASP"]
-AB_INITIO_FILE_EXTENSIONS = ["phonon", "out", "outmol", "log", "LOG", "xml", "yaml", "castep_bin", "hdf5", "json"]
+AB_INITIO_FILE_EXTENSIONS = ["castep_bin", "hdf5", "json", "out", "outmol", "phonon", "log", "LOG", "mol", "yaml", "yml", "xml"]
+
 
 ONE_DIMENSIONAL_INSTRUMENTS = ["TOSCA", "Lagrange"]
 TWO_DIMENSIONAL_CHOPPER_INSTRUMENTS = ["MAPS", "MARI", "MERLIN"]
@@ -317,13 +321,19 @@ EOF = b""
 
 ROTATIONS_AND_TRANSLATIONS = 6
 
-# This constant is used to check whether for the given atom mass averaged over all isotopes or mass of the
-# specific isotope is used.
+# This constant is used to check whether the standard atomic mass is "close enough",
+# if closer isotope exists but lacks data
 MASS_EPS = 1e-2  # in amu units.
+
+# Tolerance when distinguishing between mass types in the input data
+FINE_MASS_EPS = 1e-8
 
 # this constant is used to check if in a system for the given symbol of an element all atoms with this symbol have
 # the same mass
 ONLY_ONE_MASS = 1
+
+# String formatter for mass when used in Spectrum metadata
+MASS_STR_FORMAT = "{:.3f}"
 
 DIGITS_NUM = 5
 S_PLOT_SPACING = 4.0

@@ -16,7 +16,7 @@
 #include "MantidKernel/BoundedValidator.h"
 #include "MantidKernel/Strings.h"
 #include "MantidKernel/cow_ptr.h"
-#include <nexus/NeXusFile.hpp>
+#include "MantidNexus/NexusFile.h"
 
 #include <boost/algorithm/string/detail/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
@@ -59,17 +59,29 @@ void LoadTOFRawNexus::init() {
                   "set.");
 }
 
+namespace {
+// constants for the strings to look for
+const std::string ENTRY_NAME("/entry");
+const std::string ENTRY_STATE_NAME("/entry-state0");
+const std::string NXENTRY("NXentry");
+const std::string NXEVENT_DATA("NXevent_data");
+const std::string NX_DATA("NXdata");
+} // namespace
+
 /**
  * Return the confidence with with this algorithm can load the file
  * @param descriptor A descriptor for the file
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadTOFRawNexus::confidence(Kernel::NexusDescriptor &descriptor) const {
+int LoadTOFRawNexus::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   int confidence(0);
-  if (descriptor.pathOfTypeExists("/entry", "NXentry") || descriptor.pathOfTypeExists("/entry-state0", "NXentry")) {
-    const bool hasEventData = descriptor.classTypeExists("NXevent_data");
-    const bool hasData = descriptor.classTypeExists("NXdata");
+  if (descriptor.isEntry(ENTRY_NAME, NXENTRY) || descriptor.isEntry(ENTRY_STATE_NAME, NXENTRY)) {
+    const bool hasEventData = descriptor.classTypeExistsChild(ENTRY_NAME, NXEVENT_DATA) ||
+                              descriptor.classTypeExistsChild(ENTRY_STATE_NAME, NXEVENT_DATA);
+    const bool hasData = descriptor.classTypeExistsChild(ENTRY_NAME, NX_DATA) ||
+                         descriptor.classTypeExistsChild(ENTRY_STATE_NAME, NX_DATA);
+
     if (hasData && hasEventData)
       // Event data = this is event NXS
       confidence = 20;
@@ -99,7 +111,7 @@ void LoadTOFRawNexus::countPixels(const std::string &nexusfilename, const std::s
   bankNames.clear();
 
   // Create the root Nexus class
-  auto file = ::NeXus::File(nexusfilename);
+  auto file = Nexus::File(nexusfilename);
 
   // Open the default data group 'entry'
   file.openGroup(entry_name, "NXentry");
@@ -187,7 +199,7 @@ void LoadTOFRawNexus::countPixels(const std::string &nexusfilename, const std::s
 
           // Count how many pixels in the bank
           file.openData("pixel_id");
-          std::vector<int64_t> dims = file.getInfo().dims;
+          Nexus::DimVector const dims = file.getInfo().dims;
           file.closeData();
 
           if (!dims.empty()) {
@@ -200,11 +212,11 @@ void LoadTOFRawNexus::countPixels(const std::string &nexusfilename, const std::s
 
           // Get the number of pixels from the offsets arrays
           file.openData("x_pixel_offset");
-          std::vector<int64_t> xdim = file.getInfo().dims;
+          Nexus::DimVector const xdim = file.getInfo().dims;
           file.closeData();
 
           file.openData("y_pixel_offset");
-          std::vector<int64_t> ydim = file.getInfo().dims;
+          Nexus::DimVector const ydim = file.getInfo().dims;
           file.closeData();
 
           if (!xdim.empty() && !ydim.empty()) {
@@ -215,7 +227,7 @@ void LoadTOFRawNexus::countPixels(const std::string &nexusfilename, const std::s
         if (bankEntries.find(m_axisField) != bankEntries.end()) {
           // Get the size of the X vector
           file.openData(m_axisField);
-          std::vector<int64_t> dims = file.getInfo().dims;
+          Nexus::DimVector const dims = file.getInfo().dims;
           // Find the units, if available
           if (file.hasAttr("units"))
             file.getAttr("units", m_xUnits);
@@ -277,12 +289,12 @@ void LoadTOFRawNexus::loadBank(const std::string &nexusfilename, const std::stri
   m_fileMutex.lock();
 
   // Navigate to the point in the file
-  auto file = ::NeXus::File(nexusfilename);
+  auto file = Nexus::File(nexusfilename);
   file.openGroup(entry_name, "NXentry");
   file.openGroup("instrument", "NXinstrument");
   file.openGroup(bankName, "NXdetector");
 
-  size_t m_numPixels = 0;
+  m_numPixels = 0;
   std::vector<uint32_t> pixel_id;
 
   if (!m_assumeOldFile) {
@@ -354,7 +366,7 @@ void LoadTOFRawNexus::loadBank(const std::string &nexusfilename, const std::stri
   // Load the TOF vector
   std::vector<float> tof;
   file.readData(m_axisField, tof);
-  size_t m_numBins = tof.size() - 1;
+  m_numBins = tof.size() - 1;
   if (tof.size() <= 1) {
     file.close();
     m_fileMutex.unlock();
@@ -419,7 +431,7 @@ void LoadTOFRawNexus::loadBank(const std::string &nexusfilename, const std::stri
 /** @return the name of the entry that we will load */
 std::string LoadTOFRawNexus::getEntryName(const std::string &filename) {
   std::string entry_name = "entry";
-  auto file = ::NeXus::File(filename);
+  auto file = Nexus::File(filename);
   std::map<std::string, std::string> entries = file.getEntries();
   file.close();
 
@@ -487,10 +499,9 @@ void LoadTOFRawNexus::exec() {
   // Load the meta data, but don't stop on errors
   prog->report("Loading metadata");
   g_log.debug() << "Loading metadata\n";
-  Kernel::NexusHDF5Descriptor descriptor(filename);
 
   try {
-    LoadEventNexus::loadEntryMetadata(filename, WS, entry_name, descriptor);
+    LoadEventNexus::loadEntryMetadata(filename, WS, entry_name);
   } catch (std::exception &e) {
     g_log.warning() << "Error while loading meta data: " << e.what() << '\n';
   }

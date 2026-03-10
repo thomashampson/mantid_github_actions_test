@@ -33,12 +33,12 @@
 #include <Poco/DOM/NodeFilter.h>
 #include <Poco/DOM/NodeIterator.h>
 #include <Poco/DOM/NodeList.h>
-#include <Poco/Path.h>
 #include <Poco/SAX/AttributesImpl.h>
 #include <Poco/String.h>
 #include <Poco/XML/XMLWriter.h>
 
 #include <boost/regex.hpp>
+#include <filesystem>
 #include <memory>
 #include <unordered_set>
 #include <utility>
@@ -590,7 +590,7 @@ void InstrumentDefinitionParser::appendLocations(Geometry::ICompAssembly *parent
  *
  *  @param outFilename :: Output filename
  */
-void InstrumentDefinitionParser::saveDOM_Tree(std::string &outFilename) {
+void InstrumentDefinitionParser::saveDOM_Tree(const std::string &outFilename) {
   Poco::XML::DOMWriter writer;
   writer.setNewLine("\n");
   writer.setOptions(Poco::XML::XMLWriter::PRETTY_PRINT);
@@ -1320,7 +1320,7 @@ void InstrumentDefinitionParser::createGridDetector(Geometry::ICompAssembly *par
                                                     const Poco::XML::Element *pCompElem, const std::string &filename,
                                                     const Poco::XML::Element *pType) {
 
-  //-------------- Create a RectangularDetector
+  //-------------- Create a GridDetector
   //------------------------------------------------
   std::string name = InstrumentDefinitionParser::getNameOfLocationElement(pLocElem, pCompElem);
 
@@ -1544,12 +1544,6 @@ void InstrumentDefinitionParser::createStructuredDetector(Geometry::ICompAssembl
   int idstep = 1;
   std::vector<double> xValues;
   std::vector<double> yValues;
-
-  // The shape!
-  // Given that this leaf component is actually an assembly, its constituent
-  // component detector shapes comes from its type attribute.
-  const std::string shapeType = pType->getAttribute("type");
-  std::shared_ptr<Geometry::IObject> shape = mapTypeNameToShape[shapeType];
 
   std::string typeName = pType->getAttribute("name");
   // These parameters are in the TYPE defining StructuredDetector
@@ -2327,7 +2321,7 @@ void InstrumentDefinitionParser::setLogfile(const Geometry::IComponent *comp, co
       unsigned long numberPoint = pNLpoint->length();
 
       for (unsigned long j = 0; j < numberPoint; j++) {
-        auto *pPoint = static_cast<Element *>(pNLpoint->item(j));
+        const auto *pPoint = static_cast<Element *>(pNLpoint->item(j));
         double x = attrToDouble(pPoint, "x");
         double y = attrToDouble(pPoint, "y");
         interpolation->addPoint(x, y);
@@ -2381,9 +2375,7 @@ void InstrumentDefinitionParser::setLogfile(const Geometry::IComponent *comp, co
 
 //-----------------------------------------------------------------------------------------------------------------------
 /** Apply parameters that may be specified in \<component-link\> XML elements.
- *  Input variable pRootElem may e.g. be the root element of an XML parameter
- *file or
- *  the root element of a IDF
+ *  Input variable pRootElem may e.g. be the root element of an XML parameter file or the root element of a IDF
  *
  *  @param instrument :: Instrument
  *  @param pRootElem ::  Associated Poco::XML element that may contain
@@ -2445,9 +2437,7 @@ void InstrumentDefinitionParser::setComponentLinks(std::shared_ptr<Geometry::Ins
 
         sharedIComp.emplace_back(detector);
 
-        // If the user also supplied a name, make sure it's consistent with
-        // the
-        // detector id.
+        // If the user also supplied a name, make sure it's consistent with the detector id.
         if (name.length() > 0) {
           auto comp = std::dynamic_pointer_cast<const IComponent>(detector);
           if (comp) {
@@ -2462,10 +2452,7 @@ void InstrumentDefinitionParser::setComponentLinks(std::shared_ptr<Geometry::Ins
         }
       } else {
         // No detector id given, fall back to using the name
-
-        if (name.find('/', 0) == std::string::npos) { // Simple name, look for
-          // all components of that
-          // name.
+        if (name.find('/', 0) == std::string::npos) { // Simple name, look for all components of that name.
           sharedIComp = instrument->getAllComponentsWithName(name);
         } else { // Pathname given. Assume it is unique.
           std::shared_ptr<const Geometry::IComponent> shared = instrument->getComponentByName(name);
@@ -2476,8 +2463,7 @@ void InstrumentDefinitionParser::setComponentLinks(std::shared_ptr<Geometry::Ins
       for (auto &ptr : sharedIComp) {
         std::shared_ptr<const Geometry::Component> sharedComp =
             std::dynamic_pointer_cast<const Geometry::Component>(ptr);
-        if (sharedComp) {
-          // Not empty Component
+        if (sharedComp) { // Not empty Component
           if (sharedComp->isParametrized()) {
             setLogfile(sharedComp->base(), curElem, instrument->getLogfileCache(), requestedDate);
           } else {
@@ -2522,14 +2508,20 @@ InstrumentDefinitionParser::writeAndApplyCache(IDFObject_const_sptr firstChoiceC
 
   g_log.notice("Geometry cache is not available");
   try {
-    Poco::File dir = usedCache->getParentDirectory();
-    if (dir.path().empty() || !dir.exists() || !dir.canWrite()) {
+    std::filesystem::path dir = usedCache->getParentDirectory();
+    if (!dir.empty() && !std::filesystem::exists(dir)) {
+      usedCache = std::move(fallBackCache);
+      cachingOption = WroteCacheTemp;
+      g_log.information() << "Geometrycache directory does not exist, writing cache "
+                             "to system temp.\n";
+    } else if (!dir.empty() && (std::filesystem::status(dir).permissions() & std::filesystem::perms::owner_write) ==
+                                   std::filesystem::perms::none) {
       usedCache = std::move(fallBackCache);
       cachingOption = WroteCacheTemp;
       g_log.information() << "Geometrycache directory is read only, writing cache "
                              "to system temp.\n";
     }
-  } catch (Poco::FileNotFoundException &) {
+  } catch (std::filesystem::filesystem_error &) {
     g_log.error() << "Unable to find instrument definition while attempting to "
                      "write cache.\n";
     throw std::runtime_error("Unable to find instrument definition while "
@@ -2559,8 +2551,9 @@ InstrumentDefinitionParser::CachingOption InstrumentDefinitionParser::setupGeome
   // If the instrument directory is writable, put them there else use
   // temporary
   // directory.
-  IDFObject_const_sptr fallBackCache = std::make_shared<const IDFObject>(
-      Poco::Path(ConfigService::Instance().getTempDir()).append(this->getMangledName() + ".vtp").toString());
+  std::filesystem::path fallBackPath =
+      std::filesystem::path(ConfigService::Instance().getTempDir()) / (this->getMangledName() + ".vtp");
+  IDFObject_const_sptr fallBackCache = std::make_shared<const IDFObject>(fallBackPath.string());
   CachingOption cachingOption = NoneApplied;
   if (m_cacheFile->exists()) {
     applyCache(m_cacheFile);
@@ -2637,7 +2630,7 @@ void InstrumentDefinitionParser::createNeutronicInstrument() {
  *  @throw InstrumentDefinitionError Thrown if issues with the content of XML
  * instrument file
  */
-void InstrumentDefinitionParser::adjust(Poco::XML::Element *pElem, std::map<std::string, bool> &isTypeAssembly,
+void InstrumentDefinitionParser::adjust(Poco::XML::Element *pElem, const std::map<std::string, bool> &isTypeAssembly,
                                         std::map<std::string, Poco::XML::Element *> &getTypeElement) {
   UNUSED_ARG(isTypeAssembly)
   // check if pElem is an element with tag name 'type'
@@ -2674,7 +2667,7 @@ void InstrumentDefinitionParser::adjust(Poco::XML::Element *pElem, std::map<std:
 
   // check if a <translate-rotate-combined-shape-to> is defined
   Poco::AutoPtr<NodeList> pNL_TransRot = pElem->getElementsByTagName("translate-rotate-combined-shape-to");
-  Element *pTransRot = nullptr;
+  const Element *pTransRot = nullptr;
   if (pNL_TransRot->length() == 1) {
     pTransRot = static_cast<Element *>(pNL_TransRot->item(0));
   }
@@ -2970,10 +2963,9 @@ const std::string InstrumentDefinitionParser::createVTPFileName() {
   std::string retVal;
   std::string filename = getMangledName();
   if (!filename.empty()) {
-    Poco::Path path(ConfigService::Instance().getVTPFileDirectory());
-    path.makeDirectory();
-    path.append(filename + ".vtp");
-    retVal = path.toString();
+    std::filesystem::path path =
+        std::filesystem::path(ConfigService::Instance().getVTPFileDirectory()) / (filename + ".vtp");
+    retVal = path.string();
   }
   return retVal;
 }
@@ -3056,7 +3048,7 @@ according to pLocElem
 instrument file
 */
 std::string InstrumentDefinitionParser::getShapeCoorSysComp(Geometry::ICompAssembly *parent,
-                                                            Poco::XML::Element *pLocElem,
+                                                            const Poco::XML::Element *pLocElem,
                                                             std::map<std::string, Poco::XML::Element *> &getTypeElement,
                                                             Geometry::ICompAssembly *&endAssembly) {
   // The location element is required to be a child of a component element.
@@ -3085,7 +3077,7 @@ std::string InstrumentDefinitionParser::getShapeCoorSysComp(Geometry::ICompAssem
   if (pNL->length() == 0) {
     return pType->getAttribute("name");
   } else if (pNL->length() == 1) {
-    auto *pElem = static_cast<Element *>(pNL->item(0));
+    const auto *pElem = static_cast<Element *>(pNL->item(0));
     return getShapeCoorSysComp(ass, pElem, getTypeElement, endAssembly);
   } else {
     throw Exception::InstrumentDefinitionError(

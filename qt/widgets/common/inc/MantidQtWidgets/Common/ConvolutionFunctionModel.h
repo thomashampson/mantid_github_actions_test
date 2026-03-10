@@ -33,13 +33,13 @@ public:
   std::optional<std::vector<std::string>> peakPrefixes() const { return m_peakPrefixes; }
   std::optional<std::string> fitTypePrefix() const { return m_fitTypePrefix; }
 
-  std::string resolutionWorkspace() const { return m_resolutionWorkspace; }
+  const std::string &resolutionWorkspace() const { return m_resolutionWorkspace; }
   int resolutionWorkspaceIndex() const { return m_resolutionWorkspaceIndex; }
 
 private:
   void findComponentPrefixes();
-  void iterateThroughFunction(IFunction *func, std::string const &prefix);
-  void setPrefix(IFunction *func, std::string const &prefix);
+  void iterateThroughFunction(IFunction const *func, std::string const &prefix);
+  void setPrefix(IFunction const *func, std::string const &prefix);
 
   CompositeFunction_sptr createInnerFunction(const std::string &lorentzianPeaks, const std::string &fitType,
                                              bool hasDeltaFunction, bool isQDependent, double q, bool hasTempCorrection,

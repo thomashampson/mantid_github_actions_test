@@ -6,17 +6,20 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
+#include "MantidAPI/DeprecatedAlgorithm.h"
 #include "MantidAPI/IFileLoader.h"
 #include "MantidDataHandling/DllConfig.h"
-#include "MantidKernel/NexusHDF5Descriptor.h"
+#include "MantidNexus/NexusDescriptorLazy.h"
 
 namespace Mantid {
 namespace DataHandling {
 
 /** LoadMcStasNexus : TODO: DESCRIPTION
  */
-class MANTID_DATAHANDLING_DLL LoadMcStasNexus : public API::IFileLoader<Kernel::NexusHDF5Descriptor> {
+class MANTID_DATAHANDLING_DLL LoadMcStasNexus : public API::IFileLoader<Nexus::NexusDescriptorLazy>,
+                                                public API::DeprecatedAlgorithm {
 public:
+  LoadMcStasNexus();
   const std::string name() const override;
   /// Summary of algorithms purpose
   const std::string summary() const override { return "Loads an McStas NeXus file into a group workspace."; }
@@ -26,7 +29,7 @@ public:
   const std::string category() const override;
 
   /// Returns a confidence value that this algorithm can load a file
-  int confidence(Kernel::NexusHDF5Descriptor &descriptor) const override;
+  int confidence(Nexus::NexusDescriptorLazy &descriptor) const override;
 
 private:
   void init() override;

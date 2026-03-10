@@ -23,6 +23,7 @@
 #include "GUI/Instrument/InstrumentOptionDefaults.h"
 #include "GUI/MainWindow/IMainWindowPresenter.h"
 #include "GUI/MainWindow/IMainWindowView.h"
+#include "GUI/Preview/ROIType.h"
 #include "GUI/Runs/IRunNotifier.h"
 #include "GUI/Runs/IRunsPresenter.h"
 #include "GUI/Runs/ISearchModel.h"
@@ -40,12 +41,14 @@
 #include "MantidQtWidgets/Common/BatchAlgorithmRunner.h"
 #include "MantidQtWidgets/Common/Hint.h"
 #include "Reduction/PreviewRow.h"
+#include "Reduction/ProcessingInstructions.h"
 
 #include <QMap>
 #include <QString>
 #include <QVariant>
 #include <gmock/gmock.h>
 #include <memory>
+#include <optional>
 
 using namespace MantidQt::CustomInterfaces::ISISReflectometry;
 using namespace Mantid::API;
@@ -64,7 +67,7 @@ public:
 class MockBatchPresenter : public IBatchPresenter {
 public:
   MOCK_METHOD1(acceptMainPresenter, void(IMainWindowPresenter *));
-  MOCK_METHOD1(initInstrumentList, void(const std::string &));
+  MOCK_METHOD1(initInstrumentList, std::string(const std::string &));
   MOCK_METHOD0(notifyResumeReductionRequested, void());
   MOCK_METHOD0(notifyPauseReductionRequested, void());
   MOCK_METHOD0(notifyResumeAutoreductionRequested, void());
@@ -98,6 +101,7 @@ public:
   MOCK_METHOD1(setUnsavedBatchFlag, void(bool));
   MOCK_CONST_METHOD0(percentComplete, int());
   MOCK_CONST_METHOD0(rowProcessingProperties, std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps>());
+  MOCK_CONST_METHOD0(rowProcessingPropertiesDefault, std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps>());
   MOCK_CONST_METHOD0(requestClose, bool());
   MOCK_CONST_METHOD0(instrument, Mantid::Geometry::Instrument_const_sptr());
   MOCK_CONST_METHOD0(instrumentName, std::string());
@@ -105,22 +109,24 @@ public:
   MOCK_METHOD0(setBatchUnsaved, void());
   MOCK_METHOD0(notifyChangesSaved, void());
   MOCK_METHOD0(notifyPreviewApplyRequested, void());
-  MOCK_CONST_METHOD0(hasROIDetectorIDsForPreviewRow, bool());
+  MOCK_CONST_METHOD0(getMatchingProcessingInstructionsForPreviewRow, std::map<ROIType, ProcessingInstructions>());
+  MOCK_CONST_METHOD0(getMatchingROIDetectorIDsForPreviewRow, std::optional<ProcessingInstructions>());
+  MOCK_CONST_METHOD1(getBatchState, std::string(const std::vector<std::string> &));
 };
 
 class MockRunsPresenter : public IRunsPresenter {
 public:
   MOCK_METHOD1(acceptMainPresenter, void(IBatchPresenter *));
-  MOCK_METHOD1(initInstrumentList, void(const std::string &));
+  MOCK_METHOD1(initInstrumentList, std::string(const std::string &));
   MOCK_CONST_METHOD0(runsTable, RunsTable const &());
   MOCK_METHOD0(mutableRunsTable, RunsTable &());
   MOCK_METHOD1(notifyChangeInstrumentRequested, bool(std::string const &));
   MOCK_METHOD0(notifyResumeReductionRequested, void());
   MOCK_METHOD0(notifyPauseReductionRequested, void());
   MOCK_METHOD0(notifyRowStateChanged, void());
-  MOCK_METHOD1(notifyRowStateChanged, void(boost::optional<Item const &>));
+  MOCK_METHOD1(notifyRowStateChanged, void(std::optional<std::reference_wrapper<Item const>>));
   MOCK_METHOD0(notifyRowModelChanged, void());
-  MOCK_METHOD1(notifyRowModelChanged, void(boost::optional<Item const &>));
+  MOCK_METHOD1(notifyRowModelChanged, void(std::optional<std::reference_wrapper<Item const>>));
   MOCK_METHOD0(notifyReductionPaused, void());
   MOCK_METHOD0(notifyReductionResumed, void());
   MOCK_METHOD0(resumeAutoreduction, bool());
@@ -310,6 +316,7 @@ public:
 class MockEncoder : public IEncoder {
 public:
   MOCK_METHOD3(encodeBatch, QMap<QString, QVariant>(const IMainWindowView *, int, bool));
+  MOCK_CONST_METHOD2(extractFromEncoding, QVariant(const QVariant &, const std::vector<std::string> &));
 };
 
 class MockDecoder : public IDecoder {
@@ -350,17 +357,20 @@ public:
   MOCK_METHOD0(notifyAutoreductionResumed, void());
   MOCK_METHOD0(notifyAutoreductionPaused, void());
   MOCK_METHOD1(setReprocessFailedItems, void(bool));
-  MOCK_METHOD1(getRunsTableItem, boost::optional<Item &>(MantidQt::API::IConfiguredAlgorithm_sptr const &algorithm));
+  MOCK_METHOD1(getRunsTableItem,
+               std::optional<std::reference_wrapper<Item>>(MantidQt::API::IConfiguredAlgorithm_sptr const &algorithm));
   MOCK_METHOD1(algorithmStarted, void(MantidQt::API::IConfiguredAlgorithm_sptr));
   MOCK_METHOD1(algorithmComplete, void(MantidQt::API::IConfiguredAlgorithm_sptr));
   MOCK_METHOD2(algorithmError, void(MantidQt::API::IConfiguredAlgorithm_sptr, std::string const &));
   MOCK_CONST_METHOD2(algorithmOutputWorkspacesToSave,
                      std::vector<std::string>(MantidQt::API::IConfiguredAlgorithm_sptr, bool));
-  MOCK_METHOD1(notifyWorkspaceDeleted, boost::optional<Item const &>(std::string const &));
-  MOCK_METHOD2(notifyWorkspaceRenamed, boost::optional<Item const &>(std::string const &, std::string const &));
+  MOCK_METHOD1(notifyWorkspaceDeleted, std::optional<std::reference_wrapper<Item const>>(std::string const &));
+  MOCK_METHOD2(notifyWorkspaceRenamed,
+               std::optional<std::reference_wrapper<Item const>>(std::string const &, std::string const &));
   MOCK_METHOD0(notifyAllWorkspacesDeleted, void());
   MOCK_METHOD0(getAlgorithms, std::deque<MantidQt::API::IConfiguredAlgorithm_sptr>());
   MOCK_CONST_METHOD0(rowProcessingProperties, std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps>());
+  MOCK_CONST_METHOD0(rowProcessingPropertiesDefault, std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps>());
   MOCK_CONST_METHOD0(getProcessPartial, bool());
   MOCK_CONST_METHOD0(getProcessAll, bool());
 };

@@ -11,11 +11,8 @@
 #include "MantidAPI/ArchiveSearchFactory.h"
 #include "MantidKernel/Exception.h"
 #include "MantidKernel/InternetHelper.h"
-
 #include "MantidKernel/StringTokenizer.h"
-#include <Poco/Exception.h>
-#include <Poco/File.h>
-#include <Poco/Path.h>
+#include <filesystem>
 
 namespace Mantid::DataHandling {
 namespace {
@@ -41,8 +38,8 @@ constexpr std::string_view URL_PREFIX = "http://data.isis.rl.ac.uk/where.py/unix
  * @param exts :: A vector of file extensions to search over.
  * @returns The full path to the first found
  */
-const API::Result<std::string> ISISDataArchive::getArchivePath(const std::set<std::string> &filenames,
-                                                               const std::vector<std::string> &exts) const {
+const API::Result<std::filesystem::path> ISISDataArchive::getArchivePath(const std::set<std::string> &filenames,
+                                                                         const std::vector<std::string> &exts) const {
   if (g_log.is(Kernel::Logger::Priority::PRIO_DEBUG)) {
     for (const auto &filename : filenames) {
       g_log.debug() << filename << ")\n";
@@ -64,7 +61,7 @@ const API::Result<std::string> ISISDataArchive::getArchivePath(const std::set<st
 #endif
       std::string fullPath = getCorrectExtension(path_without_extension, exts);
       if (!fullPath.empty())
-        return API::Result<std::string>(fullPath);
+        return API::Result<std::filesystem::path>(fullPath);
       errors += "No file found. ";
 #ifdef __linux__
       errors +=
@@ -73,7 +70,7 @@ const API::Result<std::string> ISISDataArchive::getArchivePath(const std::set<st
 #endif // __linux__
     }
   }
-  return API::Result<std::string>("", errors);
+  return API::Result<std::filesystem::path>("", errors);
 }
 
 /**
@@ -87,7 +84,7 @@ std::string ISISDataArchive::getPath(const std::string &fName) const {
     return ""; // Avoid pointless call to service
 
   std::ostringstream os = sendRequest(fName);
-  os << Poco::Path::separator() << fName;
+  os << std::string(1, std::filesystem::path::preferred_separator) << fName;
   std::string expectedPath = os.str();
   return expectedPath;
 }
@@ -138,9 +135,9 @@ std::string ISISDataArchive::getCorrectExtension(const std::string &path, const 
  */
 bool ISISDataArchive::fileExists(const std::string &path) const {
   try {
-    if (Poco::File(path).exists())
+    if (std::filesystem::exists(path))
       return true;
-  } catch (Poco::Exception &) {
+  } catch (const std::filesystem::filesystem_error &) {
   }
   return false;
 }

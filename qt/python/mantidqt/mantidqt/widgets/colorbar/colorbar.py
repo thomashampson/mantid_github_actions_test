@@ -15,14 +15,14 @@ from mantid.plots.utility import get_current_cmap
 from mantidqt.MPLwidgets import FigureCanvas
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure
-from matplotlib.colors import ListedColormap, Normalize, SymLogNorm, PowerNorm, LogNorm
+from matplotlib.colors import ListedColormap, Normalize, SymLogNorm, PowerNorm, LogNorm, AsinhNorm
 from matplotlib import colormaps
 import numpy as np
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox, QCheckBox, QLabel
 from qtpy.QtCore import Signal
 from qtpy.QtGui import QDoubleValidator
 
-NORM_OPTS = ["Linear", "Log", "SymmetricLog10", "Power"]
+NORM_OPTS = ["Linear", "Log", "SymmetricLog10", "Power", "Asinh"]
 AUTO_SCALE_OPTS = ["Min/Max", "3-Sigma", "1.5-Interquartile Range", "1.5-Median Absolute Deviation"]
 
 
@@ -45,15 +45,16 @@ class ColorbarWidget(QWidget):
     scaleNormChanged = Signal()
     # register additional color maps from file
     register_customized_colormaps()
-    # create the list
-    cmap_list = sorted([cmap for cmap in colormaps.keys() if not cmap.endswith("_r")])
 
     def __init__(self, parent=None, default_norm_scale=None):
         """
         :param default_scale: None uses linear, else either a string or tuple(string, other arguments), e.g. tuple('Power', exponent)
         """
 
-        super(ColorbarWidget, self).__init__(parent)
+        super().__init__(parent)
+
+        # create the list. Initialize in the init so that it can be updated if new colormaps are added
+        self.cmap_list = sorted([cmap for cmap in colormaps.keys() if not cmap.endswith("_r")])
 
         self.setWindowTitle("Colorbar")
         self.setMaximumWidth(100)
@@ -181,7 +182,11 @@ class ColorbarWidget(QWidget):
         self.colorbar = Colorbar(ax=self.ax, mappable=mappable)
         self.cmin_value, self.cmax_value = mappable.get_clim()
         self.update_clim_text()
-        self.cmap_changed(cmap, False)
+        try:
+            self.cmap_changed(cmap, False)
+        except ValueError:
+            # the default mantid colormap is not available, just use matplotlib default
+            pass
 
         mappable_cmap = get_current_cmap(mappable)
 
@@ -275,6 +280,8 @@ class ColorbarWidget(QWidget):
             return SymLogNorm(1e-8 if cmin is None else max(1e-8, abs(cmin) * 1e-3), vmin=cmin, vmax=cmax)
         elif NORM_OPTS[idx] == "Log":
             return LogNorm(vmin=cmin, vmax=cmax)
+        elif NORM_OPTS[idx] == "Asinh":
+            return AsinhNorm(vmin=cmin, vmax=cmax)
         else:
             return Normalize(vmin=cmin, vmax=cmax)
 
@@ -286,6 +293,8 @@ class ColorbarWidget(QWidget):
             scale = "symlog"
         elif isinstance(norm, LogNorm):
             scale = "log"
+        elif isinstance(norm, AsinhNorm):
+            scale = "asinh"
         elif isinstance(norm, PowerNorm):
             scale = "function"
             kwargs = {"functions": (lambda x: np.power(x, norm.gamma), lambda x: np.power(x, 1 / norm.gamma))}

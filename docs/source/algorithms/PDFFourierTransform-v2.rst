@@ -16,8 +16,8 @@ spectral density :math:`S(Q)`, :math:`S(Q)-1`, or :math:`Q[S(Q)-1]`
 reduced pair distribution function :math:`G(r)`, the pair distribution function :math:`g(r)`, the
 radial distribution function :math:`RDF(r)`, and the total radial distribution function :math:`G_k(r)`.
 
-The output from this algorithm will have an x-range between 0.0 and the maximum parameter of the output,
-i.e. if converting from `g(r)` to `S(Q)` the output will be between 0.0 and `Qmax`.
+The output from this algorithm will have an x-range between the minimum and maximum parameter of the output,
+i.e. if converting from `g(r)` to `S(Q)` the output will be between `Qmin` and `Qmax`.
 
 The spectrum density should be in the Q-space (\ **MomentumTransfer**\ ) :ref:`units <Unit Factory>` .
 (d-spacing is not supported any more. Contact development team to fix that and enable **dSpacing** again)
@@ -158,16 +158,16 @@ Usage
 .. testoutput:: ExPDFFourierTransform
 
    part of S(Q)-1 and its correlation function
-   ! 0.00 ! 1.000000 ! 0.317333 ! 1.003494 !
-   ! 0.10 ! 0.960789 ! 0.634665 ! 1.003423 !
-   ! 0.20 ! 0.852144 ! 0.951998 ! 1.003308 !
-   ! 0.30 ! 0.697676 ! 1.269330 ! 1.003154 !
-   ! 0.40 ! 0.527292 ! 1.586663 ! 1.002965 !
-   ! 0.50 ! 0.367879 ! 1.903996 ! 1.002750 !
-   ! 0.60 ! 0.236928 ! 2.221328 ! 1.002515 !
-   ! 0.70 ! 0.140858 ! 2.538661 ! 1.002269 !
-   ! 0.80 ! 0.077305 ! 2.855993 ! 1.002018 !
-   ! 0.90 ! 0.039164 ! 3.173326 ! 1.001770 !
+   ! 0.00 ! 1.000000 ! 0.158666 ! 1.003494 !
+   ! 0.10 ! 0.960789 ! 0.475999 ! 1.003423 !
+   ! 0.20 ! 0.852144 ! 0.793331 ! 1.003308 !
+   ! 0.30 ! 0.697676 ! 1.110664 ! 1.003154 !
+   ! 0.40 ! 0.527292 ! 1.427997 ! 1.002965 !
+   ! 0.50 ! 0.367879 ! 1.745329 ! 1.002750 !
+   ! 0.60 ! 0.236928 ! 2.062662 ! 1.002515 !
+   ! 0.70 ! 0.140858 ! 2.379994 ! 1.002269 !
+   ! 0.80 ! 0.077305 ! 2.697327 ! 1.002018 !
+   ! 0.90 ! 0.039164 ! 3.014660 ! 1.001770 !
 
 
 .. categories::

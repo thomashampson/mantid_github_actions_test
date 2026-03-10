@@ -227,7 +227,7 @@ void IFittingAlgorithm::addWorkspace(const std::string &workspacePropertyName, b
     if (fun->getNumberDomains() > 1) {
       std::shared_ptr<MultiDomainCreator> multiCreator = std::dynamic_pointer_cast<MultiDomainCreator>(m_domainCreator);
       if (!multiCreator) {
-        auto &reference = *m_domainCreator;
+        auto const &reference = *m_domainCreator;
         throw std::runtime_error(std::string("MultiDomainCreator expected, found ") + typeid(reference).name());
       }
       if (!multiCreator->hasCreator(index)) {
@@ -312,7 +312,8 @@ std::shared_ptr<CostFunctions::CostFuncFitting> IFittingAlgorithm::getCostFuncti
 
   API::FunctionDomain_sptr domain;
   API::FunctionValues_sptr values;
-  m_domainCreator->ignoreInvalidData(getProperty("IgnoreInvalidData"));
+  const bool ignoreInvalidData = getProperty("IgnoreInvalidData");
+  m_domainCreator->ignoreInvalidData(ignoreInvalidData);
   m_domainCreator->createDomain(domain, values);
 
   // Set peak radius to the values which will be passed to
@@ -331,6 +332,7 @@ std::shared_ptr<CostFunctions::CostFuncFitting> IFittingAlgorithm::getCostFuncti
   auto costFunction = std::dynamic_pointer_cast<CostFunctions::CostFuncFitting>(
       API::CostFunctionFactory::Instance().create(getPropertyValue("CostFunction")));
 
+  costFunction->setIgnoreInvalidData(ignoreInvalidData);
   costFunction->setFittingFunction(m_function, domain, values);
 
   return costFunction;

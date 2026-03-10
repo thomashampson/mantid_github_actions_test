@@ -13,16 +13,16 @@ import subprocess
 # The structure of a release tag
 RELEASE_TAG_RE = re.compile(r"^v?\d+.\d+(.\d)?$")
 
-# Authors in Git that do not have a translation listed here or that have not
-# been blacklisted will cause the DOI script to fail.
+# Authors in Git that do not have a translation listed here or who are not on the
+# blocklist will cause the DOI script to fail.
 #
 # The DOI schema asks that names be of the form "last_name, first_name(s)."
 #
-# Translations exist for Git aliases, even where users have more than one.  We
-# prefer multiple translations over blacklist entries in case users log back on
+# Translations exist for Git aliases, even where users have more than one. We
+# prefer multiple translations over blocklist entries in case users log back on
 # to machines and start using old aliases again.
 _translations = {
-    # Name in Git.             :  Preferred name for DOI.
+    # Name in Git : Preferred name for DOI.
     "Freddie Akeroyd": "Akeroyd, Freddie",
     "Stuart Ansell": "Ansell, Stuart",
     "Sofia Antony": "Antony, Sofia",
@@ -213,6 +213,7 @@ _translations = {
     "Samuel Jones": "Jones, Sam",
     "Harry Saunders": "Saunders, Harry",
     "Geish Miladinovic": "Miladinovic, Geish",
+    "geishm-ansto": "Miladinovic, Geish",
     "Harrietbrown": "Brown, Harriet",
     "Harriet Brown": "Brown, Harriet",
     "Adam J. Jackson": "Jackson, Adam J.",
@@ -335,6 +336,8 @@ _translations = {
     "yusufjimoh": "Yusuf, Jimoh",
     "Jimoh Yusuf": "Yusuf, Jimoh",
     "Oluwaseun Jimoh": "Yusuf, Jimoh",
+    "Yusuf Jimoh": "Yusuf, Jimoh",
+    "Yusuf Jimoh Local": "Yusuf, Jimoh",
     "Kyle Ma": "Qianli Ma, Kyle",
     "Kyle Qianli Ma": "Qianli Ma, Kyle",
     "Despiix": "Ioannide, Despina",
@@ -343,17 +346,27 @@ _translations = {
     "Glass": "Elsarboukh, Glass",
     "Ganyushin, Dmitry": "Ganyushin, Dmitry",
     "Dmitry Ganyushin": "Ganyushin, Dmitry",
+    "Andy Bridger": "Bridger, Andy",
+    "andy-bridger": "Bridger, Andy",
+    "RabiyaF": "Farooq, Rabiya",
+    "Jack": "Allen, Jack E.",
+    "Daniel Caballero": "Caballero, Daniel",
+    "Darsh": "Dinger, Darsh",
+    "Darsh Dinger": "Dinger, Darsh",
+    "Ian Gibbs": "Gibbs, Ian",
+    "Victoria-Hawkins": "Hawkins, Victoria",
 }
 
 # Used to ensure a Git author does not appear in any of the DOIs.  This is NOT
 # to be used in the case where a Git user has multiple accounts; a translation
 # entry would suffice in such an instance.
-_blacklist = [
+_blocklist = [
     "",
     "unknown",
     "Yao, Marie",
     "Utkarsh Ayachit",
     "Chris Kerr",
+    "Copilot",
     "Thomas Brooks",
     "mantid-builder",
     "mantidbuilder",
@@ -366,12 +379,14 @@ _blacklist = [
     "davidvoneshen",
     "dependabot[bot]",
     "pre-commit-ci[bot]",
+    "github-actions[bot]",
+    "kobeduge",
 ]
 
-# The whitelist is used for sponsors / contributors who should be included,
+# The allowlist is used for sponsors / contributors who should be included,
 # but who are not listed as authors on Git.  These names will be shown in the
 # "main" DOI only.
-whitelist = [
+allowlist = [
     "Cottrell, Stephen",
     "Dillow, David",
     "Hagen, Mark",
@@ -417,12 +432,12 @@ def _get_all_release_git_tags():
 
 
 def _clean_up_author_list(author_list):
-    """Apply translations and blacklist, and get rid of duplicates."""
+    """Apply translations and blocklist, and get rid of duplicates."""
     # Double check that all names have no leading or trailing whitespace.
     result = map(str.strip, author_list)
 
-    # Remove any blacklisted names.
-    result = set(filterfalse(_blacklist.__contains__, result))
+    # Remove any names that are on the blocklist.
+    result = set(filterfalse(_blocklist.__contains__, result))
 
     # Make sure there are no names in Git without a corresponding translation.
     untranslated = set(filterfalse(_translations.keys().__contains__, result))
@@ -437,9 +452,9 @@ def _clean_up_author_list(author_list):
     # Translate all remaining names.
     result = [_translations[a] for a in result]
 
-    # Another check for any blacklisted names, in case we want to remove the
+    # Another check for any names in the blocklist, in case we want to remove the
     # translated name.
-    result = set(filterfalse(_blacklist.__contains__, result))
+    result = set(filterfalse(_blocklist.__contains__, result))
 
     # Return the unique list of translated names.
     return sorted(set(result))
@@ -450,7 +465,16 @@ def _authors_from_tag_info(tag_info):
     """Given some tag/commit information, will return the corresponding Git
     authors.
     """
-    args = ["git", "log", "--pretty=short", tag_info, '--format="%aN"', "--reverse"]
+    args = [
+        "git",
+        "log",
+        "--no-mailmap",  # use names in commits without mapping
+        "--no-merges",  # ignore merge commits
+        "--pretty=short",
+        tag_info,
+        '--format="%aN"',  # only author name, ignore committer
+        "--reverse",
+    ]
     proc = subprocess.run(args, stdout=subprocess.PIPE, encoding="utf-8")
     authors = proc.stdout.replace('"', "").split("\n")
     return _clean_up_author_list(authors)
@@ -536,3 +560,26 @@ def authors_under_git_tag(tag):
     previous_tag = all_tags[all_tags.index(tag) - 1]
 
     return _authors_from_tag_info(previous_tag + ".." + tag)
+
+
+if __name__ == "__main__":
+    """This should normally be run as a library for doi.py, but for testing/development a command line was added."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Generate list of authors for a release", epilog="This requires having a .gitmailmap file from a TWG member"
+    )
+    parser.add_argument("version", type=str, help='Version of Mantid whose DOI is to be created/updated in the form "major.minor.patch"')
+    parser.add_argument("--full", action="store_true", help="Get full list of authors back to start of project")
+    # process inputs
+    args = parser.parse_args()
+    git_tag = find_tag(args.version)
+    # generate list of authors
+    if args.full:
+        authors = authors_up_to_git_tag(git_tag)
+    else:
+        authors = authors_under_git_tag(git_tag)
+    # print out the results
+    print("For", git_tag)
+    for author in authors:
+        print(author)

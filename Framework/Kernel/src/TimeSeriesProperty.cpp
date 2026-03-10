@@ -10,9 +10,9 @@
 #include "MantidKernel/Logger.h"
 #include "MantidKernel/SplittingInterval.h"
 #include "MantidKernel/TimeROI.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <json/value.h>
-#include <nexus/NeXusFile.hpp>
 
 #include <boost/regex.hpp>
 #include <numeric>
@@ -1053,11 +1053,35 @@ template <typename TYPE> std::vector<double> TimeSeriesProperty<TYPE>::timesAsVe
 
   // 2. Output data structure
   std::vector<double> out;
-  out.reserve(m_values.size());
+  if (!m_values.empty()) {
+    out.reserve(m_values.size());
 
-  Types::Core::DateAndTime start = m_values[0].time();
-  for (size_t i = 0; i < m_values.size(); i++) {
-    out.emplace_back(DateAndTime::secondsFromDuration(m_values[i].time() - start));
+    Types::Core::DateAndTime start = m_values[0].time();
+    for (size_t i = 0; i < m_values.size(); i++) {
+      out.emplace_back(DateAndTime::secondsFromDuration(m_values[i].time() - start));
+    }
+  }
+
+  return out;
+}
+
+/**
+ * @param start The starting DateAndTime, from which the times in seconds are calculated
+ * @return Return the series as list of times, where the time is the number of
+ * seconds since the start.
+ */
+template <typename TYPE>
+std::vector<double> TimeSeriesProperty<TYPE>::timesAsVectorSeconds(Types::Core::DateAndTime start) const {
+  // 1. Sort if necessary
+  sortIfNecessary();
+
+  // 2. Output data structure
+  std::vector<double> out;
+  if (!m_values.empty()) {
+    out.reserve(m_values.size());
+    for (size_t i = 0; i < m_values.size(); i++) {
+      out.emplace_back(DateAndTime::secondsFromDuration(m_values[i].time() - start));
+    }
   }
 
   return out;
@@ -1458,9 +1482,9 @@ void TimeSeriesProperty<TYPE>::create(const Types::Core::DateAndTime &start_time
     m_propSortedFlag = TimeSeriesSortStatus::TSUNSORTED;
   // set the values
   constexpr double SEC_TO_NANO{1000000000.0};
-  const uint64_t start_time_ns = static_cast<uint64_t>(start_time.totalNanoseconds());
+  const int64_t start_time_ns = start_time.totalNanoseconds();
   for (std::size_t i = 0; i < num; i++) {
-    m_values.emplace_back(start_time_ns + static_cast<uint64_t>(time_sec[i] * SEC_TO_NANO), new_values[i]);
+    m_values.emplace_back(start_time_ns + static_cast<int64_t>(time_sec[i] * SEC_TO_NANO), new_values[i]);
   }
 
   // reset the size
@@ -2011,7 +2035,7 @@ template <typename TYPE> std::string TimeSeriesProperty<TYPE>::setValueFromPrope
 
 //----------------------------------------------------------------------------------------------
 /** Saves the time vector has time + start attribute */
-template <typename TYPE> void TimeSeriesProperty<TYPE>::saveTimeVector(::NeXus::File *file) {
+template <typename TYPE> void TimeSeriesProperty<TYPE>::saveTimeVector(Nexus::File *file) {
   std::vector<DateAndTime> times = this->timesAsVector();
   const DateAndTime &start = times.front();
   std::vector<double> timeSec(times.size());
@@ -2025,7 +2049,7 @@ template <typename TYPE> void TimeSeriesProperty<TYPE>::saveTimeVector(::NeXus::
 
 //----------------------------------------------------------------------------------------------
 /** Helper function to save a TimeSeriesProperty<> */
-template <> void TimeSeriesProperty<std::string>::saveProperty(::NeXus::File *file) {
+template <> void TimeSeriesProperty<std::string>::saveProperty(Nexus::File *file) {
   std::vector<std::string> values = this->valuesAsVector();
   if (values.empty())
     return;
@@ -2044,8 +2068,8 @@ template <> void TimeSeriesProperty<std::string>::saveProperty(::NeXus::File *fi
     index += maxlen;
   }
 
-  std::vector<int> dims{static_cast<int>(values.size()), static_cast<int>(maxlen)};
-  file->makeData("value", ::NeXus::CHAR, dims, true);
+  const Mantid::Nexus::DimVector dims{values.size(), maxlen};
+  file->makeData("value", NXnumtype::CHAR, dims, true);
   file->putData(strs.data());
   file->closeData();
   saveTimeVector(file);
@@ -2058,7 +2082,7 @@ template <> void TimeSeriesProperty<std::string>::saveProperty(::NeXus::File *fi
  * UINT8
  * for the value and add an attribute boolean to inidcate it is actually a bool
  */
-template <> void TimeSeriesProperty<bool>::saveProperty(::NeXus::File *file) {
+template <> void TimeSeriesProperty<bool>::saveProperty(Nexus::File *file) {
   std::vector<bool> value = this->valuesAsVector();
   if (value.empty())
     return;
@@ -2070,7 +2094,7 @@ template <> void TimeSeriesProperty<bool>::saveProperty(::NeXus::File *file) {
   file->closeGroup();
 }
 
-template <typename TYPE> void TimeSeriesProperty<TYPE>::saveProperty(::NeXus::File *file) {
+template <typename TYPE> void TimeSeriesProperty<TYPE>::saveProperty(Nexus::File *file) {
   auto values = this->valuesAsVector();
   if (values.empty())
     return;
@@ -2114,7 +2138,7 @@ void TimeSeriesProperty<TYPE>::histogramData(const Types::Core::DateAndTime &tMi
 
   double dt = (t1 - t0) / static_cast<double>(nPoints);
 
-  for (auto &ev : m_values) {
+  for (auto const &ev : m_values) {
     auto time = static_cast<double>(ev.time().totalNanoseconds());
     if (time < t0 || time >= t1)
       continue;

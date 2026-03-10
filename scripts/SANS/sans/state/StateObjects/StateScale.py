@@ -26,7 +26,8 @@ class StateScale(metaclass=JsonSerializable):
         self.thickness = None  # : Float (Positive)
         self.width = None  # : Float (Positive)
         self.height = None  # : Float (Positive)
-        self.scale = None  # : Float (Positive)
+        self.rear_scale = None  # : Float (Positive)
+        self.front_scale = None  # : Float (Positive)
 
         # Geometry from the file
         self.shape_from_file = SampleShape.DISC
@@ -81,5 +82,5 @@ def get_scale_builder(data_info, file_information=None):
         return StateScaleBuilder(file_information)
     else:
         raise NotImplementedError(
-            "StateScaleBuilder: Could not find any valid scale builder for the " "specified StateData object {0}".format(str(data_info))
+            "StateScaleBuilder: Could not find any valid scale builder for the specified StateData object {0}".format(str(data_info))
         )

@@ -22,12 +22,14 @@
 #include "MantidKernel/PropertyWithValue.h"
 #include "MantidKernel/TimeSeriesProperty.h"
 #include "MantidNexus/H5Util.h"
+#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <H5Cpp.h>
-#include <Poco/Path.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/math/special_functions/round.hpp>
-#include <nexus/napi.h>
+#include <filesystem>
 #include <numeric>
 
 namespace Mantid::DataHandling {
@@ -36,7 +38,7 @@ using namespace API;
 using namespace Geometry;
 using namespace H5;
 using namespace Kernel;
-using namespace NeXus;
+using namespace Nexus;
 using Types::Core::DateAndTime;
 
 namespace {
@@ -47,7 +49,7 @@ constexpr size_t D20_NUMBER_PIXELS = 1600;
 constexpr size_t D20_NUMBER_DEAD_PIXELS = 32;
 // This defines the number of monitors in the instrument. If there are cases
 // where this is no longer one this decleration should be moved.
-constexpr int NUMBER_MONITORS = 1;
+constexpr size_t NUMBER_MONITORS = 1;
 // This is the angular size of a pixel in degrees (in low resolution mode)
 constexpr double D20_PIXEL_SIZE = 0.1;
 // The conversion factor from radian to degree
@@ -60,13 +62,13 @@ constexpr double WAVE_TO_E = 81.8;
 DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadILLDiffraction)
 
 /// Returns confidence. @see IFileLoader::confidence
-int LoadILLDiffraction::confidence(NexusDescriptor &descriptor) const {
+int LoadILLDiffraction::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
 
   // fields existent only at the ILL Diffraction
   // the second one is to recognize D1B, Tx field eliminates SALSA
   // the third one is to recognize IN5/PANTHER/SHARP scan mode
-  if ((descriptor.pathExists("/entry0/instrument/2theta") && !descriptor.pathExists("/entry0/instrument/Tx")) ||
-      descriptor.pathExists("/entry0/instrument/Canne")) {
+  if ((descriptor.isEntry("/entry0/instrument/2theta") && !descriptor.isEntry("/entry0/instrument/Tx")) ||
+      descriptor.isEntry("/entry0/instrument/Canne")) {
     return 80;
   } else {
     return 0;
@@ -88,8 +90,7 @@ const std::string LoadILLDiffraction::summary() const { return "Loads ILL diffra
 /**
  * Constructor
  */
-LoadILLDiffraction::LoadILLDiffraction()
-    : IFileLoader<NexusDescriptor>(), m_instNames({"D20", "D2B", "D1B", "D4C", "IN5", "PANTHER", "SHARP"}) {}
+LoadILLDiffraction::LoadILLDiffraction() : m_instNames({"D20", "D2B", "D1B", "D4C", "IN5", "PANTHER", "SHARP"}) {}
 /**
  * Initialize the algorithm's properties.
  */
@@ -222,15 +223,18 @@ void LoadILLDiffraction::loadMetaData() {
   auto &mutableRun = m_outWorkspace->mutableRun();
   mutableRun.addProperty("Facility", std::string("ILL"));
 
-  // Open NeXus file
-  NXhandle nxHandle;
-  NXstatus nxStat = NXopen(m_filename.c_str(), NXACC_READ, &nxHandle);
-
-  if (nxStat != NX_ERROR) {
-    LoadHelper::addNexusFieldsToWsRun(nxHandle, m_outWorkspace->mutableRun());
-    NXclose(&nxHandle);
+  // get some information from the NeXus file
+  try {
+    Nexus::File filehandle(m_filename, NXaccess::READ);
+    LoadHelper::addNexusFieldsToWsRun(filehandle, mutableRun);
+  } catch (Nexus::Exception const &e) {
+    g_log.debug() << "Failed to open nexus file \"" << m_filename << "\" in read mode: " << e.what() << "\n";
   }
-  mutableRun.addProperty("run_list", mutableRun.getPropertyValueAsType<int>("run_number"));
+
+  if (mutableRun.hasProperty("run_number"))
+    mutableRun.addProperty("run_list", mutableRun.getPropertyValueAsType<int>("run_number"));
+  else
+    throw std::runtime_error("Failed to find run_number in Run object");
 
   if (!mutableRun.hasProperty("Detector.calibration_file"))
     mutableRun.addProperty("Detector.calibration_file", std::string("none"));
@@ -447,10 +451,9 @@ void LoadILLDiffraction::fillMovingInstrumentScan(const NXInt &data, const NXDou
   // prepare inputs, dimension orders and list of accepted IDs for exclusion of inactive detectors (D20)
   std::tuple<int, int, int> dimOrder{2, 1, 0}; // scan - tube - pixel
   std::set<int> acceptedIDs;
-  if (static_cast<int>(m_numberDetectorsActual) != data.dim1() * data.dim2()) {
-    for (auto index = static_cast<int>(NUMBER_MONITORS);
-         index < static_cast<int>(m_numberDetectorsActual + NUMBER_MONITORS); ++index)
-      acceptedIDs.insert(index);
+  if (m_numberDetectorsActual != data.dim1() * data.dim2()) {
+    for (auto index = NUMBER_MONITORS; index < m_numberDetectorsActual + NUMBER_MONITORS; ++index)
+      acceptedIDs.insert(static_cast<detid_t>(index));
   }
   std::vector<int> customDetectorIDs;
   // Assign detector counts
@@ -471,7 +474,7 @@ void LoadILLDiffraction::fillStaticInstrumentScan(const NXInt &data, const NXDou
   const std::vector<double> axis = getAxis(scan);
   const std::vector<double> monitor = getMonitor(scan);
 
-  int startIndex = static_cast<int>(NUMBER_MONITORS);
+  std::size_t startIndex = NUMBER_MONITORS;
 
   // Assign monitor counts
   m_outWorkspace->mutableX(0) = axis;
@@ -480,10 +483,10 @@ void LoadILLDiffraction::fillStaticInstrumentScan(const NXInt &data, const NXDou
 
   // prepare inputs, dimension orders and list of accepted IDs for exclusion of inactive detectors (D20)
   std::tuple<int, int, int> dimOrder{2, 1, 0}; // scan - tube - pixel
-  std::set<int> acceptedIDs;
-  if (static_cast<int>(m_numberDetectorsActual) != data.dim1() * data.dim2()) {
-    for (int i = static_cast<int>(startIndex); i < static_cast<int>(startIndex + m_numberDetectorsActual); ++i)
-      acceptedIDs.insert(i);
+  std::set<detid_t> acceptedIDs;
+  if (m_numberDetectorsActual != data.dim1() * data.dim2()) {
+    for (std::size_t i = startIndex; i < startIndex + m_numberDetectorsActual; ++i)
+      acceptedIDs.insert(static_cast<detid_t>(i));
   }
   // Assign detector counts
   LoadHelper::fillStaticWorkspace(m_outWorkspace, data, axis, startIndex, true, std::vector<int>(), acceptedIDs,
@@ -499,17 +502,16 @@ void LoadILLDiffraction::fillStaticInstrumentScan(const NXInt &data, const NXDou
  * Loads the scanned_variables/variables_names block
  */
 void LoadILLDiffraction::loadScanVars() {
-
-  H5File h5file(m_filename, H5F_ACC_RDONLY);
+  H5File h5file(m_filename, H5F_ACC_RDONLY, Nexus::H5Util::defaultFileAcc());
 
   Group entry0 = h5file.openGroup("entry0");
   Group dataScan = entry0.openGroup("data_scan");
   Group scanVar = dataScan.openGroup("scanned_variables");
   Group varNames = scanVar.openGroup("variables_names");
 
-  const auto names = H5Util::readStringVector(varNames, "name");
-  const auto properties = H5Util::readStringVector(varNames, "property");
-  const auto units = H5Util::readStringVector(varNames, "unit");
+  const auto names = Nexus::H5Util::readStringVector(varNames, "name");
+  const auto properties = Nexus::H5Util::readStringVector(varNames, "property");
+  const auto units = Nexus::H5Util::readStringVector(varNames, "unit");
 
   for (size_t i = 0; i < names.size(); ++i) {
     m_scanVar.emplace_back(ScannedVariables(names[i], properties[i], units[i]));
@@ -732,10 +734,10 @@ void LoadILLDiffraction::moveTwoThetaZero(double twoTheta0Read) {
  */
 std::string LoadILLDiffraction::getInstrumentFilePath(const std::string &instName) const {
 
-  Poco::Path directory(ConfigService::Instance().getInstrumentDirectory());
-  Poco::Path file(instName + "_Definition.xml");
-  Poco::Path fullPath(directory, file);
-  return fullPath.toString();
+  std::filesystem::path directory(ConfigService::Instance().getInstrumentDirectory());
+  std::filesystem::path file(instName + "_Definition.xml");
+  std::filesystem::path fullPath = std::filesystem::path(directory) / file;
+  return fullPath.string();
 }
 
 /** Adds some sample logs needed later by reduction

@@ -22,7 +22,7 @@ from mantid.plots.plotfunctions import manage_workspace_names, figure_title, plo
 
 from mantid.kernel import Logger, ConfigService
 from mantid.plots.datafunctions import add_colorbar_label
-from mantid.plots.utility import get_single_workspace_log_value
+from mantid.plots.utility import get_single_workspace_log_value, legend_set_draggable
 from mantidqt.plotting.figuretype import figure_type, FigureType
 from mantidqt.dialogs.spectraselectorutils import get_spectra_selection
 from mantid.api import IMDHistoWorkspace
@@ -291,6 +291,8 @@ def pcolormesh(workspaces, fig=None, color_norm=None, normalize_by_bin_width=Non
     size = fig.get_size_inches()
     if (size[0] <= COLORPLOT_MIN_WIDTH) or (size[1] <= COLORPLOT_MIN_HEIGHT):
         fig.set_size_inches(COLORPLOT_MIN_WIDTH, COLORPLOT_MIN_HEIGHT, forward=True)
+    if fig.canvas.manager.toolbar:
+        fig.canvas.manager.toolbar.push_current()  # push current nav stack to record original color bar state
     fig.canvas.draw()
     fig.show()
     return fig
@@ -365,18 +367,32 @@ def plot_surface(workspaces, fig=None):
 @manage_workspace_names
 def plot_wireframe(workspaces, fig=None):
     import matplotlib.pyplot as plt
+    from matplotlib import colormaps
 
-    for ws in workspaces:
-        if fig:
-            fig.clf()
-            ax = fig.add_subplot(111, projection="mantid3d")
-        else:
-            fig, ax = plt.subplots(subplot_kw={"projection": "mantid3d"})
+    cmap = colormaps["tab10"]
+    colors = [cmap(i / max(1, len(workspaces) - 1)) for i in range(len(workspaces))]
 
-        fig.set_layout_engine(layout="tight")
-        ax.plot_wireframe(ws)
-        ax.set_title(ws.name())
-        fig.show()
+    if fig:
+        fig.clf()
+        ax = fig.add_subplot(111, projection="mantid3d")
+    else:
+        fig, ax = plt.subplots(subplot_kw={"projection": "mantid3d"})
+
+    for i, ws in enumerate(workspaces):
+        try:
+            ax.plot_wireframe(ws, color=colors[i], label=ws.name())
+        except Exception as e:
+            LOGGER.error(f"Failed to plot workspace {ws.name()}: {e}")
+
+    if len(workspaces) > 1:
+        legend = ax.legend(loc="upper right", title="Workspaces")
+        legend_set_draggable(legend, True)
+
+    workspace_names = ", ".join(ws.name() for ws in workspaces)
+    ax.set_title(f"Wireframe Plot: {workspace_names}")
+
+    fig.set_layout_engine(layout="tight")
+    fig.show()
 
     return fig
 

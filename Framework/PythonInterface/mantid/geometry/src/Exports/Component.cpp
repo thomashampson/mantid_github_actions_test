@@ -20,6 +20,7 @@ GNU_DIAG_OFF("unused-local-typedef")
 GNU_DIAG_OFF("conversion")
 
 // Default parameter function overloads
+// cppcheck-suppress unknownMacro
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(Component_getParameterNames, Component::getParameterNames, 0, 1)
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(Component_hasParameter, Component::hasParameter, 1, 2)
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(Component_getNumberParameter, Component::getNumberParameter, 1, 2)
@@ -76,6 +77,9 @@ void export_Component() {
       // untill rows below do not work
       .def("getParameterType", &Component::getParameterType,
            Component_getParameterType((arg("self"), arg("pname"), arg("recursive") = true)))
+      .def("getFittingParameter", &Component::getFittingParameter, (arg("self"), arg("pname"), arg("xvalue")),
+           "Get fit parameter from the parameter map."
+           " The value of the parameter is determined from a look up table or a formula")
       //// this does not work for some obvious or not obvious reasons
       //.def("getParameter", &Component::getNumberParameter,
       // Component_getNumberParameter())
@@ -87,6 +91,5 @@ void export_Component() {
       // Component_getPositionParameter())
       //.def("getParameter", &Component::getRotationParameter,
       // Component_getRotationParameter())
-
       ;
 }

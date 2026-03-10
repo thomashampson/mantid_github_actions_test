@@ -72,8 +72,13 @@ RunsPresenter::~RunsPresenter() {
  */
 void RunsPresenter::acceptMainPresenter(IBatchPresenter *mainPresenter) { m_mainPresenter = mainPresenter; }
 
-void RunsPresenter::initInstrumentList(const std::string &selectedInstrument) {
+/** Initialise the list of available instruments.
+ * @param selectedInstrument : Optional name of an instrument to try and select from the list.
+ * @returns The name of the instrument that is selected.
+ */
+std::string RunsPresenter::initInstrumentList(const std::string &selectedInstrument) {
   m_view->setInstrumentList(m_instruments, selectedInstrument);
+  return m_view->getSearchInstrument();
 }
 
 RunsTable const &RunsPresenter::runsTable() const { return tablePresenter()->runsTable(); }
@@ -187,7 +192,7 @@ void RunsPresenter::notifyStartMonitorComplete() { startMonitorComplete(); }
 
 void RunsPresenter::notifyRowStateChanged() { tablePresenter()->notifyRowStateChanged(); }
 
-void RunsPresenter::notifyRowStateChanged(boost::optional<Item const &> item) {
+void RunsPresenter::notifyRowStateChanged(std::optional<std::reference_wrapper<Item const>> item) {
   tablePresenter()->notifyRowStateChanged(item);
 }
 
@@ -196,7 +201,7 @@ void RunsPresenter::notifyRowModelChanged() {
   tablePresenter()->notifyRowStateChanged();
 }
 
-void RunsPresenter::notifyRowModelChanged(boost::optional<Item const &> item) {
+void RunsPresenter::notifyRowModelChanged(std::optional<std::reference_wrapper<Item const>> item) {
   tablePresenter()->notifyRowModelChanged(item);
   tablePresenter()->notifyRowStateChanged(item);
 }
@@ -477,8 +482,8 @@ void RunsPresenter::transfer(const std::set<int> &rowsToTransfer, const Transfer
       if (result.hasError() || result.exclude())
         continue;
       auto row = validateRowFromRunAndTheta(result.runNumber(), result.theta());
-      assert(row.is_initialized());
-      mergeRowIntoGroup(jobs, row.get(), m_thetaTolerance, result.groupName());
+      assert(row.has_value());
+      mergeRowIntoGroup(jobs, row.value(), m_thetaTolerance, result.groupName());
     }
 
     tablePresenter()->mergeAdditionalJobs(jobs);
@@ -513,13 +518,14 @@ std::string RunsPresenter::liveDataReductionAlgorithm() { return "ReflectometryR
 
 std::string RunsPresenter::liveDataReductionOptions(const std::string &inputWorkspace, const std::string &instrument) {
   // Get the properties for the reduction algorithm from the settings tabs
-  g_log.warning("Note that lookup of experiment settings by angle/title is not supported for live data.");
-  auto options = m_mainPresenter->rowProcessingProperties();
+  auto options = m_mainPresenter->rowProcessingPropertiesDefault();
+  auto experimentState = m_mainPresenter->getBatchState({"experimentView", "perAngleDefaults", "rows"});
+
   // Add other required input properties to the live data reduction algorithnm
   options->setPropertyValue("InputWorkspace", inputWorkspace);
   options->setPropertyValue("Instrument", instrument);
   options->setPropertyValue("GetLiveValueAlgorithm", "GetLiveInstrumentValue");
-
+  options->setPropertyValue("ExperimentSettingsState", experimentState);
   return convertAlgPropsToString(*options);
 }
 
@@ -542,7 +548,7 @@ IAlgorithm_sptr RunsPresenter::setupLiveDataMonitorAlgorithm() {
   auto errorMap = alg->validateInputs();
   if (!errorMap.empty()) {
     std::string errorString;
-    for (auto &kvp : errorMap)
+    for (auto const &kvp : errorMap)
       errorString.append(kvp.first + ":" + kvp.second);
     handleError(errorString);
     return nullptr;

@@ -61,12 +61,12 @@ function usage() {
   local exitcode=$1
   echo "Usage: $0 [options]"
   echo
-  echo "Create a tarball bundle out of a Conda package. The package is built in $BUILD_DIR."
+  echo "Create a tarball bundle out of a conda package. The package is built in $BUILD_DIR."
   echo "The final name will be '${BUNDLE_PREFIX}{suffix}${BUNDLE_EXTENSION}'"
   echo "This directory will be created if it does not exist or purged if it already exists."
   echo "The final .dmg will be created in the current working directory."
   echo "Options:"
-  echo "  -c Optional Conda channel overriding the default mantid"
+  echo "  -c Optional conda channel overriding the default mantid"
   echo "  -s Optional Add a suffix to the output mantid file, has to be Unstable, or Nightly or not used"
   echo
   exit $exitcode
@@ -113,7 +113,7 @@ bundle_name="$BUNDLE_PREFIX$suffix_lower"
 bundle_icon="${ICON_DIR}/mantid_workbench${suffix_lower}.png"
 bundle_dirname="$bundle_name"
 bundle_contents="$BUILD_DIR"/"$bundle_dirname"
-echo "Building '$bundle_dirname' in '$BUILD_DIR' from '$conda_channel' Conda channel"
+echo "Building '$bundle_dirname' in '$BUILD_DIR' from '$conda_channel' conda channel"
 echo "Using bundle icon ${bundle_icon}"
 
 # Build directory needs to be empty before we start
@@ -132,10 +132,20 @@ mkdir -p "$bundle_contents"
 # Create conda environment internally. --copy ensures no symlinks are used
 bundle_conda_prefix="$bundle_contents"
 
-echo "Creating Conda environment in '$bundle_conda_prefix'"
+# The mantid channel is required as the source for installing mslice
+mantid_channel=mantid
+# If it's a Nightly or Unstable package, use the mantid/label/nightly label so it picks up
+# the nightly version of mslice
+if [[ "$suffix" == "Unstable" ]] || [[ "$suffix" == "Nightly" ]]; then
+  mantid_channel=mantid/label/nightly
+fi
+
+echo "Creating conda environment in '$bundle_conda_prefix'"
 "$CONDA_EXE" create --quiet --prefix "$bundle_conda_prefix" --copy \
-  --channel "$conda_channel" --channel conda-forge --channel mantid --yes \
+  --channel "$conda_channel" --channel conda-forge --channel $mantid_channel --yes \
   mantidworkbench \
+  mantiddocs \
+  mslice \
   jq  # used for processing the version string
 echo
 
@@ -147,9 +157,6 @@ echo
 
 # Remove jq
 "$CONDA_EXE" remove --quiet --prefix "$bundle_conda_prefix" --yes jq
-
-# Pip install quickBayes until there's a conda package
-$bundle_conda_prefix/bin/python -m pip install quickBayes==1.0.0b15
 
 # Trim and fixup bundle
 trim_conda "$bundle_conda_prefix"

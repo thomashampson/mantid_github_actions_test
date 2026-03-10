@@ -10,6 +10,7 @@
 #include <fstream>
 
 #include "MantidAPI/AnalysisDataService.h"
+#include "MantidAPI/FileFinder.h"
 #include "MantidAPI/FrameworkManager.h"
 #include "MantidAPI/WorkspaceGroup.h"
 #include "MantidDataHandling/LoadMcStasNexus.h"
@@ -19,8 +20,6 @@
 #include "MantidDataHandling/Load.h"
 #include "MantidDataHandling/LoadInstrument.h"
 #include "MantidDataObjects/WorkspaceSingleValue.h"
-#include <Poco/Path.h>
-
 using namespace Mantid::API;
 using namespace Mantid::Kernel;
 using namespace Mantid::DataHandling;
@@ -34,6 +33,13 @@ public:
   void testInit() {
     TS_ASSERT_THROWS_NOTHING(algToBeTested.initialize());
     TS_ASSERT(algToBeTested.isInitialized());
+  }
+
+  void testConfidence() {
+    std::string filepath = FileFinder::Instance().getFullPath("mcstas.h5").string();
+    Mantid::Nexus::NexusDescriptorLazy descriptor(filepath);
+    int confidence = algToBeTested.confidence(descriptor);
+    TS_ASSERT_EQUALS(confidence, 40);
   }
 
   void testExec() {
@@ -84,7 +90,7 @@ public:
 
   void test_cannot_run_via_load() {
     // We are verifying that the confidence information provided by the loader is idenfiying unsuitable files
-    std::string inputFile = "POLREF00014966.nxs";
+    std::string inputFile = "mcstas_event_hist.h5";
     Load loader;
     loader.initialize();
     loader.setChild(true);

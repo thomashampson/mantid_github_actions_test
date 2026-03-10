@@ -46,7 +46,7 @@ void copyInstrument(const API::Workspace *source, API::Workspace *target) {
   // Special handling for Worspace Groups.
   if (source->isGroup() && target->isGroup()) {
     auto *sourceGroup = dynamic_cast<const API::WorkspaceGroup *>(source);
-    auto *targetGroup = dynamic_cast<API::WorkspaceGroup *>(target);
+    auto const *targetGroup = dynamic_cast<API::WorkspaceGroup *>(target);
     auto minSize = std::min(sourceGroup->size(), targetGroup->size());
     for (size_t index = 0; index < minSize; ++index) {
       copyInstrument(sourceGroup->getItem(index).get(), targetGroup->getItem(index).get());
@@ -55,7 +55,7 @@ void copyInstrument(const API::Workspace *source, API::Workspace *target) {
     auto *sourceGroup = dynamic_cast<const API::WorkspaceGroup *>(source);
     copyInstrument(sourceGroup->getItem(0).get(), target);
   } else if (target->isGroup()) {
-    auto *targetGroup = dynamic_cast<API::WorkspaceGroup *>(target);
+    auto const *targetGroup = dynamic_cast<API::WorkspaceGroup *>(target);
     copyInstrument(source, targetGroup->getItem(0).get());
   } else {
     if (auto *sourceExpInfo = dynamic_cast<const API::ExperimentInfo *>(source)) {
@@ -77,6 +77,8 @@ const std::string LoadLiveData::category() const { return "DataHandling\\LiveDat
 
 /// Algorithm's version for identification. @see Algorithm::version
 int LoadLiveData::version() const { return 1; }
+
+const std::vector<std::string> LoadLiveData::seeAlso() const { return {"MonitorLiveData", "StartLiveData"}; }
 
 //----------------------------------------------------------------------------------------------
 /** Initialize the algorithm's properties.

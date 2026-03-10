@@ -44,11 +44,9 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
         :param model: A model to define slicing operations. If None uses SliceViewerModel
         :param view: A view to display the operations. If None uses SliceViewerView
         """
-        model: SliceViewerModel = model if model else SliceViewerModel(ws)
-        self.view = (
-            view
-            if view
-            else SliceViewerView(self, Dimensions.get_dimensions_info(ws), model.can_normalize_workspace(), parent, window_flags, conf)
+        model: SliceViewerModel = model or SliceViewerModel(ws)
+        self.view = view or SliceViewerView(
+            self, Dimensions.get_dimensions_info(ws), model.can_normalize_workspace(), parent, window_flags, conf
         )
         super().__init__(ws, self.view.data_view, model)
         self._logger = Logger("SliceViewer")
@@ -77,6 +75,9 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
             self.view.data_view.disable_tool_button(ToolItemText.NONORTHOGONAL_AXES)
         if not self.model.can_support_non_axis_cuts():
             self.view.data_view.disable_tool_button(ToolItemText.NONAXISALIGNEDCUTS)
+
+        # disable masking options until activated
+        self.view.data_view.toggle_masking_options(False)
 
         self.view.data_view.help_button.clicked.connect(self.action_open_help_window)
 
@@ -214,6 +215,11 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
             else:
                 data_view.disable_tool_button(ToolItemText.NONORTHOGONAL_AXES)
 
+        # Reset masking if dimensions changed
+        if self.view.data_view.masking:
+            self.view.data_view.masking.clear_and_disconnect()
+            self.view.data_view.masking.clear_model()
+
         ws_type = WorkspaceInfo.get_ws_type(self.model.ws)
         if ws_type == WS_TYPE.MDH or ws_type == WS_TYPE.MDE:
             if (
@@ -294,6 +300,7 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
                     bin_params=data_view.dimensions.get_bin_params(),
                     pos=pos,
                     transpose=data_view.dimensions.transpose,
+                    dimension_indices=data_view.dimensions.get_states(),
                     axis=axis,
                 )
             )
@@ -388,9 +395,14 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
         @param workspace_name: the name of the workspace that has changed
         @param workspace: the workspace that has changed
         """
-        if self.model.check_for_removed_original_workspace():
-            self._close_view_with_message("Original workspace has been replaced: Closing Slice Viewer")
-            return
+
+        try:
+            if self.model.check_for_removed_original_workspace():
+                self._close_view_with_message("Original workspace has been replaced: Closing Slice Viewer")
+                return
+        except RuntimeError:
+            # can't check for original workspace if existing models workspace has been replaced
+            pass
 
         if not self.model.workspace_equals(workspace_name):
             # TODO this is a dead branch, since the ADS observer will call this if the
@@ -405,7 +417,7 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
 
             # New model is OK, proceed with updating Slice Viewer
             self.model = candidate_model
-            self.new_plot, self.update_plot_data = self._decide_plot_update_methods()
+            self._new_plot_method, self.update_plot_data = self._decide_plot_update_methods()
             self.view.delayed_refresh()
         except ValueError as err:
             self._close_view_with_message(f"Closing Sliceviewer as the underlying workspace was changed: {str(err)}")
@@ -551,7 +563,7 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
         self.view = None
 
     def action_open_help_window(self):
-        InterfaceManager().showHelpPage("qthelp://org.mantidproject/doc/workbench/sliceviewer.html")
+        InterfaceManager().showHelpPage("workbench/sliceviewer.html")
 
     def is_integer_frame(self):
         if self.get_frame() != SpecialCoordinateSystem.HKL:
@@ -588,13 +600,36 @@ class SliceViewer(ObservingPresenter, SliceViewerBasePresenter):
         full_point[ydim] = ydata
         return full_point
 
+    def rect_masking_clicked(self, active) -> None:
+        self.view.data_view.check_masking_shape_toolbar_icons(ToolItemText.RECT_MASKING)
+        self.view.data_view.masking.new_selector(ToolItemText.RECT_MASKING)
+
+    def elli_masking_clicked(self, active) -> None:
+        self.view.data_view.check_masking_shape_toolbar_icons(ToolItemText.ELLI_MASKING)
+        self.view.data_view.masking.new_selector(ToolItemText.ELLI_MASKING)
+
+    def poly_masking_clicked(self, active) -> None:
+        self.view.data_view.check_masking_shape_toolbar_icons(ToolItemText.POLY_MASKING)
+        self.view.data_view.masking.new_selector(ToolItemText.POLY_MASKING)
+
+    def export_masking_clicked(self) -> None:
+        self.view.data_view.masking.export_selectors()
+        self.view.data_view.canvas.draw_idle()
+
+    def apply_masking_clicked(self) -> None:
+        if self.view.data_view.evaluate_apply_masking_msg_box():
+            self.view.data_view.masking.apply_selectors()
+            self.replace_workspace(self.model.ws.name(), self.model.ws)
+
 
 class SliceViewXAxisEditor(XAxisEditor):
     def __init__(self, canvas, axes, dimensions_changed):
         super(SliceViewXAxisEditor, self).__init__(canvas, axes)
         self.dimensions_changed = dimensions_changed
-        self.ui.logBox.hide()
+        self.ui.scaleBox.hide()
+        self.ui.scaleLabel.hide()
         self.ui.gridBox.hide()
+        self.ui.gridLabel.hide()
 
     def on_ok(self):
         super(SliceViewXAxisEditor, self).on_ok()
@@ -605,8 +640,10 @@ class SliceViewYAxisEditor(YAxisEditor):
     def __init__(self, canvas, axes, dimensions_changed):
         super(SliceViewYAxisEditor, self).__init__(canvas, axes)
         self.dimensions_changed = dimensions_changed
-        self.ui.logBox.hide()
+        self.ui.scaleBox.hide()
+        self.ui.scaleLabel.hide()
         self.ui.gridBox.hide()
+        self.ui.gridLabel.hide()
 
     def on_ok(self):
         super(SliceViewYAxisEditor, self).on_ok()

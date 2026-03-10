@@ -21,10 +21,9 @@
 #include "MantidKernel/EnabledWhenProperty.h"
 #include "MantidKernel/Matrix.h"
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
-#include <Poco/File.h>
+#include <filesystem>
 
-using file_holder_type = std::unique_ptr<::NeXus::File>;
+using file_holder_type = std::unique_ptr<Mantid::Nexus::File>;
 
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
@@ -75,12 +74,11 @@ void SaveMD2::doSaveHisto(const Mantid::DataObjects::MDHistoWorkspace_sptr &ws) 
   std::string filename = getPropertyValue("Filename");
 
   // Erase the file if it exists
-  Poco::File oldFile(filename);
-  if (oldFile.exists())
-    oldFile.remove();
+  if (std::filesystem::exists(filename))
+    std::filesystem::remove(filename);
 
   // Create a new file in HDF5 mode.
-  auto file = std::make_unique<::NeXus::File>(filename, NXACC_CREATE5);
+  auto file = std::make_unique<Nexus::File>(filename, NXaccess::CREATE5);
 
   // The base entry. Named so as to distinguish from other workspace types.
   file->makeGroup("MDHistoWorkspace", "NXentry", true);
@@ -136,7 +134,7 @@ void SaveMD2::doSaveHisto(const Mantid::DataObjects::MDHistoWorkspace_sptr &ws) 
     auto nbounds = dim->getNBoundaries();
     for (size_t n = 0; n < nbounds; n++)
       axis.emplace_back(dim->getX(n));
-    file->makeData(axis_title, ::NeXus::FLOAT64, static_cast<int>(dim->getNBoundaries()), true);
+    file->makeData(axis_title, NXnumtype::FLOAT64, static_cast<int>(dim->getNBoundaries()), true);
     file->putData(&axis[0]);
     file->putAttr("units", std::string(dim->getUnits()));
     file->putAttr("long_name", std::string(dim->getName()));
@@ -150,32 +148,32 @@ void SaveMD2::doSaveHisto(const Mantid::DataObjects::MDHistoWorkspace_sptr &ws) 
   // Number of data points
   // Size in each dimension (in the "C" style order, so z,y,x
   // That is, data[z][y][x] = etc.
-  std::vector<int> size(numDims);
+  Nexus::DimVector size(numDims);
   for (size_t d = 0; d < numDims; d++) {
     IMDDimension_const_sptr dim = ws->getDimension(d);
     // Size in each dimension (reverse order for RANK)
-    size[numDims - 1 - d] = int(dim->getNBins());
+    size[numDims - 1 - d] = dim->getNBins();
   }
 
-  std::vector<int> chunks = size;
+  Nexus::DimVector chunks = size;
   chunks[0] = 1; // Drop the largest stride for chunking, I don't know
                  // if this is the best but appears to work
 
-  file->makeCompData("signal", ::NeXus::FLOAT64, size, ::NeXus::LZW, chunks, true);
+  file->makeCompData("signal", NXnumtype::FLOAT64, size, NXcompression::LZW, chunks, true);
   file->putData(ws->getSignalArray());
   file->putAttr("signal", 1);
   file->putAttr("axes", axes_label);
   file->closeData();
 
-  file->makeCompData("errors_squared", ::NeXus::FLOAT64, size, ::NeXus::LZW, chunks, true);
+  file->makeCompData("errors_squared", NXnumtype::FLOAT64, size, NXcompression::LZW, chunks, true);
   file->putData(ws->getErrorSquaredArray());
   file->closeData();
 
-  file->makeCompData("num_events", ::NeXus::FLOAT64, size, ::NeXus::LZW, chunks, true);
+  file->makeCompData("num_events", NXnumtype::FLOAT64, size, NXcompression::LZW, chunks, true);
   file->putData(ws->getNumEventsArray());
   file->closeData();
 
-  file->makeCompData("mask", ::NeXus::INT8, size, ::NeXus::LZW, chunks, true);
+  file->makeCompData("mask", NXnumtype::INT8, size, NXcompression::LZW, chunks, true);
   file->putData(ws->getMaskArray());
   file->closeData();
 

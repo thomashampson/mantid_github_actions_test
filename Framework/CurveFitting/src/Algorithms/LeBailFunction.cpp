@@ -10,8 +10,8 @@
 #include "MantidCurveFitting/Algorithms/Fit.h"
 #include "MantidCurveFitting/Constraints/BoundaryConstraint.h"
 #include "MantidHistogramData/HistogramX.h"
+
 #include "MantidHistogramData/HistogramY.h"
-#include "MantidKernel/System.h"
 
 #include <sstream>
 #include <utility>
@@ -236,7 +236,7 @@ void LeBailFunction::setPeakCentreTolerance(double peakpostol, double tofmin, do
 /** Generate peaks, and add them to this composite function
  * @param peakhkls :: list of Miller indexes (HKL)
  */
-void LeBailFunction::addPeaks(std::vector<std::vector<int>> peakhkls) {
+void LeBailFunction::addPeaks(const std::vector<std::vector<int>> &peakhkls) {
   // Prerequisit
   if (!m_isInputValue)
     throw runtime_error("Client must set up profile parameter vlaues by calling "

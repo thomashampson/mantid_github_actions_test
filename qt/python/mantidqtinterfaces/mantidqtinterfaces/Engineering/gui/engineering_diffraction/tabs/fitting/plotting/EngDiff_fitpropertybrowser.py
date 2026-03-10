@@ -16,6 +16,7 @@ from mantid.api import AnalysisDataService as ADS
 from mantid.simpleapi import logger
 from mantidqtinterfaces.Engineering.gui.engineering_diffraction.settings.settings_helper import get_setting
 from mantidqtinterfaces.Engineering.gui.engineering_diffraction.tabs.common import output_settings
+from ast import literal_eval
 
 BaseBrowser = import_qt(".._common", "mantidqt.widgets", "FitPropertyBrowser")
 
@@ -53,7 +54,7 @@ class EngDiffFitPropertyBrowser(FitPropertyBrowser):
         dict_str = self.getFitAlgorithmParameters()
         if dict_str:
             # evaluate string to make a dict (replace case of bool values)
-            fitprop = eval(dict_str.replace("true", "True").replace("false", "False"))
+            fitprop = literal_eval(dict_str.replace("true", "True").replace("false", "False"))
             fitprop["peak_centre_params"] = self._get_center_param_names()
             fitprop["status"] = self.getFitAlgorithmOutputStatus()
             return fitprop
@@ -113,9 +114,9 @@ class EngDiffFitPropertyBrowser(FitPropertyBrowser):
         self.fit_enabled_notifier.notify_subscribers(self.isFitEnabled() and self.isVisible())
 
     def ws_is_valid(self, ws_name, warn):
-        is_valid = ADS.retrieve(ws_name).getAxis(0).getUnit().caption() == "Time-of-flight"
+        is_valid = ADS.retrieve(ws_name).getAxis(0).getUnit().caption() in ("Time-of-flight", "d-Spacing")
         if not is_valid and warn:
-            logger.warning(f"Workspace {ws_name} will not be available for fitting because it doesn't have units of TOF")
+            logger.warning(f"Workspace {ws_name} will not be available for fitting because it doesn't have units of TOF or d-spacing")
         return is_valid
 
     def _get_allowed_spectra(self):

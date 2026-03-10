@@ -76,23 +76,23 @@ void QtInstrumentView::connectSettingsChange(QCheckBox &edit) {
   connect(&edit, SIGNAL(stateChanged(int)), this, SLOT(onSettingsChanged()));
 }
 
-void QtInstrumentView::disconnectSettingsChange(QLineEdit &edit) {
+void QtInstrumentView::disconnectSettingsChange(QLineEdit const &edit) {
   disconnect(&edit, SIGNAL(textChanged(QString const &)), this, SLOT(onSettingsChanged()));
 }
 
-void QtInstrumentView::disconnectSettingsChange(QSpinBox &edit) {
+void QtInstrumentView::disconnectSettingsChange(QSpinBox const &edit) {
   disconnect(&edit, SIGNAL(valueChanged(QString const &)), this, SLOT(onSettingsChanged()));
 }
 
-void QtInstrumentView::disconnectSettingsChange(QDoubleSpinBox &edit) {
+void QtInstrumentView::disconnectSettingsChange(QDoubleSpinBox const &edit) {
   disconnect(&edit, SIGNAL(valueChanged(QString const &)), this, SLOT(onSettingsChanged()));
 }
 
-void QtInstrumentView::disconnectSettingsChange(QComboBox &edit) {
+void QtInstrumentView::disconnectSettingsChange(QComboBox const &edit) {
   disconnect(&edit, SIGNAL(currentIndexChanged(int)), this, SLOT(onSettingsChanged()));
 }
 
-void QtInstrumentView::disconnectSettingsChange(QCheckBox &edit) {
+void QtInstrumentView::disconnectSettingsChange(QCheckBox const &edit) {
   disconnect(&edit, SIGNAL(stateChanged(int)), this, SLOT(onSettingsChanged()));
 }
 
@@ -178,17 +178,17 @@ void QtInstrumentView::setSelected(QComboBox &box, std::string const &str) {
     box.setCurrentIndex(index);
 }
 
-void QtInstrumentView::setText(QLineEdit &lineEdit, boost::optional<double> value) {
+void QtInstrumentView::setText(QLineEdit &lineEdit, std::optional<double> value) {
   if (value)
-    setText(lineEdit, value.get());
+    setText(lineEdit, value.value());
 }
 
-void QtInstrumentView::setText(QLineEdit &lineEdit, boost::optional<int> value) {
+void QtInstrumentView::setText(QLineEdit &lineEdit, std::optional<int> value) {
   if (value)
-    setText(lineEdit, value.get());
+    setText(lineEdit, value.value());
 }
 
-void QtInstrumentView::setText(QLineEdit &lineEdit, boost::optional<std::string> const &text) {
+void QtInstrumentView::setText(QLineEdit &lineEdit, std::optional<std::string> const &text) {
   if (text && !text->empty())
     setText(lineEdit, text);
 }

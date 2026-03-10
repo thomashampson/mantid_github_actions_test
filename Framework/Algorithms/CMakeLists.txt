@@ -2,10 +2,11 @@ set(SRC_FILES
     src/AbsorptionCorrection.cpp
     src/AddAbsorptionWeightedPathLengths.cpp
     src/AddLogDerivative.cpp
+    src/AddLogInterpolated.cpp
+    src/AddLogSmoothed.cpp
     src/AddPeak.cpp
     src/AddSampleLog.cpp
     src/AddTimeSeriesLog.cpp
-    src/AlignDetectors.cpp
     src/AnnularRingAbsorption.cpp
     src/AnyShapeAbsorption.cpp
     src/ApodizationFunctions.cpp
@@ -47,6 +48,7 @@ set(SRC_FILES
     src/ClearMaskFlag.cpp
     src/CloneWorkspace.cpp
     src/CombineDiffCal.cpp
+    src/CombineTableWorkspaces.cpp
     src/Comment.cpp
     src/CommutativeBinaryOperation.cpp
     src/CompareWorkspaces.cpp
@@ -66,7 +68,6 @@ set(SRC_FILES
     src/ConvertToMatrixWorkspace.cpp
     src/ConvertToPointData.cpp
     src/ConvertUnits.cpp
-    src/ConvertUnitsUsingDetectorTable.cpp
     src/CopyDataRange.cpp
     src/CopyDetectorMapping.cpp
     src/CopyInstrumentParameters.cpp
@@ -78,6 +79,7 @@ set(SRC_FILES
     src/CorrectKiKf.cpp
     src/CorrectTOFAxis.cpp
     src/CorrectToFile.cpp
+    src/CreateBootstrapWorkspaces.cpp
     src/CreateCalFileByNames.cpp
     src/CreateDetectorTable.cpp
     src/CreateDummyCalFile.cpp
@@ -87,6 +89,7 @@ set(SRC_FILES
     src/CreateGroupingWorkspace.cpp
     src/CreateLogPropertyTable.cpp
     src/CreateLogTimeCorrection.cpp
+    src/CreateMonteCarloWorkspace.cpp
     src/CreatePSDBleedMask.cpp
     src/CreatePeaksWorkspace.cpp
     src/CreateSampleWorkspace.cpp
@@ -107,6 +110,7 @@ set(SRC_FILES
     src/DetectorEfficiencyCor.cpp
     src/DetectorEfficiencyCorUser.cpp
     src/DetectorEfficiencyVariation.cpp
+    src/DetermineSpinStateOrder.cpp
     src/DiffractionEventCalibrateDetectors.cpp
     src/DiffractionFocussing.cpp
     src/DiffractionFocussing2.cpp
@@ -120,6 +124,7 @@ set(SRC_FILES
     src/ElasticWindow.cpp
     src/EstimateDivergence.cpp
     src/EstimateResolutionDiffraction.cpp
+    src/EstimateScatteringVolumeCentreOfMass.cpp
     src/EventWorkspaceAccess.cpp
     src/Exponential.cpp
     src/ExponentialCorrection.cpp
@@ -151,6 +156,7 @@ set(SRC_FILES
     src/FitPeak.cpp
     src/FitPeaks.cpp
     src/FixGSASInstrumentFile.cpp
+    src/GenerateFlatCellWorkspaceLOQ.cpp
     src/FlatPlateAbsorption.cpp
     src/GeneralisedSecondDifference.cpp
     src/GenerateEventsFilter.cpp
@@ -234,16 +240,16 @@ set(SRC_FILES
     src/Plus.cpp
     src/PointByPointVCorrection.cpp
     src/PoissonErrors.cpp
-    src/PolarizationCorrections/HeliumAnalyserEfficiency.cpp
-    src/PolarizationCorrections/PolarizationCorrectionsHelpers.cpp
-    src/PolarizationCorrections/SpinStateValidator.cpp
-    src/PolarizationCorrections/PolarizerEfficiency.cpp
     src/PolarizationCorrectionFredrikze.cpp
     src/PolarizationCorrectionWildes.cpp
-    src/PolarizationEfficiencyCor.cpp
     src/PolarizationCorrections/DepolarizedAnalyserTransmission.cpp
     src/PolarizationCorrections/FlipperEfficiency.cpp
+    src/PolarizationCorrections/HeliumAnalyserEfficiency.cpp
+    src/PolarizationCorrections/HeliumAnalyserEfficiencyTime.cpp
+    src/PolarizationCorrections/PolarizationCorrectionsHelpers.cpp
     src/PolarizationCorrections/PolarizationEfficienciesWildes.cpp
+    src/PolarizationCorrections/PolarizerEfficiency.cpp
+    src/PolarizationEfficiencyCor.cpp
     src/PolynomialCorrection.cpp
     src/Power.cpp
     src/PowerLawCorrection.cpp
@@ -284,6 +290,7 @@ set(SRC_FILES
     src/SANSCollimationLengthEstimator.cpp
     src/SampleCorrections/CircularBeamProfile.cpp
     src/SampleCorrections/DetectorGridDefinition.cpp
+    src/SampleCorrections/IBeamProfile.cpp
     src/SampleCorrections/MCAbsorptionStrategy.cpp
     src/SampleCorrections/MCInteractionStatistics.cpp
     src/SampleCorrections/MCInteractionVolume.cpp
@@ -326,9 +333,6 @@ set(SRC_FILES
     src/TOFSANSResolution.cpp
     src/TOFSANSResolutionByPixel.cpp
     src/TOFSANSResolutionByPixelCalculator.cpp
-    src/TimeAtSampleStrategyDirect.cpp
-    src/TimeAtSampleStrategyElastic.cpp
-    src/TimeAtSampleStrategyIndirect.cpp
     src/Transpose.cpp
     src/UnGroupWorkspace.cpp
     src/UnaryOperation.cpp
@@ -352,10 +356,11 @@ set(INC_FILES
     inc/MantidAlgorithms/AbsorptionCorrection.h
     inc/MantidAlgorithms/AddAbsorptionWeightedPathLengths.h
     inc/MantidAlgorithms/AddLogDerivative.h
+    inc/MantidAlgorithms/AddLogInterpolated.h
+    inc/MantidAlgorithms/AddLogSmoothed.h
     inc/MantidAlgorithms/AddPeak.h
     inc/MantidAlgorithms/AddSampleLog.h
     inc/MantidAlgorithms/AddTimeSeriesLog.h
-    inc/MantidAlgorithms/AlignDetectors.h
     inc/MantidAlgorithms/AnnularRingAbsorption.h
     inc/MantidAlgorithms/AnyShapeAbsorption.h
     inc/MantidAlgorithms/ApodizationFunctions.h
@@ -397,6 +402,7 @@ set(INC_FILES
     inc/MantidAlgorithms/ClearMaskFlag.h
     inc/MantidAlgorithms/CloneWorkspace.h
     inc/MantidAlgorithms/CombineDiffCal.h
+    inc/MantidAlgorithms/CombineTableWorkspaces.h
     inc/MantidAlgorithms/Comment.h
     inc/MantidAlgorithms/CommutativeBinaryOperation.h
     inc/MantidAlgorithms/CompareWorkspaces.h
@@ -416,7 +422,6 @@ set(INC_FILES
     inc/MantidAlgorithms/ConvertToMatrixWorkspace.h
     inc/MantidAlgorithms/ConvertToPointData.h
     inc/MantidAlgorithms/ConvertUnits.h
-    inc/MantidAlgorithms/ConvertUnitsUsingDetectorTable.h
     inc/MantidAlgorithms/CopyDataRange.h
     inc/MantidAlgorithms/CopyDetectorMapping.h
     inc/MantidAlgorithms/CopyInstrumentParameters.h
@@ -428,6 +433,7 @@ set(INC_FILES
     inc/MantidAlgorithms/CorrectKiKf.h
     inc/MantidAlgorithms/CorrectTOFAxis.h
     inc/MantidAlgorithms/CorrectToFile.h
+    inc/MantidAlgorithms/CreateBootstrapWorkspaces.h
     inc/MantidAlgorithms/CreateCalFileByNames.h
     inc/MantidAlgorithms/CreateDetectorTable.h
     inc/MantidAlgorithms/CreateDummyCalFile.h
@@ -437,6 +443,7 @@ set(INC_FILES
     inc/MantidAlgorithms/CreateGroupingWorkspace.h
     inc/MantidAlgorithms/CreateLogPropertyTable.h
     inc/MantidAlgorithms/CreateLogTimeCorrection.h
+    inc/MantidAlgorithms/CreateMonteCarloWorkspace.h
     inc/MantidAlgorithms/CreatePSDBleedMask.h
     inc/MantidAlgorithms/CreatePeaksWorkspace.h
     inc/MantidAlgorithms/CreateSampleWorkspace.h
@@ -457,6 +464,7 @@ set(INC_FILES
     inc/MantidAlgorithms/DetectorEfficiencyCor.h
     inc/MantidAlgorithms/DetectorEfficiencyCorUser.h
     inc/MantidAlgorithms/DetectorEfficiencyVariation.h
+    inc/MantidAlgorithms/DetermineSpinStateOrder.h
     inc/MantidAlgorithms/DiffractionEventCalibrateDetectors.h
     inc/MantidAlgorithms/DiffractionFocussing.h
     inc/MantidAlgorithms/DiffractionFocussing2.h
@@ -470,6 +478,7 @@ set(INC_FILES
     inc/MantidAlgorithms/ElasticWindow.h
     inc/MantidAlgorithms/EstimateDivergence.h
     inc/MantidAlgorithms/EstimateResolutionDiffraction.h
+    inc/MantidAlgorithms/EstimateScatteringVolumeCentreOfMass.h
     inc/MantidAlgorithms/EventWorkspaceAccess.h
     inc/MantidAlgorithms/Exponential.h
     inc/MantidAlgorithms/ExponentialCorrection.h
@@ -502,6 +511,7 @@ set(INC_FILES
     inc/MantidAlgorithms/FitPeaks.h
     inc/MantidAlgorithms/FixGSASInstrumentFile.h
     inc/MantidAlgorithms/FlatPlateAbsorption.h
+    inc/MantidAlgorithms/GenerateFlatCellWorkspaceLOQ.h
     inc/MantidAlgorithms/GSLFunctions.h
     inc/MantidAlgorithms/GeneralisedSecondDifference.h
     inc/MantidAlgorithms/GenerateEventsFilter.h
@@ -588,15 +598,15 @@ set(INC_FILES
     inc/MantidAlgorithms/Plus.h
     inc/MantidAlgorithms/PointByPointVCorrection.h
     inc/MantidAlgorithms/PoissonErrors.h
-    inc/MantidAlgorithms/PolarizationCorrections/DepolarizedAnalyserTransmission.h
-    inc/MantidAlgorithms/PolarizationCorrections/HeliumAnalyserEfficiency.h
-    inc/MantidAlgorithms/PolarizationCorrections/PolarizationCorrectionsHelpers.h
-    inc/MantidAlgorithms/PolarizationCorrections/SpinStateValidator.h
-    inc/MantidAlgorithms/PolarizationCorrections/FlipperEfficiency.h
-    inc/MantidAlgorithms/PolarizationCorrections/PolarizerEfficiency.h
-    inc/MantidAlgorithms/PolarizationCorrections/PolarizationEfficienciesWildes.h
     inc/MantidAlgorithms/PolarizationCorrectionFredrikze.h
     inc/MantidAlgorithms/PolarizationCorrectionWildes.h
+    inc/MantidAlgorithms/PolarizationCorrections/DepolarizedAnalyserTransmission.h
+    inc/MantidAlgorithms/PolarizationCorrections/FlipperEfficiency.h
+    inc/MantidAlgorithms/PolarizationCorrections/HeliumAnalyserEfficiency.h
+    inc/MantidAlgorithms/PolarizationCorrections/HeliumAnalyserEfficiencyTime.h
+    inc/MantidAlgorithms/PolarizationCorrections/PolarizationCorrectionsHelpers.h
+    inc/MantidAlgorithms/PolarizationCorrections/PolarizationEfficienciesWildes.h
+    inc/MantidAlgorithms/PolarizationCorrections/PolarizerEfficiency.h
     inc/MantidAlgorithms/PolarizationEfficiencyCor.h
     inc/MantidAlgorithms/PolynomialCorrection.h
     inc/MantidAlgorithms/Power.h
@@ -683,10 +693,6 @@ set(INC_FILES
     inc/MantidAlgorithms/TOFSANSResolution.h
     inc/MantidAlgorithms/TOFSANSResolutionByPixel.h
     inc/MantidAlgorithms/TOFSANSResolutionByPixelCalculator.h
-    inc/MantidAlgorithms/TimeAtSampleStrategy.h
-    inc/MantidAlgorithms/TimeAtSampleStrategyDirect.h
-    inc/MantidAlgorithms/TimeAtSampleStrategyElastic.h
-    inc/MantidAlgorithms/TimeAtSampleStrategyIndirect.h
     inc/MantidAlgorithms/Transpose.h
     inc/MantidAlgorithms/UnGroupWorkspace.h
     inc/MantidAlgorithms/UnaryOperation.h
@@ -709,10 +715,11 @@ set(INC_FILES
 set(TEST_FILES
     AddAbsorptionWeightedPathLengthsTest.h
     AddLogDerivativeTest.h
+    AddLogInterpolatedTest.h
+    AddLogSmoothedTest.h
     AddPeakTest.h
     AddSampleLogTest.h
     AddTimeSeriesLogTest.h
-    AlignDetectorsTest.h
     AnnularRingAbsorptionTest.h
     AnyShapeAbsorptionTest.h
     AppendSpectraTest.h
@@ -755,6 +762,7 @@ set(TEST_FILES
     ClearMaskFlagTest.h
     CloneWorkspaceTest.h
     CombineDiffCalTest.h
+    CombineTableWorkspacesTest.h
     CommentTest.h
     CommutativeBinaryOperationTest.h
     CompareWorkspacesTest.h
@@ -774,7 +782,6 @@ set(TEST_FILES
     ConvertToMatrixWorkspaceTest.h
     ConvertToPointDataTest.h
     ConvertUnitsTest.h
-    ConvertUnitsUsingDetectorTableTest.h
     CopyDataRangeTest.h
     CopyDetectorMappingTest.h
     CopyInstrumentParametersTest.h
@@ -786,6 +793,7 @@ set(TEST_FILES
     CorrectKiKfTest.h
     CorrectTOFAxisTest.h
     CorrectToFileTest.h
+    CreateBootstrapWorkspacesTest.h
     CreateCalFileByNamesTest.h
     CreateDetectorTableTest.h
     CreateDummyCalFileTest.h
@@ -794,6 +802,7 @@ set(TEST_FILES
     CreateGroupingWorkspaceTest.h
     CreateLogPropertyTableTest.h
     CreateLogTimeCorrectionTest.h
+    CreateMonteCarloWorkspaceTest.h
     CreatePSDBleedMaskTest.h
     CreatePeaksWorkspaceTest.h
     CreateSampleWorkspaceTest.h
@@ -815,6 +824,7 @@ set(TEST_FILES
     DetectorEfficiencyCorUserTest.h
     DetectorEfficiencyVariationTest.h
     DetectorGridDefinitionTest.h
+    DetermineSpinStateOrderTest.h
     DiffractionEventCalibrateDetectorsTest.h
     DiffractionFocussing2Test.h
     DiffractionFocussingTest.h
@@ -826,6 +836,7 @@ set(TEST_FILES
     ElasticWindowTest.h
     EstimateDivergenceTest.h
     EstimateResolutionDiffractionTest.h
+    EstimateScatteringVolumeCentreOfMassTest.h
     ExponentialCorrectionTest.h
     ExponentialTest.h
     ExportTimeSeriesLogTest.h
@@ -856,6 +867,7 @@ set(TEST_FILES
     FitPeaksTest.h
     FixGSASInstrumentFileTest.h
     FlatPlateAbsorptionTest.h
+    GenerateFlatCellWorkspaceLOQTest.h
     GeneralisedSecondDifferenceTest.h
     GenerateEventsFilterTest.h
     GenerateGoniometerIndependentBackgroundTest.h
@@ -875,6 +887,7 @@ set(TEST_FILES
     HRPDSlabCanAbsorptionTest.h
     He3TubeEfficiencyTest.h
     HyspecScharpfCorrectionTest.h
+    IBeamProfileTest.h
     IQTransformTest.h
     IdentifyNoisyDetectorsTest.h
     IndirectFitDataCreationHelperTest.h
@@ -937,15 +950,15 @@ set(TEST_FILES
     PlusTest.h
     PointByPointVCorrectionTest.h
     PoissonErrorsTest.h
-    PolarizationCorrections/DepolarizedAnalyserTransmissionTest.h
-    PolarizationCorrections/HeliumAnalyserEfficiencyTest.h
-    PolarizationCorrections/PolarizationCorrectionsHelpersTest.h
-    PolarizationCorrections/SpinStateValidatorTest.h
-    PolarizationCorrections/FlipperEfficiencyTest.h
-    PolarizationCorrections/PolarizerEfficiencyTest.h
-    PolarizationCorrections/PolarizationEfficienciesWildesTest.h
     PolarizationCorrectionFredrikzeTest.h
     PolarizationCorrectionWildesTest.h
+    PolarizationCorrections/DepolarizedAnalyserTransmissionTest.h
+    PolarizationCorrections/FlipperEfficiencyTest.h
+    PolarizationCorrections/HeliumAnalyserEfficiencyTest.h
+    PolarizationCorrections/HeliumAnalyserEfficiencyTimeTest.h
+    PolarizationCorrections/PolarizationCorrectionsHelpersTest.h
+    PolarizationCorrections/PolarizationEfficienciesWildesTest.h
+    PolarizationCorrections/PolarizerEfficiencyTest.h
     PolarizationEfficiencyCorTest.h
     PolynomialCorrectionTest.h
     PowerLawCorrectionTest.h
@@ -1018,9 +1031,6 @@ set(TEST_FILES
     SumSpectraTest.h
     TOFSANSResolutionByPixelCalculatorTest.h
     TOFSANSResolutionByPixelTest.h
-    TimeAtSampleStrategyDirectTest.h
-    TimeAtSampleStrategyElasticTest.h
-    TimeAtSampleStrategyIndirectTest.h
     TransposeTest.h
     UnGroupWorkspaceTest.h
     UnaryOperationTest.h
@@ -1048,17 +1058,28 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Add a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidAlgorithms/PrecompiledHeader.h SRC_FILES)
 # Disable optimization for certain Segfault as the key lines that cause the segfault can be optimized away but this
 # algorithm is only ever intended to test the crashing behaviour of the framework
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-  set_source_files_properties(src/Segfault.cpp PROPERTIES COMPILE_FLAGS -O0)
+  set_source_files_properties(src/Segfault.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON COMPILE_FLAGS -O0)
 endif()
 
 # Add the target for this directory
 add_library(Algorithms ${SRC_FILES} ${C_SRC_FILES} ${INC_FILES})
 add_library(Mantid::Algorithms ALIAS Algorithms)
+
+# Add a precompiled header where they are supported
+target_precompile_headers(
+  Algorithms
+  PRIVATE
+  <MantidAPI/Algorithm.h>
+  <MantidAPI/MatrixWorkspace.h>
+  <boost/algorithm/string.hpp>
+  <boost/format.hpp>
+  <boost/function.hpp>
+  <boost/lexical_cast.hpp>
+  <boost/math/special_functions.hpp>
+)
 
 target_include_directories(
   Algorithms PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>
@@ -1078,7 +1099,7 @@ set_property(TARGET Algorithms PROPERTY FOLDER "MantidFramework")
 target_link_libraries(
   Algorithms
   PUBLIC Mantid::API Mantid::HistogramData Mantid::Kernel Mantid::Geometry Mantid::Indexing
-  PRIVATE Mantid::DataObjects Mantid::Parallel Mantid::Types
+  PRIVATE Mantid::DataObjects Mantid::Types
 )
 
 # Add the unit tests directory

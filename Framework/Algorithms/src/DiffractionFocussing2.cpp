@@ -5,6 +5,7 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidAlgorithms/DiffractionFocussing2.h"
+#include "MantidAPI/AnalysisDataService.h"
 #include "MantidAPI/Axis.h"
 #include "MantidAPI/FileProperty.h"
 #include "MantidAPI/ISpectrum.h"
@@ -13,6 +14,7 @@
 #include "MantidAPI/SpectraAxis.h"
 #include "MantidAPI/SpectrumInfo.h"
 #include "MantidAPI/WorkspaceFactory.h"
+#include "MantidAPI/WorkspaceGroup.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidDataObjects/GroupingWorkspace.h"
 #include "MantidDataObjects/WorkspaceCreation.h"
@@ -46,7 +48,7 @@ void DiffractionFocussing2::init() {
   auto wsValidator = std::make_shared<API::RawCountValidator>();
   declareProperty(
       std::make_unique<API::WorkspaceProperty<MatrixWorkspace>>("InputWorkspace", "", Direction::Input, wsValidator),
-      "A 2D workspace with X values of d-spacing, Q or TOF (TOF support deprecated on 29/04/21)");
+      "A 2D workspace with X values of d-spacing or Q");
   declareProperty(std::make_unique<API::WorkspaceProperty<>>("OutputWorkspace", "", Direction::Output),
                   "The result of diffraction focussing of InputWorkspace");
 
@@ -69,6 +71,7 @@ void DiffractionFocussing2::init() {
   declareProperty(std::make_unique<ArrayProperty<double>>("Delta"),
                   "Step parameters for rebin, positive values are constant step-size, negative are logorithmic. One "
                   "value for each output specta or single value which is common to all");
+  declareProperty("FullBinsOnly", false, "Omit the final bin if it's width is smaller than the step size");
 }
 
 std::map<std::string, std::string> DiffractionFocussing2::validateInputs() {
@@ -89,15 +92,22 @@ std::map<std::string, std::string> DiffractionFocussing2::validateInputs() {
 
   // validate input workspace
   API::MatrixWorkspace_const_sptr inputWS = getProperty("InputWorkspace");
-  // Validate UnitID (spacing)
-  const std::string unitid = inputWS->getAxis(0)->unit()->unitID();
-  if (unitid == "TOF") {
-    g_log.error(
-        "Support for TOF data in DiffractionFocussing is deprecated (on 29/04/21) - use GroupDetectors instead)");
-  } else if (unitid != "dSpacing" && unitid != "MomentumTransfer" && unitid != "TOF") {
-    std::stringstream msg;
-    msg << "UnitID " << unitid << " is not a supported spacing";
-    issues["InputWorkspace"] = msg.str();
+  if (!inputWS) {
+    // Could be a workspace group
+    const auto inputProp =
+        dynamic_cast<const WorkspaceProperty<MatrixWorkspace> *>(getPointerToProperty("InputWorkspace"));
+    API::WorkspaceGroup_const_sptr wsGroup =
+        std::dynamic_pointer_cast<WorkspaceGroup>(AnalysisDataService::Instance().retrieve(inputProp->value()));
+    if (!wsGroup) {
+      issues["InputWorkspace"] = "InputWorksapce must be a matrix workspace or workspace group.";
+    } else {
+      for (const Workspace_sptr &ws : wsGroup->getAllItems()) {
+        inputWS = std::dynamic_pointer_cast<MatrixWorkspace>(ws);
+        validateInputWorkspaceUnit(std::move(inputWS), issues);
+      }
+    }
+  } else {
+    validateInputWorkspaceUnit(std::move(inputWS), issues);
   }
 
   if (isDefault("DMin") && isDefault("DMax") && isDefault("Delta"))
@@ -153,6 +163,17 @@ std::map<std::string, std::string> DiffractionFocussing2::validateInputs() {
   }
 
   return issues;
+}
+
+void DiffractionFocussing2::validateInputWorkspaceUnit(API::MatrixWorkspace_const_sptr inputWS,
+                                                       std::map<std::string, std::string> &issues) {
+  // Validate UnitID (spacing)
+  const std::string unitid = inputWS->getAxis(0)->unit()->unitID();
+  if (unitid != "dSpacing" && unitid != "MomentumTransfer") {
+    std::stringstream msg;
+    msg << "UnitID " << unitid << " is not a supported spacing";
+    issues["InputWorkspace"] = msg.str();
+  }
 }
 
 //=============================================================================
@@ -379,6 +400,13 @@ void DiffractionFocussing2::exec() {
       prog.report();
     } // end of loop for input spectra
 
+    // Finalize the group weights:
+    //   in the case that the requested output domain interval contains all of the input intervals,
+    //   there may be zero-weighted sections at the boundaries.
+    //   (Note that the corresponding y-values should also be zero, but 0.0 / 0.0 is still NaN.)
+    std::transform(groupWgt.cbegin(), groupWgt.cend(), groupWgt.begin(),
+                   [](double w) { return std::fabs(w) < std::numeric_limits<double>::epsilon() ? 1.0 : w; });
+
     // Calculate the bin widths
     std::vector<double> widths(Xout.size());
     std::adjacent_difference(Xout.begin(), Xout.end(), widths.begin());
@@ -392,9 +420,10 @@ void DiffractionFocussing2::exec() {
     std::transform(Yout.begin(), Yout.end(), widths.begin() + 1, Yout.begin(), std::multiplies<double>());
     std::transform(Eout.begin(), Eout.end(), widths.begin() + 1, Eout.begin(), std::multiplies<double>());
 
-    // Now need to normalise the data (and errors) by the weights
+    // Now need to normalise the data (and errors) by the weights.
     std::transform(Yout.begin(), Yout.end(), groupWgt.begin(), Yout.begin(), std::divides<double>());
     std::transform(Eout.begin(), Eout.end(), groupWgt.begin(), Eout.begin(), std::divides<double>());
+
     // Now multiply by the number of spectra in the group
     std::for_each(Yout.begin(), Yout.end(), [groupSize](double &val) { val *= static_cast<double>(groupSize); });
     std::for_each(Eout.begin(), Eout.end(), [groupSize](double &val) { val *= static_cast<double>(groupSize); });
@@ -737,6 +766,8 @@ void DiffractionFocussing2::determineRebinParametersFromParameters(const std::ve
 
   nGroups = groups.size(); // Number of unique groups
 
+  const bool fullBinsOnly = getProperty("FullBinsOnly");
+
   // only now can we check that the length of rebin parameters are correct
   std::vector<double> xmins = getProperty("DMin");
   std::vector<double> xmaxs = getProperty("DMax");
@@ -763,11 +794,12 @@ void DiffractionFocussing2::determineRebinParametersFromParameters(const std::ve
   if (numDelta == 1)
     deltas.resize(nGroups, deltas[0]);
 
-  // Iterator over all groups to create the new X vectors
+  // Iterate over all groups to create the new X vectors
   size_t i = 0;
   for (auto group : groups) {
     HistogramData::BinEdges xnew(0);
-    static_cast<void>(VectorHelper::createAxisFromRebinParams({xmins[i], deltas[i], xmaxs[i]}, xnew.mutableRawData()));
+    static_cast<void>(VectorHelper::createAxisFromRebinParams({xmins[i], deltas[i], xmaxs[i]}, xnew.mutableRawData(),
+                                                              true, fullBinsOnly));
     group2xvector[group] = xnew; // Register this vector in the map
     group2xstep[group] = deltas[i];
     i++;
@@ -823,7 +855,7 @@ size_t DiffractionFocussing2::setupGroupToWSIndices() {
   for (const auto &item : group2xvector) {
     const auto group = item.first;
     m_validGroups.emplace_back(group);
-    totalHistProcess += wsIndices[group].size();
+    totalHistProcess += wsIndices[group].size(); // cppcheck-suppress containerOutOfBounds
   }
 
   std::transform(m_validGroups.cbegin(), m_validGroups.cend(), std::back_inserter(m_wsIndices),

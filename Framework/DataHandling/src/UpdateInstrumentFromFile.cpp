@@ -15,18 +15,16 @@
 #include "MantidGeometry/Instrument.h"
 #include "MantidGeometry/Instrument/DetectorGroup.h"
 #include "MantidGeometry/Instrument/DetectorInfo.h"
-#include "MantidKernel/NexusDescriptor.h"
 #include "MantidKernel/StringTokenizer.h"
+#include "MantidNexus/NexusDescriptorLazy.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
+#include <H5Cpp.h>
+#include <algorithm>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/scoped_ptr.hpp>
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
-
-#include <algorithm>
 #include <fstream>
 
 namespace Mantid::DataHandling {
@@ -91,20 +89,16 @@ void UpdateInstrumentFromFile::exec() {
   m_ignoreMonitors = (!moveMonitors);
 
   // Check file type
-  if (NexusDescriptor::isReadable(filename)) {
+  if (H5::H5File::isHdf5(filename)) {
     LoadISISNexus2 isisNexus;
     LoadEventNexus eventNexus;
 
     // we open and close the HDF5 file.
-    // there is an issue with how HDF5 files are opened (only one at a time)
-    // swap the order of descriptors
-    boost::scoped_ptr<Kernel::NexusHDF5Descriptor> descriptorNexusHDF5(new Kernel::NexusHDF5Descriptor(filename));
+    boost::scoped_ptr<Nexus::NexusDescriptorLazy> descriptorNexusLazy(new Nexus::NexusDescriptorLazy(filename));
 
-    boost::scoped_ptr<Kernel::NexusDescriptor> descriptor(new Kernel::NexusDescriptor(filename));
-
-    if (isisNexus.confidence(*descriptor) > 0 || eventNexus.confidence(*descriptorNexusHDF5) > 0) {
-      auto &nxFile = descriptor->data();
-      const auto &rootEntry = descriptor->firstEntryNameType();
+    if (isisNexus.confidence(*descriptorNexusLazy) > 0 || eventNexus.confidence(*descriptorNexusLazy) > 0) {
+      const auto &rootEntry = descriptorNexusLazy->firstEntryNameType();
+      Nexus::File nxFile(filename);
       nxFile.openGroup(rootEntry.first, rootEntry.second);
       updateFromNeXus(nxFile);
       return;
@@ -164,10 +158,10 @@ void UpdateInstrumentFromFile::updateFromRaw(const std::string &filename) {
  * Update the detector information from a NeXus file
  * @param nxFile :: Handle to a NeXus file where the root group has been opened
  */
-void UpdateInstrumentFromFile::updateFromNeXus(::NeXus::File &nxFile) {
+void UpdateInstrumentFromFile::updateFromNeXus(Nexus::File &nxFile) {
   try {
     nxFile.openGroup("isis_vms_compat", "IXvms");
-  } catch (::NeXus::Exception &) {
+  } catch (Nexus::Exception const &) {
     throw std::runtime_error("Unknown NeXus flavour. Cannot update instrument "
                              "positions using this type of file");
   }

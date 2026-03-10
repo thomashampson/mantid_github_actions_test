@@ -8,7 +8,7 @@
   "configurePresets": [
     {
       "name": "conda",
-      "description": "Inherited by all Conda-based, non-hidden presets",
+      "description": "Inherited by all conda-based, non-hidden presets",
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "generator": "Ninja",
@@ -23,21 +23,23 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_PRECOMMIT": "OFF",
-        "COLORED_COMPILER_OUTPUT": "OFF"
+        "COLORED_COMPILER_OUTPUT": "OFF",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
       }
     },
     {
       "name": "unix-debug",
-      "description": "Inherited by all Unix-like presets for debugging. Overrides Conda CXX flags for debugging",
+      "description": "Inherited by all Unix-like presets for debugging. Overrides conda CXX flags for debugging",
       "hidden": true,
       "cacheVariables": {
         "CMAKE_CXX_FLAGS_DEBUG": "-g -Og",
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_DISABLE_PRECOMPILE_HEADERS": "ON"
       }
     },
     {
       "name": "osx-default",
-      "description": "Inherited by all OSX configurations",
+      "description": "Inherited by all macOS configurations",
       "hidden": true,
       "cacheVariables": {
         "CMAKE_FIND_FRAMEWORK": "LAST",
@@ -45,8 +47,8 @@
       }
     },
     {
-      "name": "osx-64-ci",
-      "description": "Build options for a CI build on OSX",
+      "name": "osx-arm64-ci",
+      "description": "Build options for a CI build on an Arm macOS machine",
       "inherits": [
         "osx-default",
         "ci-default",
@@ -61,7 +63,7 @@
         "conda"
       ],
       "cacheVariables": {
-        "PROFILE_ALGORITHM_LINUX": "ON"
+        "CMAKE_DISABLE_PRECOMPILE_HEADERS": "ON"
       }
     },
     {
@@ -71,7 +73,8 @@
         "ci-default",
         "conda"
       ],
-      "generator": "Visual Studio 16 2019"
+      "generator": "Visual Studio 17 2022",
+      "toolset": "v143"
     },
     {
       "name": "win-64-ci-ninja",
@@ -79,10 +82,7 @@
       "inherits": [
         "ci-default",
         "conda"
-      ],
-      "cacheVariables": {
-        "USE_PRECOMPILED_HEADERS": "OFF"
-      }
+      ]
     },
     {
       "name": "cppcheck-ci",
@@ -110,7 +110,7 @@
     },
     {
       "name": "osx",
-      "description": "Default build options for a developer OSX build",
+      "description": "Default build options for a developer macOS build",
       "inherits": [
         "unix-debug",
         "osx-default",
@@ -123,10 +123,7 @@
       "inherits": [
         "unix-debug",
         "conda"
-      ],
-      "cacheVariables": {
-        "PROFILE_ALGORITHM_LINUX": "ON"
-      }
+      ]
     },
     {
       "name": "win-vs-2019",
@@ -143,7 +140,7 @@
         "conda"
       ],
       "generator": "Visual Studio 17 2022",
-      "toolset": "v142"
+      "toolset": "v143"
     },
     {
       "name": "win-ninja",

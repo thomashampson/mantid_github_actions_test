@@ -15,7 +15,7 @@ namespace DataObjects {
 
 /** An OffsetsWorkspace is a specialized Workspace2D where
  * the Y value at each pixel is the offset to be used for correcting
- * calculations (specifically AlignDetectors).
+ * calculations.
  *
  * @author Janik Zikovsky
  * @date 2011-05-09
@@ -51,3 +51,12 @@ using OffsetsWorkspace_const_sptr = std::shared_ptr<const OffsetsWorkspace>;
 
 } // namespace DataObjects
 } // namespace Mantid
+
+#ifndef DataObjects_EXPORTS
+#include "MantidAPI/WorkspaceProperty.h"
+namespace Mantid::API {
+/// @cond
+extern template class MANTID_DATAOBJECTS_DLL WorkspaceProperty<DataObjects::OffsetsWorkspace>;
+/// @endcond
+} // namespace Mantid::API
+#endif

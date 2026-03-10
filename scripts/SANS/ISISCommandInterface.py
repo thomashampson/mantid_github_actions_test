@@ -30,8 +30,8 @@ import warnings
 warnings.simplefilter("default", category=DeprecationWarning)
 warnings.warn(
     "This ISIS Command Interface is deprecated.\n"
-    "Please change 'import ISISCommandInterface' or 'from ISISCommandInterface'"
-    "to use 'sans.command_interface.ISISCommandInterface' instead.",
+    "Please import using 'sans.command_interface.ISISCommandInterface'"
+    "instead of 'import ISISCommandInterface' or 'from ISISCommandInterface'.",
     DeprecationWarning,
     stacklevel=2,
 )
@@ -2088,7 +2088,7 @@ def ViewCurrentMask():
     detectors in the bank in a different colour
     """
     raise NotImplementedError(
-        "This is no longer implemented as it required MantidPlot, please switch" "to sans.command_interface.ISISCommandInterface instead"
+        "This is no longer implemented as it required MantidPlot, please switch to sans.command_interface.ISISCommandInterface instead"
     )
 
 

@@ -195,14 +195,14 @@ std::string TimeSplitter::debugPrint() const {
 const std::map<DateAndTime, int> &TimeSplitter::getSplittersMap() const { return m_roi_map; }
 
 // Get the target name from the target index.
-std::string TimeSplitter::getWorkspaceIndexName(const int workspaceIndex, const int numericalShift) {
+std::string TimeSplitter::getWorkspaceIndexName(const int workspaceIndex, const int numericalShift) const {
   if (m_index_name_map.count(workspaceIndex) == 0) {
     std::stringstream msg;
     msg << "Invalid target index " << workspaceIndex << " when calling TimeSplitter::getWorkspaceIndexName";
     throw std::runtime_error(msg.str());
   }
 
-  std::string target_name = m_index_name_map[workspaceIndex];
+  std::string target_name = m_index_name_map.at(workspaceIndex);
 
   // If numericalShift is not zero, the "_index" suffix of the name will be shifted.
   // This is needed to support FilterEvents property OutputWorkspaceIndexedFrom1.
@@ -218,7 +218,7 @@ std::string TimeSplitter::getWorkspaceIndexName(const int workspaceIndex, const 
           "FilterEvents property \"OutputWorkspaceIndexedFrom1\" is not compatible with non-numeric targets.");
     }
 
-    assert(target_index == m_name_index_map[target_name]);
+    assert(target_index == m_name_index_map.at(target_name));
     std::stringstream s;
     s << target_index + numericalShift;
     return s.str();
@@ -676,6 +676,63 @@ void TimeSplitter::splitEventVec(const std::function<const DateAndTime(const Eve
       }
     }
   }
+}
+
+/**
+ * @brief Calculate the target indices for a given set of times.
+  Returns a vector of pairs, where each pair contains a target index and a pair of size_t representing the start and
+ stop indices in the input times vector that correspond to that target.
+
+ *
+ * @param times
+ * @return std::vector<std::pair<int, std::pair<size_t, size_t>>>
+ */
+std::vector<std::pair<int, std::pair<size_t, size_t>>>
+TimeSplitter::calculate_target_indices(const std::vector<DateAndTime> &times) const {
+  const auto splittingIntervals = this->getSplittingIntervals(false);
+
+  std::vector<std::pair<int, std::pair<size_t, size_t>>> indices;
+  indices.reserve(splittingIntervals.size());
+
+  for (const auto &it : splittingIntervals) {
+    const auto startIdx = std::lower_bound(times.cbegin(), times.cend(), it.start());
+    if (startIdx != times.cend()) {
+      const auto stopIdx = std::lower_bound(times.cbegin(), times.cend(), it.stop());
+      if (stopIdx != times.cend()) {
+        if (startIdx != stopIdx) {
+          indices.emplace_back(it.index(), std::make_pair(std::distance(times.cbegin(), startIdx),
+                                                          std::distance(times.cbegin(), stopIdx)));
+        }
+      } else {
+        indices.emplace_back(
+            it.index(), std::make_pair(std::distance(times.cbegin(), startIdx), std::numeric_limits<size_t>::max()));
+      }
+    }
+  }
+
+  return indices;
+}
+
+/**
+ * @brief Returns a combined TimeROI covering all intervals.
+ *
+ * @param start_offset Offset in nanoseconds to subtract from interval start times.
+ *        This accounts for TOF (Time-of-Flight) values that may extend before the pulse time.
+ *        Pass 0 if no offset is required.
+ * @return TimeROI covering all intervals, with start times adjusted by start_offset.
+ */
+const TimeROI TimeSplitter::combinedTimeROI(const int64_t start_offset) const {
+  TimeROI combined;
+
+  auto it = m_roi_map.cbegin();
+  for (; it != std::prev(m_roi_map.cend()); it++) {
+    if (it->second == NO_TARGET)
+      continue;
+    DateAndTime intervalStart = it->first - start_offset;
+    DateAndTime intervalStop = std::next(it)->first;
+    combined.addROI(intervalStart, intervalStop);
+  }
+  return combined;
 }
 
 } // namespace DataObjects

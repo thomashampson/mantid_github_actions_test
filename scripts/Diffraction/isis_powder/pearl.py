@@ -6,6 +6,7 @@
 # SPDX - License - Identifier: GPL - 3.0 +
 from contextlib import contextmanager
 import os
+from ast import literal_eval
 
 import mantid.simpleapi as mantid
 from mantid.kernel import logger
@@ -98,7 +99,7 @@ class Pearl(AbstractInst):
 
     def get_trans_module_indices(self):
         default_imods = list(range(9))  # all modules 1-9 in transverse banks (tth~90 deg)
-        default_mod_nums_str = ""
+        default_mod_nums_str = "1-9"
         if self._inst_settings.focus_mode != "trans_custom" or not self._inst_settings.trans_mod_nums:
             return default_imods, default_mod_nums_str
         mod_nums = common.generate_run_numbers(run_number_string=self._inst_settings.trans_mod_nums)
@@ -206,7 +207,7 @@ class Pearl(AbstractInst):
             name_key = "name"
             path_key = "path"
             if isinstance(self._inst_settings.attenuation_files, str):
-                self._inst_settings.attenuation_files = eval(self._inst_settings.attenuation_files)
+                self._inst_settings.attenuation_files = literal_eval(self._inst_settings.attenuation_files)
             atten_file_found = False
             for atten_file in self._inst_settings.attenuation_files:
                 if any(required_key not in atten_file for required_key in [name_key, path_key]):
@@ -255,7 +256,7 @@ class Pearl(AbstractInst):
         if self._inst_settings.gen_absorb:
             absorb_file_name = self._inst_settings.absorb_out_file
             if not absorb_file_name:
-                raise RuntimeError('"absorb_corrections_out_filename" must be supplied when generating absorption ' "corrections")
+                raise RuntimeError('"absorb_corrections_out_filename" must be supplied when generating absorption corrections')
             absorb_corrections = pearl_algs.generate_vanadium_absorb_corrections(van_ws=ws_to_correct, output_filename=absorb_file_name)
         else:
             absorb_corrections = None

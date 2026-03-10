@@ -72,8 +72,7 @@ def get_plugin_paths_as_set(key):
     @returns A set containing defined plugins paths
     """
     s = set(config[key].split(PATH_SEPARATOR))
-    if "" in s:
-        s.remove("")
+    s.discard("")
     return s
 
 
@@ -250,8 +249,6 @@ def contains_algorithm(filename):
     """
     alg_found = True
     try:
-        from io import open
-
         with open(filename, "r", encoding="UTF-8") as plugin_file:
             # linear search through file
             # looking from the bottom would be better, but searching from the top doesn't appear to

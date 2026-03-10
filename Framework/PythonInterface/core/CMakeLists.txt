@@ -7,6 +7,8 @@ set(SRC_FILES
     src/ErrorHandling.cpp
     src/GlobalInterpreterLock.cpp
     src/NDArray.cpp
+    src/PythonObjectProperty.cpp
+    src/PythonObjectTypeValidator.cpp
     src/ReleaseGlobalInterpreterLock.cpp
     src/UninstallTrace.cpp
     src/PythonLoggingChannel.cpp
@@ -36,6 +38,8 @@ set(INC_FILES
     inc/MantidPythonInterface/core/PropertyWithValueExporter.h
     inc/MantidPythonInterface/core/PythonLoggingChannel.h
     inc/MantidPythonInterface/core/PythonObjectInstantiator.h
+    inc/MantidPythonInterface/core/PythonObjectProperty.h
+    inc/MantidPythonInterface/core/PythonObjectTypeValidator.h
     inc/MantidPythonInterface/core/PythonStdoutChannel.h
     inc/MantidPythonInterface/core/ReleaseGlobalInterpreterLock.h
     inc/MantidPythonInterface/core/StlExportDefinitions.h
@@ -65,14 +69,23 @@ set(INC_FILES
     inc/MantidPythonInterface/core/Policies/VectorToNumpy.h
 )
 
-# Add a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidPythonInterface/core/PrecompiledHeader.h SRC_FILES)
-
 # Add the target for this directory
 set(_target_name PythonInterfaceCore)
 
 add_library(${_target_name} ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::${_target_name} ALIAS ${_target_name})
+
+# Add a precompiled header
+target_precompile_headers(
+  ${_target_name}
+  PRIVATE
+  <memory>
+  <string>
+  <boost/python/class.hpp>
+  <boost/python/dict.hpp>
+  <boost/python/extract.hpp>
+  <boost/python/list.hpp>
+)
 
 target_include_directories(
   ${_target_name} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

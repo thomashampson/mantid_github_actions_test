@@ -68,6 +68,7 @@ public:
   Mantid::Geometry::Instrument_const_sptr instrument() const override;
   std::string instrumentName() const override;
   bool discardChanges(std::string const &message) const override;
+  std::string encodeBatchToStr(const std::vector<std::string> &jsonKey) const override;
 
   // MainWindowSubscriber overrides
   void notifyHelpPressed() override;
@@ -99,7 +100,7 @@ private:
   bool isAnyBatchUnsaved() const override;
   bool isRoundChecked() const override;
   int &getRoundPrecision() const override;
-  boost::optional<int> roundPrecision() const override;
+  std::optional<int> roundPrecision() const override;
   bool isWarnProcessAllChecked() const override;
   bool isWarnProcessPartialGroupChecked() const override;
   bool isCloseBatchPrevented(int batchIndex) const override;
@@ -108,10 +109,11 @@ private:
   void optionsChanged() const;
   void showHelp();
   void addNewBatch(IBatchView *batchView);
-  void initNewBatch(IBatchPresenter *batchPresenter, std::string const &instrument, boost::optional<int> precision);
+  void initNewBatch(IBatchPresenter *batchPresenter, std::string const &instrument, std::optional<int> precision);
   void updateInstrument(const std::string &instrumentName);
   void setDefaultInstrument(const std::string &newInstrument);
   void onInstrumentChanged();
+  void processInstrumentSelection(std::string const &selectedInstrument, IBatchPresenter *batchPresenter = nullptr);
 
   void disableSaveAndLoadBatch();
   void enableSaveAndLoadBatch();

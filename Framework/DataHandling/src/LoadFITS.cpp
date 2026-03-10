@@ -21,8 +21,7 @@
 #include <boost/scoped_array.hpp>
 
 #include <Poco/BinaryReader.h>
-#include <Poco/Path.h>
-
+#include <filesystem>
 using namespace Mantid::DataHandling;
 using namespace Mantid::DataObjects;
 using namespace Mantid::API;
@@ -542,9 +541,8 @@ void LoadFITS::parseHeader(FITSInfo &headerInfo) {
 
         // Comments on header entries are added after the value separated by a /
         // symbol. Exclude those comments.
-        auto slashPos = value.find('/');
-        if (slashPos > 0)
-          value = value.substr(0, slashPos);
+        if (auto pos = value.find('/'); pos != std::string::npos && pos > 0)
+          value.erase(pos);
 
         boost::trim(key);
         boost::trim(value);
@@ -647,7 +645,7 @@ Workspace2D_sptr LoadFITS::makeWorkspace(const FITSInfo &fileInfo, size_t &newFi
   }
 
   try {
-    ws->setTitle(Poco::Path(fileInfo.filePath).getFileName());
+    ws->setTitle(std::filesystem::path(fileInfo.filePath).filename().string());
   } catch (std::runtime_error &) {
     ws->setTitle(padZeros(newFileNumber, g_DIGIT_SIZE_APPEND));
   }

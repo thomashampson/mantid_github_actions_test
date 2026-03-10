@@ -31,7 +31,6 @@
 #include <Poco/DOM/Node.h>
 #include <Poco/DOM/NodeList.h>
 #include <Poco/DOM/Text.h>
-#include <Poco/Path.h>
 #include <Poco/SAX/InputSource.h>
 
 #include <algorithm>
@@ -247,7 +246,7 @@ void LoadSpice2D::setInputPropertiesAsMemberProperties() {
   try {
     m_xmlHandler = XmlHandler(fileName);
   } catch (...) {
-    throw Kernel::Exception::FileError("Unable to parse File:", fileName);
+    throw Kernel::Exception::FileError("Unable to parse File:", std::move(fileName));
   }
 }
 
@@ -610,7 +609,7 @@ void LoadSpice2D::runLoadInstrument(const std::string &inst_name, const DataObje
  * @param name ::  element name
  * @param fileName :: xml file name
  */
-void LoadSpice2D::throwException(Poco::XML::Element *elem, const std::string &name, const std::string &fileName) {
+void LoadSpice2D::throwException(Poco::XML::Element const *elem, const std::string &name, const std::string &fileName) {
   if (!elem) {
     throw Kernel::Exception::NotFoundError(name + " element not found in Spice XML file", fileName);
   }

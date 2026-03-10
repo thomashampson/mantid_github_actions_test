@@ -114,7 +114,7 @@ TECH_DOCS = [
     "reflectometry.rst",
 ]
 
-MANTID_DOI = "`doi: 10.5286/SOFTWARE/MANTID{version_maj_min} <https://dx.doi.org/10.5286/SOFTWARE/" "MANTID{version_maj_min}>`_"
+MANTID_DOI = "`doi: 10.5286/SOFTWARE/MANTID{version_maj_min} <https://dx.doi.org/10.5286/SOFTWARE/MANTID{version_maj_min}>`_"
 
 #################################################################################
 # Lists to help create the subfolders
@@ -157,8 +157,7 @@ def getTemplateRoot() -> pathlib.Path:
 
 
 def fixReleaseName(name):
-    if name.startswith("v"):
-        name = name[1:]
+    name = name.removeprefix("v")
 
     # make sure that all of the parts can be converted to integers
     try:

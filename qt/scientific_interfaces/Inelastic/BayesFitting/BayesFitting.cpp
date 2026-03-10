@@ -6,43 +6,57 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "BayesFitting.h"
 #include "MantidQtWidgets/Spectroscopy/SettingsWidget/Settings.h"
-#include "Quasi.h"
+#include "QuasiModel.h"
+#include "QuasiPresenter.h"
+#include "QuasiView.h"
 #include "ResNormPresenter.h"
-#include "Stretch.h"
+#include "StretchPresenter.h"
 
 #include <MantidQtWidgets/Common/QtJobRunner.h>
-
-using namespace MantidQt::CustomInterfaces;
 
 namespace MantidQt::CustomInterfaces {
 DECLARE_SUBWINDOW(BayesFitting)
 
 BayesFitting::BayesFitting(QWidget *parent)
-    : InelasticInterface(parent), m_changeObserver(*this, &BayesFitting::handleDirectoryChange) {
+    : InelasticInterface(parent), m_changeObserver(*this, &BayesFitting::handleDirectoryChange),
+      m_backend(BayesBackendType::QUASI_ELASTIC_BAYES) {
   m_uiForm.setupUi(this);
   m_uiForm.pbSettings->setIcon(Settings::icon());
+  setBackend(backendToQStr.at(m_backend));
 
   // Connect Poco Notification Observer
   Mantid::Kernel::ConfigService::Instance().addObserver(m_changeObserver);
 
-  auto jobRunner = std::make_unique<MantidQt::API::QtJobRunner>(true);
-  auto algorithmRunner = std::make_unique<MantidQt::API::AlgorithmRunner>(std::move(jobRunner));
+  auto resNormRunner = createAlgorithmRunner();
 
   // insert each tab into the interface on creation
   auto resNormModel = std::make_unique<ResNormModel>();
   auto resNormWidget = m_uiForm.bayesFittingTabs->widget(RES_NORM);
-  m_bayesTabs.emplace(RES_NORM, new ResNormPresenter(resNormWidget, std::move(algorithmRunner), std::move(resNormModel),
+  m_bayesTabs.emplace(RES_NORM, new ResNormPresenter(resNormWidget, std::move(resNormRunner), std::move(resNormModel),
                                                      new ResNormView(resNormWidget)));
 
-  m_bayesTabs.emplace(QUASI, new Quasi(m_uiForm.bayesFittingTabs->widget(QUASI)));
-  m_bayesTabs.emplace(STRETCH, new Stretch(m_uiForm.bayesFittingTabs->widget(STRETCH)));
+  auto quasiRunner = createAlgorithmRunner();
+  auto quasiModel = std::make_unique<QuasiModel>();
+  auto quasiWidget = m_uiForm.bayesFittingTabs->widget(QUASI);
+  m_bayesTabs.emplace(QUASI, new QuasiPresenter(quasiWidget, std::move(quasiRunner), std::move(quasiModel),
+                                                new QuasiView(quasiWidget)));
+
+  auto stretchRunner = createAlgorithmRunner();
+
+  auto tabContent = m_uiForm.bayesFittingTabs->widget(STRETCH);
+  m_bayesTabs.emplace(STRETCH, new StretchPresenter(tabContent, new StretchView(tabContent),
+                                                    std::make_unique<StretchModel>(), std::move(stretchRunner)));
+}
+
+std::unique_ptr<MantidQt::API::AlgorithmRunner> BayesFitting::createAlgorithmRunner() const {
+  auto jobRunner = std::make_unique<MantidQt::API::QtJobRunner>(true);
+  return std::make_unique<MantidQt::API::AlgorithmRunner>(std::move(jobRunner));
 }
 
 void BayesFitting::initLayout() {
   // Connect each tab to the actions available in this GUI
-  std::map<unsigned int, BayesFittingTab *>::iterator iter;
-  for (iter = m_bayesTabs.begin(); iter != m_bayesTabs.end(); ++iter) {
-    connect(iter->second, &BayesFittingTab::showMessageBox, this, &BayesFitting::showMessageBox);
+  for (const auto &tab : m_bayesTabs) {
+    connect(tab.second, &BayesFittingTab::showMessageBox, this, &BayesFitting::showMessageBox);
   }
 
   loadSettings();
@@ -50,6 +64,7 @@ void BayesFitting::initLayout() {
   connect(m_uiForm.pbSettings, &QPushButton::clicked, this, &BayesFitting::settings);
   connect(m_uiForm.pbHelp, &QPushButton::clicked, this, &BayesFitting::help);
   connect(m_uiForm.pbManageDirs, &QPushButton::clicked, this, &BayesFitting::manageUserDirectories);
+  connect(m_uiForm.backendChoice, &QComboBox::currentTextChanged, this, &BayesFitting::setBackend);
 
   InelasticInterface::initLayout();
 }
@@ -103,6 +118,29 @@ void BayesFitting::applySettings(std::map<std::string, QVariant> const &settings
 }
 
 std::string BayesFitting::documentationPage() const { return "Inelastic Bayes Fitting"; }
+
+void BayesFitting::setBackend(const QString &text) {
+  BayesBackendType newBackend = m_backend;
+  if (text == backendToQStr.at(BayesBackendType::QUASI_ELASTIC_BAYES)) {
+    newBackend = BayesBackendType::QUASI_ELASTIC_BAYES;
+    m_uiForm.warningLabel->setText(
+        "Warning: quasielasticbayes (old Fortran library) is deprecated. This library will be\n"
+        "removed once confidence in quickbayes (new Python library) has been established.");
+    m_uiForm.backendChoice->setToolTip("Old Fortran library");
+  } else if (text == backendToQStr.at(BayesBackendType::QUICK_BAYES)) {
+    newBackend = BayesBackendType::QUICK_BAYES;
+    m_uiForm.warningLabel->setText(
+        "Warning: the process to establish confidence in quickbayes (new Python library)\n"
+        "is ongoing. Please feedback any issues you encounter to the Mantid development team.");
+    m_uiForm.backendChoice->setToolTip("New Python library");
+  }
+  if (newBackend != m_backend) {
+    m_backend = newBackend;
+    for (const auto &tab : m_bayesTabs) {
+      tab.second->notifyBackendChanged(m_backend);
+    }
+  }
+}
 
 BayesFitting::~BayesFitting() = default;
 

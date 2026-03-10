@@ -22,7 +22,7 @@ matplotlib.use("AGG")
 X_COLUMN_LABEL = "x_column"
 Y_COLUMN_LABEL = "y_column"
 FULL_FUNCTION = FunctionFactory.createInitialized(
-    "name=FlatBackground,A0=1;name=LinearBackground,A0=1," "A1=2;name=GausOsc,A=0.2,Sigma=0.2,Frequency=0.1,Phi=0"
+    "name=FlatBackground,A0=1;name=LinearBackground,A0=1,A1=2;name=GausOsc,A=0.2,Sigma=0.2,Frequency=0.1,Phi=0"
 )
 FUNCTION_1 = FunctionFactory.createInitialized("name=FlatBackground,A0=1")
 FUNCTION_2 = FunctionFactory.createInitialized("name=LinearBackground,A0=1,A1=2")
@@ -169,6 +169,14 @@ class FitPropertyBrowserPlotInteractionTest(unittest.TestCase):
         self.browser_plot_interaction.slot_for_function_removed()
 
         self.assertEqual(list(self.browser_plot_interaction.guess_lines.keys()), ["f0.FlatBackground", "f1.GausOsc"])
+
+    def test_shift_stored_prefixes_returns_when_prefix_len_is_less_than_two(self):
+        self.create_mock_guess_lines()
+        self.setup_mock_fit_browser(
+            workspace_creator=self.create_workspace2D, workspace_name="test_workspace", function=FULL_FUNCTION, function_prefix="f"
+        )
+        self.browser_plot_interaction.slot_for_function_removed()
+        self.assertEqual(list(self.browser_plot_interaction.guess_lines.keys()), ["f0.FlatBackground", "f1.LinearBackground", "f2.GausOsc"])
 
     def test_remove_function_correctly_removes_line(self):
         workspace_name = "test_workspace"

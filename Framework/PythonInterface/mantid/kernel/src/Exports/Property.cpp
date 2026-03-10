@@ -26,6 +26,7 @@
 #include <boost/python/return_value_policy.hpp>
 
 using Mantid::Kernel::Direction;
+using Mantid::Kernel::IPropertySettings;
 using Mantid::Kernel::Property;
 using Mantid::PythonInterface::std_vector_exporter;
 using namespace boost::python;
@@ -91,6 +92,30 @@ PyObject *unitAsUnicode(const Property &self) {
  */
 PyObject *unitsAsBytes(const Property &self) { return PyBytes_FromString(self.units().c_str()); }
 
+/**
+ * Convert the `std::vector<std::unique_ptr<IPropertySettings const>>` returned by `getSettings`
+ *   into a Python-compatible form.  In order to support legacy code, we return a single
+ *   `IPropertySettings` instance when that case applies, and `None` in the case the vector
+ *   is empty.
+ */
+boost::python::object getSettingsRawPointers(Property const &self) {
+  namespace py = boost::python;
+
+  auto const &settings = self.getSettings();
+  size_t n = settings.size();
+  if (n == 0) {
+    return py::object(); // returns 'None'
+  } else if (n == 1) {
+    // SAFE `const_cast`: `IPropertySettings` exports do not allow any modification of the instance.
+    return py::object(py::ptr(const_cast<IPropertySettings *>(settings[0].get())));
+  } else {
+    py::list out;
+    for (auto const &ptr : settings)
+      out.append(py::ptr(const_cast<IPropertySettings *>(ptr.get())));
+    return out;
+  }
+}
+
 } // namespace
 
 GET_POINTER_SPECIALIZATION(Property)
@@ -98,10 +123,8 @@ GNU_DIAG_OFF("unused-local-typedef")
 // Ignore -Wconversion warnings coming from boost::python
 // Seen with GCC 7.1.1 and Boost 1.63.0
 GNU_DIAG_OFF("conversion")
-
-BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(valueAsPrettyStrOverloader,
-
-                                       valueAsPrettyStr, 0, 2)
+// cppcheck-suppress unknownMacro
+BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(valueAsPrettyStrOverloader, valueAsPrettyStr, 0, 2)
 GNU_DIAG_ON("conversion")
 GNU_DIAG_ON("unused-local-typedef")
 
@@ -170,8 +193,9 @@ void export_Property() {
                     "Return the 'group' of the property, that is, the header "
                     "in the algorithm's list of properties.")
 
-      .add_property("settings", make_function(&Property::getSettings, return_value_policy<return_by_value>()),
-                    "Return the object managing this property's settings")
+      .add_property("settings", make_function(&getSettingsRawPointers, return_value_policy<return_by_value>()),
+                    "Return the settings vector for this property")
+      .def("clearSettings", &Property::clearSettings, "Clear the settings vector for this property")
 
       .add_static_property("EMPTY_DBL", emptyDouble)
       .add_static_property("EMPTY_INT", emptyInt)
@@ -180,5 +204,11 @@ void export_Property() {
       .def("setAutoTrim", &Property::setAutoTrim, (arg("setting")), "Setting automatic trimming of whitespaces.")
       .def("getAutoTrim", &Property::autoTrim, "Gets the setting of automatic trimming of whitespaces.")
       .def("setDisableReplaceWSButton", &Property::setDisableReplaceWSButton, (arg("disable")),
-           "Disable the creation of the Replace Workspace button.");
+           "Disable the creation of the Replace Workspace button.")
+
+      .add_property("isDynamicDefault", make_function(&Property::isDynamicDefault),
+                    "A flag indicating that the property's value has been set programmatically:"
+                    "  for example, if the property's default value depends on an upstream property")
+      .def("setIsDynamicDefault", &Property::setIsDynamicDefault, (arg("flag")),
+           "Set or clear the flag indicating that the property's value has been set programmatically.");
 }

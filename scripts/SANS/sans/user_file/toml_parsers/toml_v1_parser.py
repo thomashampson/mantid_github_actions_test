@@ -7,7 +7,6 @@
 
 from sans.common.enums import SANSInstrument, ReductionMode, DetectorType, RangeStepType, FitModeForMerge, DataType, FitType, RebinType
 from sans.common.general_functions import get_bank_for_spectrum_number, get_detector_types_from_instrument
-from sans.state.IStateParser import IStateParser
 from sans.state.StateObjects.StateAdjustment import StateAdjustment
 from sans.state.StateObjects.StateCalculateTransmission import get_calculate_transmission
 from sans.state.StateObjects.StateCompatibility import StateCompatibility
@@ -16,6 +15,7 @@ from sans.state.StateObjects.StateData import StateData
 from sans.state.StateObjects.StateMaskDetectors import get_mask_builder, StateMaskDetectors
 from sans.state.StateObjects.StateMoveDetectors import get_move_builder
 from sans.state.StateObjects.StateNormalizeToMonitor import get_normalize_to_monitor_builder
+from sans.state.StateObjects.StatePolarization import StatePolarization
 from sans.state.StateObjects.StateReductionMode import StateReductionMode
 from sans.state.StateObjects.StateSave import StateSave
 from sans.state.StateObjects.StateScale import StateScale
@@ -25,22 +25,18 @@ from sans.state.StateObjects.StateWavelengthAndPixelAdjustment import get_wavele
 from sans.user_file.parser_helpers.toml_parser_impl_base import TomlParserImplBase
 from sans.user_file.parser_helpers.wavelength_parser import DuplicateWavelengthStates, WavelengthTomlParser
 from sans.user_file.toml_parsers.toml_v1_schema import TomlSchemaV1Validator
+from sans.user_file.toml_parsers.toml_base_parser import TomlParserBase
 
 
-class TomlV1Parser(IStateParser):
+class TomlV1Parser(TomlParserBase):
     def __init__(self, dict_to_parse, file_information, schema_validator=None):
-        self._validator = schema_validator if schema_validator else TomlSchemaV1Validator(dict_to_parse)
-        self._validator.validate()
-
-        self._implementation = None
-        data_info = self.get_state_data(file_information)
-        self._implementation = self._get_impl(dict_to_parse, data_info)
-        self._implementation.parse_all()
+        validator = schema_validator or TomlSchemaV1Validator(dict_to_parse)
+        super(TomlV1Parser, self).__init__(dict_to_parse, file_information, validator)
 
     @staticmethod
     def _get_impl(*args):
         # Wrapper which can replaced with a mock
-        return _TomlV1ParserImpl(*args)
+        return TomlV1ParserImpl(*args)
 
     def get_state_data(self, file_information):
         state_data = super().get_state_data(file_information)
@@ -73,6 +69,10 @@ class TomlV1Parser(IStateParser):
     def get_state_reduction_mode(self):
         return self._implementation.reduction_mode
 
+    def get_state_polarization(self) -> StatePolarization:
+        # Not supported by TOML V1, but we return a blank one to keep the parsing results consistent.
+        return StatePolarization()
+
     def get_state_save(self):
         return StateSave()
 
@@ -92,9 +92,9 @@ class TomlV1Parser(IStateParser):
         return self._implementation.wavelength_and_pixel
 
 
-class _TomlV1ParserImpl(TomlParserImplBase):
+class TomlV1ParserImpl(TomlParserImplBase):
     def __init__(self, input_dict, data_info: StateData):
-        super(_TomlV1ParserImpl, self).__init__(toml_dict=input_dict)
+        super(TomlV1ParserImpl, self).__init__(toml_dict=input_dict)
         # Always take the instrument from the TOML file rather than guessing in the new parser
         data_info.instrument = self.instrument
         self._create_state_objs(data_info=data_info)
@@ -112,6 +112,7 @@ class _TomlV1ParserImpl(TomlParserImplBase):
         self._parse_transmission()
         self._parse_transmission_roi()
         self._parse_transmission_fitting()
+        self._parse_transmission_wide_angle()
 
     @property
     def instrument(self):
@@ -149,11 +150,13 @@ class _TomlV1ParserImpl(TomlParserImplBase):
 
         self.move.sample_offset = self.get_val("sample_offset", inst_config_dict, 0.0)
         self.convert_to_q.use_gravity = self.get_val("gravity_enabled", inst_config_dict, default=True)
+        self.convert_to_q.solid_angle_cylinder_slices = self.get_val("solid_angle_cylinder_slices", inst_config_dict, 11)
 
     def _parse_detector_configuration(self):
         det_config_dict = self.get_val(["detector", "configuration"])
 
-        self.scale.scale = self.get_val("rear_scale", det_config_dict)
+        self.scale.rear_scale = self.get_val("rear_scale", det_config_dict)
+        self.scale.front_scale = self.get_val("front_scale", det_config_dict)
 
         reduction_mode_key = self.get_mandatory_val(["detector", "configuration", "selected_detector"])
         # LAB/Rear was set by default in user parser, so we fall-back to this
@@ -362,6 +365,9 @@ class _TomlV1ParserImpl(TomlParserImplBase):
 
         self.calculate_transmission.transmission_roi_files = [file]
 
+    def _parse_transmission_wide_angle(self):
+        self.adjustment.wide_angle_correction = self.get_val(["transmission", "wide_angle_correction"], default=False)
+
     def _parse_transmission_fitting(self):
         fit_dict = self.get_val(["transmission", "fitting"])
         can_fitting = self.calculate_transmission.fit[DataType.CAN.value]
@@ -510,6 +516,9 @@ class _TomlV1ParserImpl(TomlParserImplBase):
                 self.mask.phi_min = phi_mask["start"]
             if "stop" in phi_mask:
                 self.mask.phi_max = phi_mask["stop"]
+            if "range" in phi_mask:
+                self.mask.phi_range = phi_mask["range"]
+                self.mask.use_phi_range = True
 
     @staticmethod
     def _get_1d_min_max(one_d_binning: str):

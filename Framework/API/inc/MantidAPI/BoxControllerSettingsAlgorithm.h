@@ -8,8 +8,8 @@
 
 #include "MantidAPI/Algorithm.h"
 #include "MantidAPI/BoxController.h"
+#include "MantidAPI/DllConfig.h"
 #include "MantidGeometry/Instrument.h"
-#include "MantidKernel/System.h"
 
 namespace Mantid {
 namespace API {
@@ -38,9 +38,6 @@ protected:
   std::string getBoxSettingsGroupName() { return "Box Splitting Settings"; }
   /// Take the defaults for the box splitting from the instrument parameters.
   void takeDefaultsFromInstrument(const Mantid::Geometry::Instrument_const_sptr &instrument, const size_t ndims);
-
-protected:
-  ~BoxControllerSettingsAlgorithm() = default;
 
 private:
 };

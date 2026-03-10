@@ -41,7 +41,7 @@ if hasattr(Legend, "set_draggable"):
     SET_DRAGGABLE_METHOD = "set_draggable(True)"
 else:
     SET_DRAGGABLE_METHOD = "draggable()"
-FIT_DOCUMENTATION_STRING = "# Fit definition, see https://docs.mantidproject.org/algorithms/Fit-v1.html for more " "details"
+FIT_DOCUMENTATION_STRING = "# Fit definition, see https://docs.mantidproject.org/algorithms/Fit-v1.html for more details"
 TICKER_FORMATTER_IMPORT = "from matplotlib.ticker import NullFormatter, ScalarFormatter, LogFormatterSciNotation"
 
 
@@ -80,7 +80,7 @@ def generate_script(fig, exclude_headers=False):
         if not isinstance(ax, MantidAxes):
             continue
         ax_object_var = get_axes_object_variable(ax)
-        if axes_type(ax) in [FigureType.Image]:
+        if axes_type(ax) == FigureType.Image:
             colormap_lines, colormap_headers = get_plot_2d_cmd(ax, ax_object_var)  # ax.imshow or pcolormesh
             plot_commands.extend(colormap_lines)
             plot_headers.extend(colormap_headers)

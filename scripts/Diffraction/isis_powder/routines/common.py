@@ -190,8 +190,9 @@ def extract_ws_spectra(ws_to_split):
 def generate_run_numbers(run_number_string):
     """
     Generates a list of run numbers as a list from the input. This input can be either a string or int type
-    and uses the same syntax that Mantid supports i.e. 1-10 generates 1,2,3...9,10 inclusive and commas can specify
-    breaks between runs
+    and uses the same syntax that Mantid supports i.e. 1-10 generates 1,2,3...9,10 inclusive and commas or plus signs
+    can specify breaks between runs (These are treated differently in Load, but this function just returns a list of
+    files that would be loaded).
     :param run_number_string: The string or int to convert into a list of run numbers
     :return: A list of run numbers generated from the string
     """
@@ -205,6 +206,7 @@ def generate_run_numbers(run_number_string):
 
     # If its a string we must parse it
     run_number_string = run_number_string.strip()
+    run_number_string = run_number_string.replace("+", ",")
     run_boundaries = run_number_string.replace("_", "-")  # Accept either _ or - delimiters
     run_list = _run_number_generator(processed_string=run_boundaries)
     return run_list
@@ -296,7 +298,6 @@ def get_first_run_number(run_number_string):
         raise RuntimeError("Attempted to load empty set of workspaces. Please input at least one valid run number")
 
     run_numbers = run_numbers[0]
-
     return run_numbers
 
 
@@ -541,8 +542,7 @@ def subtract_summed_runs(ws_to_correct, empty_ws):
             mantid.Minus(LHSWorkspace=ws_to_correct, RHSWorkspace=empty_ws, OutputWorkspace=ws_to_correct)
         except ValueError:
             raise ValueError(
-                "The empty run(s) specified for this file do not have matching binning. Do the TOF windows of"
-                " the empty and sample match?"
+                "The empty run(s) specified for this file do not have matching binning. Do the TOF windows of the empty and sample match?"
             )
     else:
         ws_to_correct = copy.deepcopy(ws_to_correct)
@@ -655,7 +655,7 @@ def _check_load_range(list_of_runs_to_load):
     maximum_range_len = 1000  # If more than this number of runs is entered probably wrong
     if len(list_of_runs_to_load) > maximum_range_len:
         raise ValueError(
-            "More than " + str(maximum_range_len) + " runs were selected." " Found " + str(len(list_of_runs_to_load)) + " Aborting."
+            "More than " + str(maximum_range_len) + " runs were selected. Found " + str(len(list_of_runs_to_load)) + " Aborting."
         )
 
 

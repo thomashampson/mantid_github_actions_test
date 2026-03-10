@@ -9,11 +9,12 @@
 #include "MantidAPI/TableRow.h"
 #include "MantidAPI/WorkspaceProperty.h"
 #include "MantidKernel/BoundedValidator.h"
+#include "MantidKernel/EmptyValues.h"
 #include "MantidKernel/ListValidator.h"
 
-#include "Poco/File.h"
 #include "boost/math/special_functions/round.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 
@@ -117,7 +118,7 @@ void SaveFullprofResolution::processProperties() {
   m_append = getProperty("Append");
   if (m_append) {
     // Set append flag to false if file does not exist
-    bool fileexist = Poco::File(m_outIrfFilename).exists();
+    bool fileexist = std::filesystem::exists(m_outIrfFilename);
     if (!fileexist)
       m_append = false;
   }

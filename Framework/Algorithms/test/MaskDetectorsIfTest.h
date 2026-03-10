@@ -14,7 +14,7 @@
 #include "MantidFrameworkTestHelpers/ScopedFileHelper.h"
 #include "MantidFrameworkTestHelpers/WorkspaceCreationHelper.h"
 #include "MantidGeometry/Instrument/DetectorInfo.h"
-#include <Poco/File.h>
+#include <filesystem>
 #include <fstream>
 #include <limits>
 
@@ -195,6 +195,21 @@ public:
     checkOutputWorkspace(alg, correctMasking);
   }
 
+  void testStartEndWorkspaceIndex() {
+    // When the start ix > 0 and end ix < nHist
+    auto correctMasking = [](MatrixWorkspace const &ws, const size_t wsIndex) {
+      if (wsIndex < 1 || wsIndex > 2)
+        return false;
+      return ws.y(wsIndex).front() > 2.2;
+    };
+    MaskDetectorsIf alg;
+    MatrixWorkspace_sptr inWS = makeFakeWorkspace();
+    setupAlgorithmForOutputWorkspace(alg, inWS, "SelectIf", "Greater", 2.2, 1, 2);
+    TS_ASSERT_THROWS_NOTHING(alg.execute())
+    TS_ASSERT(alg.isExecuted())
+    checkOutputWorkspace(alg, correctMasking);
+  }
+
 private:
   constexpr static int numBanks{1};
   constexpr static int numPixels{2};
@@ -278,7 +293,8 @@ private:
   // Initialise the algorithm and set the properties. Creates a fake
   // workspace for the input.
   static void setupAlgorithmForOutputWorkspace(MaskDetectorsIf &alg, const MatrixWorkspace_sptr &inWS,
-                                               const std::string &mode, const std::string &op, const double value) {
+                                               const std::string &mode, const std::string &op, const double value,
+                                               int startIx = 0, int endIx = EMPTY_INT()) {
     // set up the algorithm
     if (!alg.isInitialized())
       alg.initialize();
@@ -288,6 +304,8 @@ private:
     alg.setProperty("Mode", mode);
     alg.setProperty("Operator", op);
     alg.setProperty("Value", value);
+    alg.setProperty("StartWorkspaceIndex", startIx);
+    alg.setProperty("EndWorkspaceIndex", endIx);
     alg.setProperty("OutputWorkspace", "_unused_for_child");
   }
 
@@ -301,7 +319,7 @@ private:
     // check that the algorithm has written a file to disk
     std::string outputFile = alg.getProperty("OutputCalFile");
     bool fileExists = false;
-    TS_ASSERT(fileExists = Poco::File(outputFile).exists());
+    TS_ASSERT(fileExists = std::filesystem::exists(outputFile));
 
     // check that we can open the file
     if (fileExists) {

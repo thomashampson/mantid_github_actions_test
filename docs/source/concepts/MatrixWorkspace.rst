@@ -5,9 +5,6 @@
 Matrix Workspace
 ================
 
-.. contents::
-  :local:
-
 A Matrix Workspace is a generic name for a family which contains measured (or derived) data (Y) with associated errors (E) and an axis (X) giving information about where the measurement was made. The Matrix Workspace forms a 2D structure, more details on this will be provided below. This is the most common structure for storing data in  Mantid. This covers several more detailed workspace types including:
 
 -  :ref:`Workspace2D <Workspace2D>` - A workspace for holding 2D, accumulated data in memory, this is the most commonly used to store histograms.
@@ -283,6 +280,56 @@ Output:
 
   Counts
   Elephants
+
+.. _MatrixWorkspace_Plotting:
+
+Plotting
+^^^^^^^^
+
+You can specify the type of plot to be used when plotting a Matrix Workspace. The following plot types are available:
+``plot``, ``marker``, ``errorbar_x``, ``errorbar_y``, ``errorbar_xy``. By default all Matrix Workspaces will be
+treated as a ``plot`` type and this value will not auto-update or affect existing workspace plots. Changing the plot
+type will affect the way the data is displayed. An example of the different plot types can be seen in :ref:`mantid.plots`.
+Below is a simple example changing the plot type, a full example is available in the :ref:`plotting gallery<MarkerWS_Example>` page.
+
+.. testsetup:: MatrixWorkspacePlotType
+
+  from mantid.simpleapi import CreateSampleWorkspace
+  ws = CreateSampleWorkspace()
+
+.. testcode:: MatrixWorkspacePlotType
+
+    print(ws.getPlotType())
+    ws.setPlotType("marker")
+    print(ws.getPlotType())
+
+Output:
+
+.. testoutput:: MatrixWorkspacePlotType
+
+  plot
+  marker
+
+**Setting Plot Marker**
+
+When plotting multiple marker workspaces it may be necessary to set the marker type for each workspace.
+If no marker is set, the default will be used from the :ref:`Properties File <Properties File>`. Marker style can be changed using the following code:
+
+.. testsetup:: MatrixWorkspaceMarker
+
+  from mantid.simpleapi import CreateSampleWorkspace
+  ws = CreateSampleWorkspace()
+
+.. testcode:: MatrixWorkspaceMarker
+
+    ws.setMarkerStyle("circle")
+    print(ws.getMarkerStyle())
+
+Output:
+
+.. testoutput:: MatrixWorkspaceMarker
+
+  circle
 
 Matrix Workspace Operations
 ###########################

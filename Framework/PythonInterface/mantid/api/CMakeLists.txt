@@ -8,6 +8,7 @@ set(EXPORT_FILES
     src/Exports/IAlgorithm.cpp
     src/Exports/AlgorithmObserver.cpp
     src/Exports/AlgorithmHistory.cpp
+    src/Exports/AlgoTimeRegister.cpp
     src/Exports/CatalogManager.cpp
     src/Exports/CatalogSession.cpp
     src/Exports/DeprecatedAlgorithmChecker.cpp
@@ -88,11 +89,9 @@ set(EXPORT_FILES
     src/Exports/IPreview.cpp
     src/Exports/PreviewManager.cpp
     src/Exports/RegionSelectorObserver.cpp
+    src/Exports/WorkspaceNearestNeighbourInfo.cpp
+    src/Exports/PanelsSurfaceCalculator.cpp
 )
-
-if(PROFILE_ALGORITHM_LINUX)
-  set(EXPORT_FILES "${EXPORT_FILES}" "src/Exports/AlgoTimeRegister.cpp")
-endif()
 
 set(MODULE_DEFINITION ${CMAKE_CURRENT_BINARY_DIR}/api.cpp)
 create_module(${MODULE_TEMPLATE} ${MODULE_DEFINITION} ${EXPORT_FILES})
@@ -128,9 +127,7 @@ set(INC_FILES
     inc/MantidPythonInterface/api/WorkspacePropertyExporter.h
 )
 
-# Add a precompiled header where they are supported
 list(APPEND ALL_FILES ${EXPORT_FILES} ${SRC_FILES})
-enable_precompiled_headers(inc/MantidPythonInterface/api/PrecompiledHeader.h ALL_FILES)
 
 # Create the target for this directory
 set(FRAMEWORK_DIR ../../..)
@@ -138,6 +135,30 @@ include_directories(${FRAMEWORK_DIR}/CurveFitting/inc)
 
 add_library(PythonAPIModule ${ALL_FILES} ${MODULE_DEFINITION} ${INC_FILES} ${PYTHON_INSTALL_FILES})
 add_library(Mantid::PythonAPIModule ALIAS PythonAPIModule)
+
+# Add a precompiled header
+target_precompile_headers(
+  PythonAPIModule
+  PRIVATE
+  <MantidAPI/Algorithm.h>
+  <boost/mpl/and.hpp>
+  <boost/mpl/if.hpp>
+  <boost/python/call_method.hpp>
+  <boost/python/class.hpp>
+  <boost/python/copy_const_reference.hpp>
+  <boost/python/def.hpp>
+  <boost/python/dict.hpp>
+  <boost/python/enum.hpp>
+  <boost/python/make_constructor.hpp>
+  <boost/python/make_function.hpp>
+  <boost/python/object.hpp>
+  <boost/python/overloads.hpp>
+  <boost/python/register_ptr_to_python.hpp>
+  <boost/python/return_value_policy.hpp>
+  <boost/python/tuple.hpp>
+  <boost/python/wrapper.hpp>
+  <optional>
+)
 
 target_include_directories(
   PythonAPIModule PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

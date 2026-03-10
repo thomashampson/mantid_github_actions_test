@@ -1322,7 +1322,7 @@ class DarkRunSubtraction(object):
         @param dark_run_setting
         """
         if not isinstance(dark_run_setting, UserFileParser.DarkRunSettings):
-            raise RuntimeError("DarkRunSubtraction: The provided settings " "object is not of type DarkRunSettings")
+            raise RuntimeError("DarkRunSubtraction: The provided settings object is not of type DarkRunSettings")
 
         # We only add entries where the run number has been specified
         if not dark_run_setting.run_number:
@@ -1774,6 +1774,7 @@ class DarkRunSubtraction(object):
         alg_conjoined.setChild(True)
         alg_conjoined.setProperty("InputWorkspace1", monitor)
         alg_conjoined.setProperty("InputWorkspace2", detector)
+        alg_conjoined.setProperty("CheckMatchingBins", False)
         alg_conjoined.execute()
         return alg_conjoined.getProperty("InputWorkspace1").value
 
@@ -2885,6 +2886,7 @@ class ConvertToQISIS(ReductionStep):
                     WavePixelAdj=wavepixeladj,
                     ExtraLength=self._grav_extra_length,
                     QResolution=qResolution,
+                    SolidAngleNumberOfCylinderSlices=11,
                 )
             elif self._Q_alg == "Qxy":
                 Qxy(
@@ -2899,6 +2901,7 @@ class ConvertToQISIS(ReductionStep):
                     WaveCut=self.w_cut,
                     OutputParts=self.outputParts,
                     ExtraLength=self._grav_extra_length,
+                    SolidAngleNumberOfCylinderSlices=11,
                 )
                 ReplaceSpecialValues(
                     InputWorkspace=workspace,
@@ -3207,7 +3210,7 @@ class UnitsConvert(ReductionStep):
             bin_alg = self.rebin_alg
 
         rebin_com = bin_alg + '(workspace, "' + self._get_rebin(low_wav, self.wav_step, high_wav) + '", OutputWorkspace=workspace)'
-        eval(rebin_com)
+        eval(rebin_com)  # noqa: S307
 
     def _get_rebin(self, low, step, high):
         """

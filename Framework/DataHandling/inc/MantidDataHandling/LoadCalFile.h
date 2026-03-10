@@ -37,8 +37,8 @@ public:
   /// Algorithm's version for identification
   int version() const override { return 1; };
   const std::vector<std::string> seeAlso() const override {
-    return {"LoadDiffCal",    "ReadGroupsFromFile",   "CreateDummyCalFile", "CreateCalFileByNames",
-            "AlignDetectors", "DiffractionFocussing", "SaveCalFile",        "MergeCalFiles"};
+    return {"LoadDiffCal",          "ReadGroupsFromFile", "CreateDummyCalFile", "CreateCalFileByNames",
+            "DiffractionFocussing", "SaveCalFile",        "MergeCalFiles"};
   }
   /// Algorithm's category for identification
   const std::string category() const override { return R"(DataHandling\Text;Diffraction\DataHandling\CalFiles)"; }
@@ -46,7 +46,7 @@ public:
   static void getInstrument3WaysInit(Mantid::API::Algorithm *alg);
 
   static Geometry::Instrument_const_sptr getInstrument3Ways(API::Algorithm *alg);
-  static bool instrumentIsSpecified(API::Algorithm *alg);
+  static bool instrumentIsSpecified(API::Algorithm const *alg);
 
   static void readCalFile(const std::string &calFileName, const Mantid::DataObjects::GroupingWorkspace_sptr &groupWS,
                           const Mantid::DataObjects::OffsetsWorkspace_sptr &offsetsWS,

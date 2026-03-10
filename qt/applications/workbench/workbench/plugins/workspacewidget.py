@@ -9,6 +9,9 @@
 from functools import partial
 from qtpy.QtWidgets import QApplication, QVBoxLayout
 
+from instrumentview.FullInstrumentViewWindow import FullInstrumentViewWindow
+from instrumentview.FullInstrumentViewModel import FullInstrumentViewModel
+from instrumentview.FullInstrumentViewPresenter import FullInstrumentViewPresenter
 from mantid.api import AnalysisDataService, WorkspaceGroup
 from mantid.kernel import logger
 from mantidqt.plotting import functions
@@ -69,6 +72,7 @@ class WorkspaceWidget(PluginWidget):
         self.workspacewidget.sliceViewerClicked.connect(self._do_slice_viewer)
         self.workspacewidget.showDataClicked.connect(self._do_show_data)
         self.workspacewidget.showInstrumentClicked.connect(self._do_show_instrument)
+        self.workspacewidget.showNewInstrumentViewClicked.connect(self._do_show_new_instrument_view)
         self.workspacewidget.showAlgorithmHistoryClicked.connect(self._do_show_algorithm_history)
         self.workspacewidget.showDetectorsClicked.connect(self._do_show_detectors)
         self.workspacewidget.plotAdvancedClicked.connect(partial(self._do_plot_spectrum, errors=False, overplot=False, advanced=True))
@@ -248,7 +252,7 @@ class WorkspaceWidget(PluginWidget):
             try:
                 SampleLogs(ws=ws, parent=parent, window_flags=flags)
             except Exception as exception:
-                logger.warning("Could not open sample logs for workspace '{}'." "".format(ws.name()))
+                logger.warning("Could not open sample logs for workspace '{}'.".format(ws.name()))
                 logger.warning("{}: {}".format(type(exception).__name__, exception))
 
     def _do_slice_viewer(self, names):
@@ -270,7 +274,7 @@ class WorkspaceWidget(PluginWidget):
                 presenter = SliceViewer(ws=ws, conf=CONF, parent=parent, window_flags=flags)
                 presenter.view.show()
             except Exception as exception:
-                logger.warning("Could not open slice viewer for workspace '{}'." "".format(ws.name()))
+                logger.warning("Could not open slice viewer for workspace '{}'.".format(ws.name()))
                 logger.warning("{}: {}".format(type(exception).__name__, exception))
 
     def _do_show_instrument(self, names):
@@ -286,15 +290,53 @@ class WorkspaceWidget(PluginWidget):
                     presenter = InstrumentViewPresenter(ws, parent=parent, window_flags=flags)
                     presenter.show_view()
                 except Exception as exception:
-                    logger.warning("Could not show instrument for workspace " "'{}':\n{}\n".format(ws.name(), exception))
+                    logger.warning("Could not show instrument for workspace '{}':\n{}\n".format(ws.name(), exception))
             else:
-                logger.warning("Could not show instrument for workspace '{}':" "\nNo instrument available.\n" "".format(ws.name()))
+                logger.warning("Could not show instrument for workspace '{}':\nNo instrument available.\n".format(ws.name()))
+
+    def _do_show_new_instrument_view(self, names, off_screen=False):
+        """
+        Show the updated instrument view for the given workspaces
+
+        :param names: A list of workspace names
+        """
+        parent, _ = get_window_config()
+        for ws in self._ads.retrieveWorkspaces(names, unrollGroups=True):
+            if ws.getInstrument().getName():
+                try:
+                    view = FullInstrumentViewWindow(parent=parent, off_screen=off_screen)
+                    view.show()
+                    model = FullInstrumentViewModel(ws)
+                    FullInstrumentViewPresenter(view, model)
+                    logger.warning(
+                        "This Instrument View interface is available for testing purposes and evaluation, but is still "
+                        "under active development. There may be bugs, and several features from the older Instrument View "
+                        "('Show Instrument') are not currently implemented. If you have any feedback about this interface "
+                        "then the Mantid team would be happy to receive it."
+                    )
+                except Exception as exception:
+                    logger.warning("Could not show instrument for workspace '{}':\n{}\n".format(ws.name(), exception))
+            else:
+                logger.warning("Could not show instrument for workspace '{}':\nNo instrument available.\n".format(ws.name()))
 
     def _do_show_data(self, names):
         # local import to allow this module to be imported without pyplot being imported
         import matplotlib.pyplot
 
         parent, flags = get_window_config()
+        # Process group peak workspaces first and remove them from the list
+        for ws in self._ads.retrieveGroupPeaksWorkspaces(names):
+            try:
+                TableWorkspaceDisplay.supports(ws)
+                presenter = TableWorkspaceDisplay(ws, plot=matplotlib.pyplot, parent=parent, window_flags=flags, group=True)
+                presenter.show_view()
+                names.remove(ws.name())
+            except ValueError as e:
+                logger.error(str(e))
+                logger.error(
+                    "Could not open workspace: {0} with neither MatrixWorkspaceDisplay nor TableWorkspaceDisplay.".format(ws.name())
+                )
+
         for ws in self._ads.retrieveWorkspaces(names, unrollGroups=True):
             try:
                 MatrixWorkspaceDisplay.supports(ws)
@@ -309,7 +351,7 @@ class WorkspaceWidget(PluginWidget):
                     presenter.show_view()
                 except ValueError:
                     logger.error(
-                        "Could not open workspace: {0} with neither " "MatrixWorkspaceDisplay nor TableWorkspaceDisplay.".format(ws.name())
+                        "Could not open workspace: {0} with neither MatrixWorkspaceDisplay nor TableWorkspaceDisplay.".format(ws.name())
                     )
 
     def _do_show_algorithm_history(self, names):
@@ -318,7 +360,7 @@ class WorkspaceWidget(PluginWidget):
                 try:
                     AlgorithmHistoryWindow(self, name).show()
                 except Exception as exception:
-                    logger.warning("Could not open history of '{}'. " "".format(name))
+                    logger.warning("Could not open history of '{}'. ".format(name))
                     logger.warning("{}: {}".format(type(exception).__name__, exception))
 
     def _do_show_detectors(self, names):
@@ -354,7 +396,7 @@ class WorkspaceWidget(PluginWidget):
                 presenter = SampleMaterialDialogPresenter(workspace, parent=self)
                 presenter.show_view()
             except Exception as exception:
-                logger.warning("Could not show sample material for workspace " "'{}':\n{}\n".format(names[0], exception))
+                logger.warning("Could not show sample material for workspace '{}':\n{}\n".format(names[0], exception))
         else:
             logger.warning("Sample material can only be viewed for a single workspace.")
 
@@ -368,7 +410,7 @@ class WorkspaceWidget(PluginWidget):
             try:
                 sample_shape.plot_sample_container_and_components(workspace_names[0])
             except Exception as exception:
-                logger.warning("Could not show sample shape for workspace " "'{}':\n{}\n".format(workspace_names[0], exception))
+                logger.warning("Could not show sample shape for workspace '{}':\n{}\n".format(workspace_names[0], exception))
         else:
             logger.warning("Plot Sample Shape can only be viewed for a single workspace.")
 

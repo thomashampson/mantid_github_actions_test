@@ -11,9 +11,9 @@
 #include <utility>
 
 namespace Mantid::DataHandling {
-PulseIndexer::PulseIndexer(std::shared_ptr<std::vector<uint64_t>> event_index, const std::size_t firstEventIndex,
-                           const std::size_t numEvents, const std::string &entry_name,
-                           const std::vector<size_t> &pulse_roi)
+PulseIndexer::PulseIndexer(std::shared_ptr<std::vector<uint64_t> const> const &event_index,
+                           const std::size_t firstEventIndex, const std::size_t numEvents,
+                           const std::string &entry_name, const std::vector<size_t> &pulse_roi)
     : m_event_index(std::move(event_index)), m_firstEventIndex(firstEventIndex), m_numEvents(numEvents),
       m_roi_complex(false), m_entry_name(entry_name) {
   // cache the number of pulses
@@ -46,17 +46,19 @@ PulseIndexer::PulseIndexer(std::shared_ptr<std::vector<uint64_t>> event_index, c
   // determine if should trim the front end to remove empty pulses
   auto firstPulseIndex = m_roi.front();
   auto eventRange = this->getEventIndexRange(firstPulseIndex);
-  while (eventRange.first == eventRange.second) {
+  while (eventRange.first == eventRange.second && eventRange.first < m_numEvents) {
     ++firstPulseIndex;
     eventRange = this->getEventIndexRange(firstPulseIndex);
   }
 
   // determine if should trim the back end to remove empty pulses
   auto lastPulseIndex = m_roi.back();
-  eventRange = this->getEventIndexRange(lastPulseIndex - 1);
-  while (eventRange.first == eventRange.second) {
-    --lastPulseIndex;
+  if (lastPulseIndex > 0) {
     eventRange = this->getEventIndexRange(lastPulseIndex - 1);
+    while (eventRange.first == eventRange.second && eventRange.second > 0 && lastPulseIndex > 1) {
+      --lastPulseIndex;
+      eventRange = this->getEventIndexRange(lastPulseIndex - 1);
+    }
   }
 
   // update the value if it has changed
@@ -146,7 +148,7 @@ size_t PulseIndexer::getLastPulseIndex() const { return m_roi.back(); }
 std::pair<size_t, size_t> PulseIndexer::getEventIndexRange(const size_t pulseIndex) const {
   const auto start = this->getStartEventIndex(pulseIndex);
   // return early if the start is too big
-  if (start > m_numEvents)
+  if (start >= m_numEvents)
     return std::make_pair(start, m_numEvents);
 
   // get the end index

@@ -12,8 +12,8 @@
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/BoundedValidator.h"
 #include "MantidKernel/StringTokenizer.h"
+
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
 
 using namespace Mantid::Kernel;
 
@@ -75,7 +75,7 @@ void BoxControllerSettingsAlgorithm::takeDefaultsFromInstrument(
   const std::string splitThresholdName = "SplitThreshold";
   const std::string splitIntoName = "SplitInto";
   const std::string maxRecursionDepthName = "MaxRecursionDepth";
-  Property *p = getProperty(splitThresholdName);
+  Property const *p = getProperty(splitThresholdName);
   if (p->isDefault()) {
     std::vector<double> instrumentSplitThresholds = instrument->getNumberParameter(splitThresholdName, true);
     if (!instrumentSplitThresholds.empty()) {

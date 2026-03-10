@@ -13,10 +13,9 @@
 #include "MantidDataObjects/MaskWorkspace.h"
 #include "MantidDataObjects/OffsetsWorkspace.h"
 #include "MantidFrameworkTestHelpers/ComponentCreationHelper.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
-#include <Poco/File.h>
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 #include <fstream>
 #include <iosfwd>
 
@@ -47,21 +46,20 @@ public:
     groupWS->setValue(3, 45);
     offsetsWS->setValue(1, 0.123);
     offsetsWS->setValue(2, 0.456);
-    maskWS->getSpectrum(0).clearData();
-    maskWS->mutableSpectrumInfo().setMasked(0, true);
+    maskWS->setMasked(1, true);
 
     SaveCalFile alg;
     TS_ASSERT_THROWS_NOTHING(alg.initialize())
     TS_ASSERT(alg.isInitialized())
     TS_ASSERT_THROWS_NOTHING(alg.setProperty("GroupingWorkspace", groupWS));
     TS_ASSERT_THROWS_NOTHING(alg.setProperty("OffsetsWorkspace", offsetsWS));
-    TS_ASSERT_THROWS_NOTHING(alg.setProperty("MaskWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(maskWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("MaskWorkspace", maskWS));
     TS_ASSERT_THROWS_NOTHING(alg.setPropertyValue("Filename", "SaveCalFileTest.cal"));
     TS_ASSERT_THROWS_NOTHING(alg.execute(););
     TS_ASSERT(alg.isExecuted());
 
     std::string filename = alg.getPropertyValue("Filename");
-    TS_ASSERT(Poco::File(filename).exists());
+    TS_ASSERT(std::filesystem::exists(filename));
 
     std::ifstream grFile(filename.c_str());
     std::string str;
@@ -75,7 +73,7 @@ public:
     TS_ASSERT_EQUALS(str, "        2              3      0.0000000       1      45");
 
     grFile.close();
-    if (Poco::File(filename).exists())
-      Poco::File(filename).remove();
+    if (std::filesystem::exists(filename))
+      std::filesystem::remove(filename);
   }
 };

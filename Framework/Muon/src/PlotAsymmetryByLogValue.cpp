@@ -31,7 +31,8 @@
 #include "MantidKernel/TimeROI.h"
 #include "MantidKernel/TimeSeriesProperty.h"
 #include "MantidMuon/PlotAsymmetryByLogValue.h"
-#include "Poco/File.h"
+
+#include <filesystem>
 
 using namespace Mantid::DataObjects;
 using namespace Mantid::HistogramData;
@@ -213,7 +214,7 @@ const std::string PlotAsymmetryByLogValue::getLogUnits(const std::string &fileNa
     ws = std::dynamic_pointer_cast<MatrixWorkspace>(group->getItem(m_red - 1));
   }
   const Run &run = ws->run();
-  auto property = run.getLogData(m_logName);
+  const auto *property = run.getLogData(m_logName);
   return property->units();
 }
 
@@ -223,14 +224,12 @@ const std::string PlotAsymmetryByLogValue::getLogUnits(const std::string &fileNa
  */
 std::string PlotAsymmetryByLogValue::getDirectoryFromFileName(const std::string &fileName) const {
   const auto path = FileFinder::Instance().getFullPath(fileName);
-  Poco::File fileBase(path);
-  std::size_t found = fileBase.path().find_last_of("/\\");
 
-  if (found == std::string::npos)
-    return ""; // Empty string if file name could not be found so directory
-               // could not be determined
+  if (path.has_parent_path()) {
+    return path.parent_path().string() + "/";
+  }
 
-  return fileBase.path().substr(0, found + 1);
+  return ""; // Empty string if file name could not be found so directory could not be determined
 }
 
 /**  Loops files between first and last values and adds to vector of file names
@@ -251,7 +250,7 @@ void PlotAsymmetryByLogValue::populateFileNamesFromFirstLast(std::string firstRu
     file << m_filenameBase << fileRunNumber.str() << m_filenameExt;
 
     // Check if file exists
-    if (!Poco::File(file.str()).exists()) {
+    if (!std::filesystem::exists(file.str())) {
       m_log.warning() << "File " << file.str() << " not found\n";
     } else {
       m_fileNames.emplace_back(file.str());
@@ -449,7 +448,7 @@ void PlotAsymmetryByLogValue::populateOutputWorkspace(MatrixWorkspace_sptr &outW
   auto tAxis = std::make_unique<TextAxis>(nplots);
   if (nplots == 1) {
     size_t i = 0;
-    for (auto &value : m_logValue) {
+    for (const auto &value : m_logValue) {
       outWS->mutableX(0)[i] = value.second;
       outWS->mutableY(0)[i] = m_redY[value.first];
       outWS->mutableE(0)[i] = m_redE[value.first];
@@ -459,7 +458,7 @@ void PlotAsymmetryByLogValue::populateOutputWorkspace(MatrixWorkspace_sptr &outW
 
   } else {
     size_t i = 0;
-    for (auto &value : m_logValue) {
+    for (const auto &value : m_logValue) {
       outWS->mutableX(0)[i] = value.second;
       outWS->mutableY(0)[i] = m_diffY[value.first];
       outWS->mutableE(0)[i] = m_diffE[value.first];
@@ -494,7 +493,7 @@ void PlotAsymmetryByLogValue::saveResultsToADS(MatrixWorkspace_sptr &outWS, int 
 
   if (nplots == 2) {
     size_t i = 0;
-    for (auto &value : m_logValue) {
+    for (const auto &value : m_logValue) {
       size_t run = value.first;
       outWS->mutableX(0)[i] = static_cast<double>(run); // run number
       outWS->mutableY(0)[i] = value.second;             // log value
@@ -504,7 +503,7 @@ void PlotAsymmetryByLogValue::saveResultsToADS(MatrixWorkspace_sptr &outWS, int 
     }
   } else {
     size_t i = 0;
-    for (auto &value : m_logValue) {
+    for (const auto &value : m_logValue) {
       size_t run = value.first;
       outWS->mutableX(0)[i] = static_cast<double>(run); // run number
       outWS->mutableY(0)[i] = value.second;             // log value
@@ -575,20 +574,20 @@ void PlotAsymmetryByLogValue::parseRunNames(std::string &firstFN, std::string &l
     // First run number with last base name
     std::ostringstream tempFirst;
     tempFirst << lastBase << firstFN << firstExt << '\n';
-    std::string pathFirst = FileFinder::Instance().getFullPath(tempFirst.str());
+    auto pathFirst = FileFinder::Instance().getFullPath(tempFirst.str());
     // Last run number with first base name
     std::ostringstream tempLast;
     tempLast << firstBase << lastFN << lastExt << '\n';
-    std::string pathLast = FileFinder::Instance().getFullPath(tempLast.str());
 
+    auto pathLast = FileFinder::Instance().getFullPath(tempLast.str());
     // Try to correct this on the fly by
     // checking if the last run can be found in the first directory...
-    if (Poco::File(pathLast).exists()) {
+    if (std::filesystem::exists(pathLast)) {
       fnBase = firstBase;
       fnExt = firstExt;
       g_log.warning() << "First and last run are not in the same directory. File " << pathLast
                       << " will be used instead.\n";
-    } else if (Poco::File(pathFirst).exists()) {
+    } else if (std::filesystem::exists(pathFirst)) {
       // ...or viceversa
       fnBase = lastBase;
       fnExt = lastExt;
@@ -865,7 +864,7 @@ void PlotAsymmetryByLogValue::calcIntAsymmetry(const MatrixWorkspace_sptr &ws_re
  * @throw :: std::invalid_argument if the log cannot be converted to a double or
  *doesn't exist.
  */
-double PlotAsymmetryByLogValue::getLogValue(MatrixWorkspace &ws) {
+double PlotAsymmetryByLogValue::getLogValue(const MatrixWorkspace &ws) {
   const Run &run = ws.run();
   const auto &runROI = run.getTimeROI();
 

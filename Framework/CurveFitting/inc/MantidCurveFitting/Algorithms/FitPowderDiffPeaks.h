@@ -10,13 +10,13 @@
 #include "MantidAPI/CompositeFunction.h"
 #include "MantidAPI/ITableWorkspace_fwd.h"
 #include "MantidAPI/MatrixWorkspace_fwd.h"
+#include "MantidCurveFitting/DllConfig.h"
 #include "MantidCurveFitting/Functions/BackToBackExponential.h"
 #include "MantidCurveFitting/Functions/BackgroundFunction.h"
 #include "MantidCurveFitting/Functions/Polynomial.h"
 #include "MantidDataObjects/TableWorkspace.h"
 #include "MantidDataObjects/Workspace2D.h"
 #include "MantidGeometry/Crystal/UnitCell.h"
-#include "MantidKernel/System.h"
 
 namespace Mantid {
 namespace CurveFitting {
@@ -238,7 +238,7 @@ private:
                          double leftfwhm, double rightfwhm, double &center, double &sigma, double &height);
 
   /// Create a Workspace2D for fitted peaks (pattern)
-  DataObjects::Workspace2D_sptr genOutputFittedPatternWorkspace(std::vector<double> pattern, int workspaceindex);
+  DataObjects::Workspace2D_sptr genOutputFittedPatternWorkspace(const std::vector<double> &pattern, int workspaceindex);
 
   /// Calcualte the value of a single peak in a given range.
   void calculate1PeakGroup(std::vector<size_t> peakindexes, Functions::BackgroundFunction_sptr background);

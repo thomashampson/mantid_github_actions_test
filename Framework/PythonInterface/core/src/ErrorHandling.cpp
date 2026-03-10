@@ -38,8 +38,8 @@ void tracebackToStream(std::ostream &msg, PyTracebackObject *traceback, bool roo
   else
     msg << "caused by";
 
-  msg << " line " << traceback->tb_lineno << " in \'"
-      << extract<const char *>(traceback->tb_frame->f_code->co_filename)() << "\'";
+  msg << " line " << PyFrame_GetLineNumber(traceback->tb_frame) << " in \'"
+      << extract<const char *>(PyFrame_GetCode(traceback->tb_frame)->co_filename)() << "\'";
   tracebackToStream(msg, traceback->tb_next, false);
 }
 
@@ -93,5 +93,7 @@ std::string exceptionToString(bool withTrace) {
  * @param withTrace If true, include the full traceback in the message
  */
 PythonException::PythonException(bool withTrace) : std::runtime_error(exceptionToString(withTrace)) {}
+
+PythonException::~PythonException() = default;
 
 } // namespace Mantid::PythonInterface

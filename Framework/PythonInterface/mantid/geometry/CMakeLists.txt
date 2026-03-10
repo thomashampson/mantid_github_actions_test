@@ -61,14 +61,29 @@ set(INC_FILES inc/MantidPythonInterface/geometry/ComponentInfoPythonIterator.h
               inc/MantidPythonInterface/geometry/DetectorInfoPythonIterator.h
 )
 
-# Add a precompiled header where they are supported
 list(APPEND ALL_FILES ${EXPORT_FILES} ${SRC_FILES})
-enable_precompiled_headers(inc/MantidPythonInterface/geometry/PrecompiledHeader.h ALL_FILES)
 
 # Create the target for this directory
 add_library(PythonGeometryModule ${ALL_FILES} ${MODULE_DEFINITION} ${INC_FILES} ${PYTHON_INSTALL_FILES})
 add_library(Mantid::PythonGeometryModule ALIAS PythonGeometryModule)
 set_python_properties(PythonGeometryModule _geometry)
+
+# Add a precompiled header
+target_precompile_headers(
+  PythonGeometryModule
+  PRIVATE
+  <boost/python/class.hpp>
+  <boost/python/copy_const_reference.hpp>
+  <boost/python/def.hpp>
+  <boost/python/default_call_policies.hpp>
+  <boost/python/dict.hpp>
+  <boost/python/enum.hpp>
+  <boost/python/make_constructor.hpp>
+  <boost/python/make_function.hpp>
+  <boost/python/overloads.hpp>
+  <boost/python/register_ptr_to_python.hpp>
+  <boost/python/return_value_policy.hpp>
+)
 
 target_include_directories(
   PythonGeometryModule PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

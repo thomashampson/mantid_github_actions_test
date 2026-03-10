@@ -5,23 +5,25 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidNexus/H5Util.h"
-#include "MantidAPI/LogManager.h"
-#include "MantidKernel/System.h"
+#include "MantidNexus/UniqueID.h"
+#include <Poco/Logger.h>
 
 #include <H5Cpp.h>
+
 #include <algorithm>
 #include <array>
 #include <boost/numeric/conversion/cast.hpp>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
 using namespace H5;
 
-namespace Mantid::NeXus::H5Util {
+namespace Mantid::Nexus::H5Util {
 
 namespace {
-/// static logger object
-Mantid::Kernel::Logger g_log("H5Util");
+/// static logger object. Use Poco directly instead of Kernel::Logger so we don't need to import from Kernel
+const auto g_log = &Poco::Logger::get("H5Util");
 
 const std::string NX_ATTR_CLASS("NX_class");
 const std::string CAN_SAS_ATTR_CLASS("canSAS_class");
@@ -37,6 +39,14 @@ template <> MANTID_NEXUS_DLL DataType getType<float>() { return PredType::NATIVE
 
 template <> MANTID_NEXUS_DLL DataType getType<double>() { return PredType::NATIVE_DOUBLE; }
 
+template <> MANTID_NEXUS_DLL DataType getType<int8_t>() { return PredType::NATIVE_INT8; }
+
+template <> MANTID_NEXUS_DLL DataType getType<uint8_t>() { return PredType::NATIVE_UINT8; }
+
+template <> MANTID_NEXUS_DLL DataType getType<int16_t>() { return PredType::NATIVE_INT16; }
+
+template <> MANTID_NEXUS_DLL DataType getType<uint16_t>() { return PredType::NATIVE_UINT16; }
+
 template <> MANTID_NEXUS_DLL DataType getType<int32_t>() { return PredType::NATIVE_INT32; }
 
 template <> MANTID_NEXUS_DLL DataType getType<uint32_t>() { return PredType::NATIVE_UINT32; }
@@ -45,13 +55,94 @@ template <> MANTID_NEXUS_DLL DataType getType<int64_t>() { return PredType::NATI
 
 template <> MANTID_NEXUS_DLL DataType getType<uint64_t>() { return PredType::NATIVE_UINT64; }
 
+template <> MANTID_NEXUS_DLL DataType getType<char>() { return PredType::C_S1; }
+
+template <> MANTID_NEXUS_DLL DataType getType<std::string>() { return PredType::C_S1; }
+
+template <> MANTID_NEXUS_DLL DataType getType<bool>() { return PredType::NATIVE_HBOOL; }
+
+/** Operations for help with narrowing casts */
+namespace {
+
+template <typename InT, typename OutT>
+inline void narrowingVectorCast(std::vector<InT> const &input, std::vector<OutT> &output) {
+  output.resize(input.size());
+  std::transform(input.cbegin(), input.cend(), output.begin(),
+                 [](const auto &a) { return boost::numeric_cast<OutT>(a); });
+}
+
+template <typename InT, typename OutT, Narrowing narrow> inline void throwIfUnallowedNarrowing() {
+  if constexpr (sizeof(OutT) < sizeof(InT) && narrow == Narrowing::Prevent) {
+    std::string msg = "H5Util: narrowing from " + getType<InT>().fromClass();
+    msg += " to " + getType<OutT>().fromClass() + " is prevented.";
+    throw DataTypeIException(msg);
+  }
+}
+
+} // namespace
+
+/**
+ * This macro matches the dataType in terms of PredType, with the actual primitive datatype.
+ * The macro assumes it is called from inside a function where OutT, narrow are defined.
+ * It assumes that func_name is a template function with parameters <InT, OutT, narrow>
+ * It will set InT to the proper value, based on dataType.
+ */
+#define RUN_H5UTIL_FUNCTION(dataType, func_name, ...)                                                                  \
+  if (dataType == PredType::NATIVE_FLOAT) {                                                                            \
+    func_name<float, OutT, narrow>(__VA_ARGS__);                                                                       \
+  } else if (dataType == PredType::NATIVE_DOUBLE) {                                                                    \
+    func_name<double, OutT, narrow>(__VA_ARGS__);                                                                      \
+  } else if (dataType == PredType::NATIVE_INT8) {                                                                      \
+    func_name<int8_t, OutT, narrow>(__VA_ARGS__);                                                                      \
+  } else if (dataType == PredType::NATIVE_UINT8) {                                                                     \
+    func_name<uint8_t, OutT, narrow>(__VA_ARGS__);                                                                     \
+  } else if (dataType == PredType::NATIVE_INT16) {                                                                     \
+    func_name<int16_t, OutT, narrow>(__VA_ARGS__);                                                                     \
+  } else if (dataType == PredType::NATIVE_UINT16) {                                                                    \
+    func_name<uint16_t, OutT, narrow>(__VA_ARGS__);                                                                    \
+  } else if (dataType == PredType::NATIVE_INT32) {                                                                     \
+    func_name<int32_t, OutT, narrow>(__VA_ARGS__);                                                                     \
+  } else if (dataType == PredType::NATIVE_UINT32) {                                                                    \
+    func_name<uint32_t, OutT, narrow>(__VA_ARGS__);                                                                    \
+  } else if (dataType == PredType::NATIVE_INT64) {                                                                     \
+    func_name<int64_t, OutT, narrow>(__VA_ARGS__);                                                                     \
+  } else if (dataType == PredType::NATIVE_UINT64) {                                                                    \
+    func_name<uint64_t, OutT, narrow>(__VA_ARGS__);                                                                    \
+  } else if (dataType == PredType::C_S1) {                                                                             \
+    func_name<char, OutT, narrow>(__VA_ARGS__);                                                                        \
+  } else {                                                                                                             \
+    std::string msg = "H5Util: error in narrowing, unknown H5Cpp PredType ";                                           \
+    msg += dataType.fromClass() + ".";                                                                                 \
+    throw DataTypeIException(msg);                                                                                     \
+  }
+
+H5::FileAccPropList defaultFileAcc() {
+  H5::FileAccPropList access_plist;
+  access_plist.setFcloseDegree(H5F_CLOSE_STRONG);
+  return access_plist;
+}
+
+bool isHdf5(std::string const &filename) {
+  // Calls C routine H5Fis_accessible to determine whether the file is in
+  // HDF5 format.  It returns positive value, 0, or negative value
+  // Copies the function in H5Cpp, but using the correct access level
+  Mantid::Nexus::UniqueID<&H5Pclose> plist = H5Pcopy(H5Util::defaultFileAcc().getId());
+  htri_t ret_value = H5Fis_accessible(filename.c_str(), plist);
+  plist.reset(); // explicit closure
+
+  if (ret_value > 0)
+    return true;
+  else if (ret_value == 0)
+    return false;
+  else // Raise exception when H5Fis_accessible returns a negative value
+  {
+    throw H5::FileIException("H5File::isHdf5", "H5Fis_accessible returned negative value");
+  }
+}
+
 DataSpace getDataSpace(const size_t length) {
   hsize_t dims[] = {length};
   return DataSpace(1, dims);
-}
-
-template <typename NumT> DataSpace getDataSpace(const std::vector<NumT> &data) {
-  return H5Util::getDataSpace(data.size());
 }
 
 namespace {
@@ -141,7 +232,7 @@ void writeNumAttribute(const H5::H5Object &object, const std::string &name, cons
                 "The writeNumAttribute function only accepts integral of "
                 "floating point values.");
   auto attrType = getType<NumT>();
-  DataSpace attrSpace = getDataSpace(value);
+  DataSpace attrSpace = getDataSpace(value.size());
 
   auto attribute = object.createAttribute(name, attrType, attrSpace);
   attribute.write(attrType, value.data());
@@ -160,7 +251,7 @@ void writeScalarDataSetWithStrAttributes(H5::Group &group, const std::string &na
 
 template <typename NumT> void writeArray1D(Group &group, const std::string &name, const std::vector<NumT> &values) {
   DataType dataType(getType<NumT>());
-  DataSpace dataSpace = getDataSpace(values);
+  DataSpace dataSpace = getDataSpace(values.size());
 
   DSetCreatPropList propList = setCompressionAttributes(values.size());
 
@@ -172,9 +263,9 @@ template <typename NumT> void writeArray1D(Group &group, const std::string &name
 // read methods
 // -------------------------------------------------------------------
 
-std::string readString(H5::H5File &file, const std::string &path) {
+std::string readString(H5::H5File &file, const std::string &address) {
   try {
-    auto data = file.openDataSet(path);
+    auto data = file.openDataSet(address);
     return readString(data);
   } catch (const H5::FileIException &e) {
     UNUSED_ARG(e);
@@ -185,9 +276,9 @@ std::string readString(H5::H5File &file, const std::string &path) {
   }
 }
 
-std::string readString(H5::Group &group, const std::string &name) {
+std::string readString(const H5::Group &group, const std::string &name) {
   try {
-    auto data = group.openDataSet(name);
+    const auto data = group.openDataSet(name);
     return readString(data);
   } catch (const H5::GroupIException &e) {
     UNUSED_ARG(e);
@@ -216,15 +307,19 @@ std::string readString(const H5::DataSet &dataset) {
  * @return :: vector of strings
  */
 std::vector<std::string> readStringVector(Group &group, const std::string &name) {
+  DataSet dataset = group.openDataSet(name);
+  return readStringVector(dataset);
+}
+
+std::vector<std::string> readStringVector(DataSet &dataset) {
   hsize_t dims[1];
   char **rdata;
   std::vector<std::string> result;
-
-  DataSet dataset = group.openDataSet(name);
   DataSpace dataspace = dataset.getSpace();
   DataType datatype = dataset.getDataType();
 
   dataspace.getSimpleExtentDims(dims, nullptr);
+  result.reserve(dims[0]);
 
   rdata = new char *[dims[0]];
   dataset.read(rdata, datatype);
@@ -245,182 +340,164 @@ bool hasAttribute(const H5::H5Object &object, const char *attributeName) {
 }
 
 void readStringAttribute(const H5::H5Object &object, const std::string &attributeName, std::string &output) {
-  const auto attribute = object.openAttribute(attributeName);
-  attribute.read(attribute.getDataType(), output);
-}
-
-// This method avoids a copy on return so should be preferred to its sibling method
-template <typename NumT>
-void readArray1DCoerce(const H5::Group &group, const std::string &name, std::vector<NumT> &output) {
-  try {
-    DataSet dataset = group.openDataSet(name);
-    readArray1DCoerce(dataset, output);
-  } catch (const H5::GroupIException &e) {
-    UNUSED_ARG(e);
-    g_log.information("Failed to open dataset \"" + name + "\"\n");
-  } catch (const H5::DataTypeIException &e) {
-    UNUSED_ARG(e);
-    g_log.information("DataSet \"" + name + "\" should be double" + "\n");
+  if (object.attrExists(attributeName)) {
+    const auto attribute = object.openAttribute(attributeName);
+    attribute.read(attribute.getDataType(), output);
+  } else {
+    throw H5::Exception("H5Util::readStringAttribute", "no attribute with name " + attributeName);
   }
 }
 
-template <typename NumT> std::vector<NumT> readArray1DCoerce(const H5::Group &group, const std::string &name) {
-  std::vector<NumT> result;
+// This method avoids a copy on return so should be preferred to its sibling method
+template <typename OutT, Narrowing narrow>
+void readArray1DCoerce(const H5::Group &group, const std::string &name, std::vector<OutT> &output) {
   try {
     DataSet dataset = group.openDataSet(name);
-    readArray1DCoerce(dataset, result);
-  } catch (const H5::GroupIException &e) {
-    UNUSED_ARG(e);
-    g_log.information("Failed to open dataset \"" + name + "\"\n");
-  } catch (const H5::DataTypeIException &e) {
-    UNUSED_ARG(e);
-    g_log.information("DataSet \"" + name + "\" should be double" + "\n");
+    readArray1DCoerce<OutT, narrow>(dataset, output);
+  } catch (const H5::GroupIException &) {
+    g_log->information("Failed to open dataset \"" + name + "\"");
+  } catch (const H5::DataTypeIException &) {
+    g_log->information("DataSet \"" + name + "\" should be double");
+  }
+}
+
+template <typename OutT, Narrowing narrow>
+std::vector<OutT> readArray1DCoerce(const H5::Group &group, const std::string &name) {
+  std::vector<OutT> result;
+  try {
+    DataSet dataset = group.openDataSet(name);
+    readArray1DCoerce<OutT, narrow>(dataset, result);
+  } catch (const H5::GroupIException &) {
+    g_log->information("Failed to open dataset \"" + name + "\"");
+  } catch (const H5::DataTypeIException &) {
+    g_log->information("DataSet \"" + name + "\" should be double");
   }
 
   return result;
 }
 
 namespace {
-template <typename InputNumT, typename OutputNumT>
-void convertingRead(const DataSet &dataset, const DataType &dataType, std::vector<OutputNumT> &output) {
-  DataSpace dataSpace = dataset.getSpace();
+template <typename InT, typename OutT, Narrowing narrow>
+void convertingVectorRead(const DataSet &dataset, const DataType &dataType, std::vector<OutT> &output,
+                          const DataSpace &memspace, const DataSpace &filespace) {
+  throwIfUnallowedNarrowing<InT, OutT, narrow>();
 
-  std::vector<InputNumT> temp(dataSpace.getSelectNpoints());
-  dataset.read(temp.data(), dataType, dataSpace);
-
-  output.resize(temp.size());
-
-  std::transform(temp.begin(), temp.end(), output.begin(),
-                 [](const InputNumT a) { // lambda
-                   return boost::numeric_cast<OutputNumT>(a);
-                 });
+  std::size_t dataSize = filespace.getSelectNpoints();
+  if constexpr (std::is_same_v<InT, OutT>) {
+    output.resize(dataSize);
+    dataset.read(output.data(), dataType, memspace, filespace);
+  } else {
+    std::vector<InT> temp(dataSize);
+    dataset.read(temp.data(), dataType, memspace, filespace);
+    narrowingVectorCast<InT, OutT>(temp, output);
+  }
 }
 
-template <typename InputNumT, typename OutputNumT>
-std::vector<OutputNumT> convertingNumArrayAttributeRead(Attribute &attribute, const DataType &dataType) {
-  DataSpace dataSpace = attribute.getSpace();
+template <typename InT, typename OutT, Narrowing narrow>
+void convertingNumArrayAttributeRead(Attribute &attribute, DataType const &dataType, std::vector<OutT> &value) {
+  throwIfUnallowedNarrowing<InT, OutT, narrow>();
 
-  std::vector<InputNumT> temp(dataSpace.getSelectNpoints());
-  attribute.read(dataType, temp.data());
-
-  std::vector<OutputNumT> result;
-  result.resize(temp.size());
-
-  std::transform(temp.begin(), temp.end(), result.begin(),
-                 [](const InputNumT a) { return boost::numeric_cast<OutputNumT>(a); });
-
-  return result;
+  std::size_t dataSize = (attribute.getSpace()).getSelectNpoints();
+  if constexpr (std::is_same_v<InT, OutT>) {
+    value.resize(dataSize);
+    attribute.read(dataType, value.data());
+  } else {
+    std::vector<InT> temp(dataSize);
+    attribute.read(dataType, temp.data());
+    narrowingVectorCast<InT, OutT>(temp, value);
+  }
 }
 
-template <typename InputNumT, typename OutputNumT>
-OutputNumT convertingRead(Attribute &attribute, const DataType &dataType) {
-  InputNumT temp;
-  attribute.read(dataType, &temp);
-  auto result = boost::numeric_cast<OutputNumT>(temp);
-  return result;
+template <typename InT, typename OutT, Narrowing narrow>
+void convertingScalarRead(Attribute &attribute, const DataType &dataType, OutT &value) {
+  throwIfUnallowedNarrowing<InT, OutT, narrow>();
+
+  if constexpr (std::is_same_v<InT, OutT>) {
+    attribute.read(dataType, &value);
+  } else {
+    InT temp;
+    attribute.read(dataType, &temp);
+    value = boost::numeric_cast<OutT>(temp);
+  }
 }
 
 } // namespace
 
-template <typename NumT> NumT readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName) {
+/** Read a single quantity from an attribute, coerced to type of OutT.
+ * Narrowing behavior can be controlled with optional template param narrow,
+ * which, if narrow = Prevent, will throw an error if type coercion would cause narrowing.
+ */
+template <typename OutT, Narrowing narrow>
+OutT readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName) {
   auto attribute = object.openAttribute(attributeName);
   auto dataType = attribute.getDataType();
 
-  NumT value;
-
-  if (getType<NumT>() == dataType) {
-    attribute.read(dataType, &value);
-  } else if (PredType::NATIVE_INT32 == dataType) {
-    value = convertingRead<int32_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_UINT32 == dataType) {
-    value = convertingRead<uint32_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_INT64 == dataType) {
-    value = convertingRead<int64_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_UINT64 == dataType) {
-    value = convertingRead<uint64_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_FLOAT == dataType) {
-    value = convertingRead<float, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_DOUBLE == dataType) {
-    value = convertingRead<double, NumT>(attribute, dataType);
-  } else {
-    // not a supported type
-    throw DataTypeIException();
-  }
+  OutT value;
+  RUN_H5UTIL_FUNCTION(dataType, convertingScalarRead, attribute, dataType, value);
   return value;
 }
 
-template <typename NumT>
-std::vector<NumT> readNumArrayAttributeCoerce(const H5::H5Object &object, const std::string &attributeName) {
+/** Read a numerical array from an attribute, coerced to type of OutT.
+ * Narrowing behavior can be controlled with optional template param narrow,
+ * which, if narrow = Prevent, will throw an error if type coercion would cause narrowing.
+ */
+template <typename OutT, Narrowing narrow>
+std::vector<OutT> readNumArrayAttributeCoerce(const H5::H5Object &object, const std::string &attributeName) {
   auto attribute = object.openAttribute(attributeName);
   auto dataType = attribute.getDataType();
 
-  std::vector<NumT> value;
-
-  if (getType<NumT>() == dataType) {
-    DataSpace dataSpace = attribute.getSpace();
-    value.resize(dataSpace.getSelectNpoints());
-    attribute.read(dataType, value.data());
-  } else if (PredType::NATIVE_INT32 == dataType) {
-    value = convertingNumArrayAttributeRead<int32_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_UINT32 == dataType) {
-    value = convertingNumArrayAttributeRead<uint32_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_INT64 == dataType) {
-    value = convertingNumArrayAttributeRead<int64_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_UINT64 == dataType) {
-    value = convertingNumArrayAttributeRead<uint64_t, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_FLOAT == dataType) {
-    value = convertingNumArrayAttributeRead<float, NumT>(attribute, dataType);
-  } else if (PredType::NATIVE_DOUBLE == dataType) {
-    value = convertingNumArrayAttributeRead<double, NumT>(attribute, dataType);
-  } else {
-    // not a supported type
-    throw DataTypeIException();
-  }
+  std::vector<OutT> value;
+  RUN_H5UTIL_FUNCTION(dataType, convertingNumArrayAttributeRead, attribute, dataType, value);
+  // RUN_H5UTIL_FUNCTION(dataType, narrow, convertingNumArrayAttributeRead, attribute, dataType, value);
   return value;
 }
 
-template <typename NumT> void readArray1DCoerce(const DataSet &dataset, std::vector<NumT> &output) {
-  DataType dataType = dataset.getDataType();
+/** Read a standard vector from a dataset, coerced to type of OutT.
+ * Narrowing behavior can be controlled with optional template param narrow,
+ * which, if narrow = Prevent, will throw an error if type coercion would cause narrowing.
+ */
+template <typename OutT, Narrowing narrow>
+void readArray1DCoerce(const H5::DataSet &dataset, std::vector<OutT> &output, const size_t length,
+                       const size_t offset) {
+  DataSpace filespace = dataset.getSpace();
+  const auto length_actual = static_cast<size_t>(filespace.getSelectNpoints());
 
-  if (getType<NumT>() == dataType) { // no conversion necessary
-    DataSpace dataSpace = dataset.getSpace();
-    output.resize(dataSpace.getSelectNpoints());
-    dataset.read(output.data(), dataType, dataSpace);
+  if (offset >= length_actual && offset != 0) {
+    std::stringstream msg;
+    msg << "Tried to read offset=" << offset << " into array that is only lenght=" << length_actual << " long";
+    throw std::runtime_error(msg.str());
   }
 
-  if (PredType::NATIVE_INT32 == dataType) {
-    convertingRead<int32_t>(dataset, dataType, output);
-  } else if (PredType::NATIVE_UINT32 == dataType) {
-    convertingRead<uint32_t>(dataset, dataType, output);
-  } else if (PredType::NATIVE_INT64 == dataType) {
-    convertingRead<int64_t>(dataset, dataType, output);
-  } else if (PredType::NATIVE_UINT64 == dataType) {
-    convertingRead<uint64_t>(dataset, dataType, output);
-  } else if (PredType::NATIVE_FLOAT == dataType) {
-    convertingRead<float>(dataset, dataType, output);
-  } else if (PredType::NATIVE_DOUBLE == dataType) {
-    convertingRead<double>(dataset, dataType, output);
-  } else {
-    // not a supported type
-    throw DataTypeIException();
-  }
+  // set extent and offset in DataSpace
+  const hsize_t rankedoffset[1] = {static_cast<hsize_t>(offset)};
+  const hsize_t rankedextent[1] = {
+      static_cast<hsize_t>(std::min(length, length_actual - offset))}; // don't read past the end
+  // select a part of filespace if appropriate
+  if (rankedextent[0] < length_actual)
+    filespace.selectHyperslab(H5S_SELECT_SET, rankedextent, rankedoffset);
+
+  // size of thing being read out
+  DataSpace memspace(1, rankedextent);
+
+  // do the actual read
+  const DataType dataType = dataset.getDataType();
+  RUN_H5UTIL_FUNCTION(dataType, convertingVectorRead, dataset, dataType, output, memspace, filespace);
 }
 
 /// Test if a group exists in an HDF5 file or parent group.
-bool groupExists(H5::H5Object &h5, const std::string &groupPath) {
+bool groupExists(H5::H5Object const &h5, const std::string &groupAddress) {
   bool status = true;
   // Unfortunately, this is actually the approach recommended by the HDF Group.
   try {
-    h5.openGroup(groupPath);
-  } catch (const H5::Exception &e) {
-    UNUSED_ARG(e);
+    h5.openGroup(groupAddress);
+  } catch (const H5::Exception &) {
     status = false;
   }
   return status;
 }
 
 /// Test if an attribute is present on an HDF5 group or dataset and has a specific string value.
-bool keyHasValue(H5::H5Object &h5, const std::string &key, const std::string &value) {
+bool keyHasValue(H5::H5Object const &h5, const std::string &key, const std::string &value) {
   bool status = true;
   try {
     Attribute attr = h5.openAttribute(key);
@@ -428,19 +505,18 @@ bool keyHasValue(H5::H5Object &h5, const std::string &key, const std::string &va
     attr.read(attr.getDataType(), value_);
     if (value_ != value)
       status = false;
-  } catch (const H5::Exception &e) {
-    UNUSED_ARG(e);
+  } catch (const H5::Exception &) {
     status = false;
   }
   return status;
 }
 
-void copyGroup(H5::H5Object &dest, const std::string &destGroupPath, H5::H5Object &src,
-               const std::string &srcGroupPath) {
+void copyGroup(H5::H5Object &dest, const std::string &destGroupAddress, H5::H5Object &src,
+               const std::string &srcGroupAddress) {
   // Source group must exist, and destination group must not exist.
-  if (!groupExists(src, srcGroupPath) || groupExists(dest, destGroupPath))
-    throw std::invalid_argument(std::string("H5Util::copyGroup: source group '") + srcGroupPath + "' must exist and " +
-                                "destination group '" + destGroupPath + "' must not exist.");
+  if (!groupExists(src, srcGroupAddress) || groupExists(dest, destGroupAddress))
+    throw std::invalid_argument(std::string("H5Util::copyGroup: source group '") + srcGroupAddress +
+                                "' must exist and " + "destination group '" + destGroupAddress + "' must not exist.");
 
   // TODO: check that source file must have at least read access and destination file must have write access.
 
@@ -448,13 +524,13 @@ void copyGroup(H5::H5Object &dest, const std::string &destGroupPath, H5::H5Objec
   //   C++ API support for these HDF5 methods does not yet exist.
 
   // Create intermediate groups, if necessary
-  hid_t lcpl = H5Pcreate(H5P_LINK_CREATE);
+  Mantid::Nexus::UniqueID<&H5Pclose> lcpl = H5Pcreate(H5P_LINK_CREATE);
   if (H5Pset_create_intermediate_group(lcpl, 1) < 0)
     throw std::runtime_error("H5Util::copyGroup: 'H5Pset_create_intermediate_group' error return.");
 
-  if (H5Ocopy(src.getId(), srcGroupPath.c_str(), dest.getId(), destGroupPath.c_str(), H5P_DEFAULT, lcpl) < 0)
+  if (H5Ocopy(src.getId(), srcGroupAddress.c_str(), dest.getId(), destGroupAddress.c_str(), H5P_DEFAULT, lcpl) < 0)
     throw std::runtime_error("H5Util::copyGroup: 'H5Ocopy' error return.");
-  H5Pclose(lcpl);
+  lcpl.reset(); // explicit closure
 }
 
 void deleteObjectLink(H5::H5Object &h5, const std::string &target) {
@@ -475,6 +551,14 @@ template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, con
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const double &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const int8_t &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const uint8_t &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const int16_t &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const uint16_t &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const int32_t &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const uint32_t &value);
@@ -482,11 +566,21 @@ template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, con
                                                  const int64_t &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const uint64_t &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const char &value);
 
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const std::vector<float> &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const std::vector<double> &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const std::vector<int8_t> &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const std::vector<uint8_t> &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const std::vector<int16_t> &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const std::vector<uint16_t> &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const std::vector<int32_t> &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
@@ -495,20 +589,37 @@ template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, con
                                                  const std::vector<int64_t> &value);
 template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
                                                  const std::vector<uint64_t> &value);
+template MANTID_NEXUS_DLL void writeNumAttribute(const H5::H5Object &object, const std::string &name,
+                                                 const std::vector<char> &value);
 
 // -------------------------------------------------------------------
 // instantiations for readNumAttributeCoerce
 // -------------------------------------------------------------------
+
+/* NOTE these instantiations are for case Narrowing::Allow
+/ To use Narrowing:Prevent, will need to instantiate and export those methods
+*/
+
 template MANTID_NEXUS_DLL float readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 template MANTID_NEXUS_DLL double readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
+template MANTID_NEXUS_DLL int8_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
+template MANTID_NEXUS_DLL uint8_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
+template MANTID_NEXUS_DLL int16_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
+template MANTID_NEXUS_DLL uint16_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 template MANTID_NEXUS_DLL int32_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 template MANTID_NEXUS_DLL uint32_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 template MANTID_NEXUS_DLL int64_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 template MANTID_NEXUS_DLL uint64_t readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
+template MANTID_NEXUS_DLL char readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 
 // -------------------------------------------------------------------
 // instantiations for readNumArrayAttributeCoerce
 // -------------------------------------------------------------------
+
+/* NOTE these instantiations are for case Narrowing::Allow
+/ To use Narrowing:Prevent, will need to instantiate and export those methods
+*/
+
 template MANTID_NEXUS_DLL std::vector<float> readNumArrayAttributeCoerce(const H5::H5Object &object,
                                                                          const std::string &attributeName);
 template MANTID_NEXUS_DLL std::vector<double> readNumArrayAttributeCoerce(const H5::H5Object &object,
@@ -525,6 +636,11 @@ template MANTID_NEXUS_DLL std::vector<uint64_t> readNumArrayAttributeCoerce(cons
 // -------------------------------------------------------------------
 // instantiations for writeArray1D
 // -------------------------------------------------------------------
+
+/* NOTE these instantiations are for case Narrowing::Allow
+/ To use Narrowing:Prevent, will need to instantiate and export those methods
+*/
+
 template MANTID_NEXUS_DLL void writeArray1D(H5::Group &group, const std::string &name,
                                             const std::vector<float> &values);
 template MANTID_NEXUS_DLL void writeArray1D(H5::Group &group, const std::string &name,
@@ -564,16 +680,6 @@ writeScalarDataSetWithStrAttributes(H5::Group &group, const std::string &name, c
                                     const std::map<std::string, std::string> &attributes);
 
 // -------------------------------------------------------------------
-// instantiations for getDataSpace
-// -------------------------------------------------------------------
-template MANTID_NEXUS_DLL DataSpace getDataSpace(const std::vector<float> &data);
-template MANTID_NEXUS_DLL DataSpace getDataSpace(const std::vector<double> &data);
-template MANTID_NEXUS_DLL DataSpace getDataSpace(const std::vector<int32_t> &data);
-template MANTID_NEXUS_DLL DataSpace getDataSpace(const std::vector<uint32_t> &data);
-template MANTID_NEXUS_DLL DataSpace getDataSpace(const std::vector<int64_t> &data);
-template MANTID_NEXUS_DLL DataSpace getDataSpace(const std::vector<uint64_t> &data);
-
-// -------------------------------------------------------------------
 // instantiations for readArray1DCoerce
 // -------------------------------------------------------------------
 template MANTID_NEXUS_DLL void readArray1DCoerce(const H5::Group &group, const std::string &name,
@@ -596,10 +702,26 @@ template MANTID_NEXUS_DLL std::vector<uint32_t> readArray1DCoerce(const H5::Grou
 template MANTID_NEXUS_DLL std::vector<int64_t> readArray1DCoerce(const H5::Group &group, const std::string &name);
 template MANTID_NEXUS_DLL std::vector<uint64_t> readArray1DCoerce(const H5::Group &group, const std::string &name);
 
-template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<float> &output);
-template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<double> &output);
-template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<int32_t> &output);
-template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<uint32_t> &output);
-template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<int64_t> &output);
-template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<uint64_t> &output);
-} // namespace Mantid::NeXus::H5Util
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<float> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<double> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<int8_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<uint8_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<int16_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<uint16_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<int32_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<uint32_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<int64_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<uint64_t> &output,
+                                                 const size_t length, const size_t offset);
+template MANTID_NEXUS_DLL void readArray1DCoerce(const DataSet &dataset, std::vector<char> &output, const size_t length,
+                                                 const size_t offset);
+} // namespace Mantid::Nexus::H5Util

@@ -54,7 +54,7 @@ const Kernel::V3D toShapeFrame(const Kernel::V3D &point, const Beamline::Compone
 ComponentInfo::ComponentInfo(
     std::unique_ptr<Beamline::ComponentInfo> componentInfo,
     std::shared_ptr<const std::vector<Mantid::Geometry::IComponent *>> componentIds,
-    std::shared_ptr<const std::unordered_map<Geometry::IComponent *, size_t>> componentIdToIndexMap,
+    std::shared_ptr<const std::unordered_map<Geometry::IComponent const *, size_t>> componentIdToIndexMap,
     std::shared_ptr<std::vector<std::shared_ptr<const Geometry::IObject>>> shapes)
     : m_componentInfo(std::move(componentInfo)), m_componentIds(std::move(componentIds)),
       m_compIDToIndex(std::move(componentIdToIndexMap)), m_shapes(std::move(shapes)) {
@@ -126,7 +126,7 @@ ComponentInfo::QuadrilateralComponent ComponentInfo::quadrilateralComponent(cons
   return corners;
 }
 
-size_t ComponentInfo::indexOf(Geometry::IComponent *id) const { return m_compIDToIndex->at(id); }
+size_t ComponentInfo::indexOf(Geometry::IComponent const *id) const { return m_compIDToIndex->at(id); }
 
 size_t ComponentInfo::indexOfAny(const std::string &name) const { return m_componentInfo->indexOfAny(name); }
 
@@ -448,5 +448,30 @@ ComponentInfoIt ComponentInfo::end() { return ComponentInfoIt(*this, size(), siz
 const ComponentInfoConstIt ComponentInfo::cbegin() { return ComponentInfoConstIt(*this, 0, size()); }
 
 const ComponentInfoConstIt ComponentInfo::cend() { return ComponentInfoConstIt(*this, size(), size()); }
+
+size_t ComponentInfo::findBankParent(size_t index, const std::string &bankPart) const {
+  constexpr size_t invalidIndex{0}; // index 0 will always be a dectector and never a bank
+  // if this component is a bank, return the parent
+  if (name(index).starts_with(bankPart)) {
+    return parent(index);
+  }
+  // check if the children components begin with bankPart
+  auto indexChildren = children(index);
+  if (indexChildren.empty()) {
+    return invalidIndex;
+  }
+  // if they do, we found the bank parent
+  if (name(indexChildren[0]).starts_with(bankPart)) {
+    return index;
+  }
+  // if not, check the grandchildren
+  for (size_t const child : indexChildren) {
+    size_t j = findBankParent(child, bankPart);
+    if (j != invalidIndex) {
+      return j;
+    }
+  }
+  return invalidIndex;
+}
 
 } // namespace Mantid::Geometry

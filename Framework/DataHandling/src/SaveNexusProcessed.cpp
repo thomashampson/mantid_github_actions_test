@@ -12,6 +12,7 @@
 #include "MantidAPI/IMDEventWorkspace.h"
 #include "MantidAPI/IMDHistoWorkspace.h"
 #include "MantidAPI/WorkspaceHistory.h"
+#include "MantidDataHandling/SaveNexusProcessedHelper.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidDataObjects/GroupingWorkspace.h"
 #include "MantidDataObjects/MaskWorkspace.h"
@@ -20,7 +21,6 @@
 #include "MantidGeometry/Crystal/AngleUnits.h"
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/BoundedValidator.h"
-#include "MantidNexus/NexusFileIO.h"
 #include <memory>
 #include <utility>
 
@@ -33,7 +33,7 @@ using namespace API;
 using namespace DataObjects;
 using Geometry::Instrument_const_sptr;
 
-using optional_size_t = NeXus::NexusFileIO::optional_size_t;
+using optional_size_t = Nexus::NexusFileIO::optional_size_t;
 
 // Register the algorithm into the algorithm factory
 DECLARE_ALGORITHM(SaveNexusProcessed)
@@ -201,11 +201,10 @@ void SaveNexusProcessed::getWSIndexList(std::vector<int> &indices, const MatrixW
   }
 }
 
-void SaveNexusProcessed::doExec(const Workspace_sptr &inputWorkspace,
-                                std::shared_ptr<Mantid::NeXus::NexusFileIO> &nexusFile, const bool keepFile,
-                                optional_size_t entryNumber) {
-  // TODO: Remove?
-  NXMEnableErrorReporting();
+void SaveNexusProcessed::doExec(const Workspace_sptr &inputWorkspace, std::shared_ptr<Nexus::NexusFileIO> &nexusFile,
+                                const bool keepFile, optional_size_t entryNumber) {
+  //
+  //
 
   // Retrieve the filename from the properties
   const std::string filename = getPropertyValue("Filename");
@@ -269,9 +268,6 @@ void SaveNexusProcessed::doExec(const Workspace_sptr &inputWorkspace,
   nexusFile->resetProgress(&prog_init);
   nexusFile->openNexusWrite(filename, entryNumber, append_to_file || keepFile);
 
-  // Equivalent C++ API handle
-  ::NeXus::File cppFile(nexusFile->fileID);
-
   prog_init.reportIncrement(1, "Opening file");
   if (nexusFile->writeNexusProcessedHeader(title, wsName) != 0)
     throw Exception::FileError("Failed to write to file", filename);
@@ -281,7 +277,7 @@ void SaveNexusProcessed::doExec(const Workspace_sptr &inputWorkspace,
   // write instrument data, if present and writer enabled
   if (matrixWorkspace) {
     // Save the instrument names, ParameterMap, sample, run
-    matrixWorkspace->saveExperimentInfoNexus(&cppFile, saveLegacyInstrument());
+    matrixWorkspace->saveExperimentInfoNexus(nexusFile->filehandle().get(), saveLegacyInstrument());
     prog_init.reportIncrement(1, "Writing sample and instrument");
 
     // check if all X() are in fact the same array
@@ -312,23 +308,23 @@ void SaveNexusProcessed::doExec(const Workspace_sptr &inputWorkspace,
     }
 
     if (saveLegacyInstrument()) {
-      cppFile.openGroup("instrument", "NXinstrument");
-      cppFile.makeGroup("detector", "NXdetector", true);
+      nexusFile->filehandle()->openGroup("instrument", "NXinstrument");
+      nexusFile->filehandle()->makeGroup("detector", "NXdetector", true);
 
-      cppFile.putAttr("version", 1);
-      saveSpectraDetectorMapNexus(*matrixWorkspace, &cppFile, indices, ::NeXus::LZW);
-      saveSpectrumNumbersNexus(*matrixWorkspace, &cppFile, indices, ::NeXus::LZW);
-      cppFile.closeGroup();
-      cppFile.closeGroup();
+      nexusFile->filehandle()->putAttr("version", 1);
+      saveSpectraDetectorMapNexus(*matrixWorkspace, nexusFile->filehandle().get(), indices, NXcompression::LZW);
+      saveSpectrumNumbersNexus(*matrixWorkspace, nexusFile->filehandle().get(), indices, NXcompression::LZW);
+      nexusFile->filehandle()->closeGroup();
+      nexusFile->filehandle()->closeGroup();
     }
 
   } // finish matrix workspace specifics
 
   if (peaksWorkspace) {
     // Save the instrument names, ParameterMap, sample, run
-    peaksWorkspace->saveExperimentInfoNexus(&cppFile);
+    peaksWorkspace->saveExperimentInfoNexus(nexusFile->filehandle().get());
     prog_init.reportIncrement(1, "Writing sample and instrument");
-    peaksWorkspace->saveNexus(&cppFile);
+    peaksWorkspace->saveNexus(nexusFile->filehandle().get());
   } else if (tableWorkspace) {
     nexusFile->writeNexusTableWorkspace(tableWorkspace, "table_workspace");
   }
@@ -346,7 +342,7 @@ void SaveNexusProcessed::doExec(const Workspace_sptr &inputWorkspace,
     }
   }
 
-  inputWorkspace->history().saveNexus(&cppFile);
+  inputWorkspace->history().saveNexus(nexusFile->filehandle().get());
   nexusFile->closeGroup();
 }
 
@@ -359,7 +355,7 @@ void SaveNexusProcessed::exec() {
   Workspace_sptr inputWorkspace = getProperty("InputWorkspace");
 
   // Then immediately open the file
-  auto nexusFile = std::make_shared<Mantid::NeXus::NexusFileIO>();
+  auto nexusFile = std::make_shared<Mantid::Nexus::NexusFileIO>();
 
   // Perform the execution.
   doExec(inputWorkspace, nexusFile);
@@ -408,7 +404,7 @@ void SaveNexusProcessed::appendEventListData(const std::vector<T> &events, size_
 /** Execute the saving of event data.
  * This will make one long event list for all events contained.
  * */
-void SaveNexusProcessed::execEvent(const Mantid::NeXus::NexusFileIO *nexusFile, const bool uniformSpectra,
+void SaveNexusProcessed::execEvent(const Mantid::Nexus::NexusFileIO *nexusFile, const bool uniformSpectra,
                                    const bool raggedSpectra, const std::vector<int> &spec) {
   m_progress = std::make_unique<Progress>(this, m_timeProgInit, 1.0, m_eventWorkspace->getNumberEvents() * 2);
 
@@ -530,7 +526,7 @@ void SaveNexusProcessed::setOtherProperties(IAlgorithm *alg, const std::string &
  */
 bool SaveNexusProcessed::processGroups() {
   // Then immediately open the file
-  auto nexusFile = std::make_shared<Mantid::NeXus::NexusFileIO>();
+  auto nexusFile = std::make_shared<Mantid::Nexus::NexusFileIO>();
 
   // If we have arrived here then a WorkspaceGroup was passed to the
   // InputWorkspace property. Pull out the unrolled workspaces and append an
@@ -560,9 +556,9 @@ bool SaveNexusProcessed::processGroups() {
  * @param wsIndices :: list of the Workspace Indices to save.
  * @param compression :: NXcompression int to indicate how to compress
  */
-void SaveNexusProcessed::saveSpectraDetectorMapNexus(const MatrixWorkspace &ws, ::NeXus::File *file,
+void SaveNexusProcessed::saveSpectraDetectorMapNexus(const MatrixWorkspace &ws, Nexus::File *file,
                                                      const std::vector<int> &wsIndices,
-                                                     const ::NeXus::NXcompression compression) const {
+                                                     const NXcompression compression) const {
 
   std::vector<int32_t> detector_index;
   std::vector<int32_t> detector_count;
@@ -576,7 +572,7 @@ void SaveNexusProcessed::saveSpectraDetectorMapNexus(const MatrixWorkspace &ws, 
     return;
 
   // write data as Nexus sections detector{index,count,list}
-  std::vector<int> dims(1, numberSpec);
+  Nexus::DimVector dims(1, numberSpec);
   file->writeCompData("detector_index", detector_index, dims, compression, dims);
   file->writeCompData("detector_count", detector_count, dims, compression, dims);
   dims.front() = static_cast<int>(nDetectors);
@@ -625,9 +621,9 @@ void SaveNexusProcessed::saveSpectraDetectorMapNexus(const MatrixWorkspace &ws, 
  * @param wsIndices :: list of the Workspace Indices to save.
  * @param compression :: NXcompression int to indicate how to compress
  */
-void SaveNexusProcessed::saveSpectrumNumbersNexus(const API::MatrixWorkspace &ws, ::NeXus::File *file,
+void SaveNexusProcessed::saveSpectrumNumbersNexus(const API::MatrixWorkspace &ws, Nexus::File *file,
                                                   const std::vector<int> &wsIndices,
-                                                  const ::NeXus::NXcompression compression) const {
+                                                  const NXcompression compression) const {
   const auto numberSpec = int(wsIndices.size());
   std::vector<int32_t> spectra;
   spectra.reserve(static_cast<size_t>(numberSpec));
@@ -636,7 +632,7 @@ void SaveNexusProcessed::saveSpectrumNumbersNexus(const API::MatrixWorkspace &ws
     spectra.emplace_back(static_cast<int32_t>(spectrum.getSpectrumNo()));
   }
 
-  const std::vector<int> dims(1, numberSpec);
+  const Nexus::DimVector dims(1, numberSpec);
   file->writeCompData("spectra", spectra, dims, compression, dims);
 }
 

@@ -64,7 +64,7 @@ public:
   IObject *clone() const override { return new CSGObject(*this); }
 
   IObject *cloneWithMaterial(const Kernel::Material &material) const override {
-    auto obj = new CSGObject(*this);
+    auto obj = this->clone();
     obj->setMaterial(material);
     return obj;
   }
@@ -86,9 +86,7 @@ public:
   /// Return whether this object has a valid shape
   bool hasValidShape() const override;
   int setObject(const int objName, const std::string &lineStr);
-  int procString(const std::string &lineStr);
-  int complementaryObject(const int cellNum,
-                          std::string &lineStr); ///< Process a complementary object
+  void procString(const std::string &lineStr);
   int hasComplement() const;
 
   int populate(const std::map<int, std::shared_ptr<Surface>> &);
@@ -168,7 +166,6 @@ public:
   std::shared_ptr<GeometryHandler> getGeometryHandler() const override;
   /// Set Geometry Handler
   void setGeometryHandler(const std::shared_ptr<GeometryHandler> &h);
-
   /// set vtkGeometryCache writer
   void setVtkGeometryCacheWriter(std::shared_ptr<vtkGeometryCacheWriter>);
   /// set vtkGeometryCache reader

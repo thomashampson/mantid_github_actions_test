@@ -33,6 +33,10 @@ class CalibrationPresenter(object):
         self.instrument = "ENGINX"
         self.rb_num = None
 
+        last_van_path = get_setting(output_settings.INTERFACES_SETTINGS_GROUP, output_settings.ENGINEERING_PREFIX, "last_vanadium_run")
+        if last_van_path:
+            self.view.set_van_file_text_with_search(last_van_path)
+
         # Cropping Options
         self.cropping_widget = CroppingPresenter(parent=self.view, view=self.view.get_cropping_widget())
         self.show_cropping(False)
@@ -46,24 +50,28 @@ class CalibrationPresenter(object):
         self.view.set_on_check_cropping_state_changed(self.show_cropping)
 
     def update_calibration_from_view(self):
+        van_file = self.view.get_vanadium_filename()
         self.current_calibration.clear()
         if self.view.get_load_checked():
             # loading calibration from path to .prm
             self.current_calibration.set_calibration_from_prm_fname(self.view.get_path_filename())
+            self.current_calibration.van_file = van_file
         else:
-            # make a new calibration
+            # update current calibration with new data
             sample_file = self.view.get_sample_filename()
-            self.current_calibration.set_calibration_paths(self.instrument, sample_file)
+            self.current_calibration.set_calibration_paths(self.instrument, sample_file, van_file)
             # set group and any additional parameters needed
             if self.view.get_crop_checked():
                 self.current_calibration.set_group(self.cropping_widget.get_group())
                 if self.current_calibration.group == GROUP.CUSTOM:
-                    self.current_calibration.set_cal_file(self.cropping_widget.get_custom_calfile())
+                    self.current_calibration.set_grouping_file(self.cropping_widget.get_custom_groupingfile())
                 elif self.current_calibration.group == GROUP.CROPPED:
                     self.current_calibration.set_spectra_list(self.cropping_widget.get_custom_spectra())
             else:
                 # default if no cropping
                 self.current_calibration.set_group(GROUP.BOTH)
+            # ensure the updated group is translated to an updated group_ws
+            self.current_calibration.update_group_ws_from_group()
 
     def on_calibrate_clicked(self):
         if self.view.get_new_checked() and self._validate():
@@ -73,6 +81,8 @@ class CalibrationPresenter(object):
             self.update_calibration_from_view()
             self.model.load_existing_calibration_files(self.current_calibration)
             self._notify_updated_calibration()
+        van_run = self.view.get_vanadium_run()
+        set_setting(output_settings.INTERFACES_SETTINGS_GROUP, output_settings.ENGINEERING_PREFIX, "last_vanadium_run", van_run)
 
     def start_calibration_worker(self, plot_output):
         """
@@ -106,17 +116,19 @@ class CalibrationPresenter(object):
         self.prm_filepath_notifier_gsas2.notify_subscribers(self.model.get_last_prm_file_gsas2())
 
     def set_field_value(self):
-        self.view.set_sample_text(self.current_calibration.get_sample())
+        self.view.set_sample_text(self.current_calibration.get_ceria_path())
 
     def load_last_calibration(self) -> None:
         """
         Loads the most recently created or loaded calibration into the interface instance. To be used on interface
         startup.
         """
-        last_cal_path = get_setting(output_settings.INTERFACES_SETTINGS_GROUP, output_settings.ENGINEERING_PREFIX, "last_calibration_path")
-        if last_cal_path:
+        last_grouping_path = get_setting(
+            output_settings.INTERFACES_SETTINGS_GROUP, output_settings.ENGINEERING_PREFIX, "last_calibration_path"
+        )
+        if last_grouping_path:
             self.view.set_load_checked(True)
-            self.view.set_file_text_with_search(last_cal_path)
+            self.view.set_file_text_with_search(last_grouping_path)
 
     def set_instrument_override(self, instrument):
         instrument = INSTRUMENT_DICT[instrument]
@@ -134,9 +146,12 @@ class CalibrationPresenter(object):
         if not self.view.get_sample_valid():
             create_error_message(self.view, "Check run numbers/path is valid.")
             return False
+        if not self.view.get_vanadium_valid():
+            create_error_message(self.view, "Check vanadium run number/path is valid.")
+            return False
         if self.view.get_crop_checked():
-            if self.cropping_widget.get_custom_calfile_enabled() and not self.cropping_widget.is_calfile_valid():
-                create_error_message(self.view, "Check custom calfile path is valid.")
+            if self.cropping_widget.get_custom_groupingfile_enabled() and not self.cropping_widget.is_groupingfile_valid():
+                create_error_message(self.view, "Check custom grouping file path is valid.")
                 return False
             if self.cropping_widget.get_custom_spectra_enabled() and not self.cropping_widget.is_spectra_valid():
                 create_error_message(self.view, "Check custom spectra are valid.")

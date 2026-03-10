@@ -14,7 +14,7 @@
 namespace Mantid {
 namespace MDAlgorithms {
 
-/** ApplyDetailedBalance : Perform the And boolean operation on two MDHistoWorkspaces
+/** ApplyDetailedBalance : Convert to chi'' of an MDEvent workspace
 
   @date 2011-11-08
 */
@@ -48,6 +48,9 @@ private:
 
   /// map of temperature retrieved from sample logs
   std::map<uint16_t, double> mExpinfoTemperatureMean;
+
+  /// temperature to convert to
+  double mFinalTemperature;
 };
 
 } // namespace MDAlgorithms

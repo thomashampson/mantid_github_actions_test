@@ -508,17 +508,16 @@ void GeneratePeaks::processTableColumnNames() {
                     "number of parameters of function(s) to generate peaks. ");
 
     // Check column names are same as function parameter naems
-    for (size_t i = 0; i < numpeakparams; ++i) {
-      if (!hasParameter(m_peakFunction, m_funcParameterNames[i])) {
-        std::stringstream errss;
-        errss << "Peak function " << m_peakFunction->name() << " does not have paramter " << m_funcParameterNames[i]
-              << "\n"
-              << "Allowed function parameters are ";
-        std::vector<std::string> parnames = m_peakFunction->getParameterNames();
-        for (auto &parname : parnames)
-          errss << parname << ", ";
-        throw std::runtime_error(errss.str());
-      }
+    const auto it = std::find_if(m_funcParameterNames.cbegin(), m_funcParameterNames.cbegin() + numpeakparams,
+                                 [this](const auto &name) { return !hasParameter(m_peakFunction, name); });
+    if (it != m_funcParameterNames.cbegin() + numpeakparams) {
+      std::stringstream errss;
+      errss << "Peak function " << m_peakFunction->name() << " does not have paramter " << *it << "\n"
+            << "Allowed function parameters are ";
+      std::vector<std::string> parnames = m_peakFunction->getParameterNames();
+      for (auto const &parname : parnames)
+        errss << parname << ", ";
+      throw std::runtime_error(errss.str());
     }
 
     // Background function
@@ -659,7 +658,7 @@ API::MatrixWorkspace_sptr GeneratePeaks::createOutputWorkspace() {
 //----------------------------------------------------------------------------------------------
 /** Create a Workspace2D (MatrixWorkspace) with given spectra and bin parameters
  */
-MatrixWorkspace_sptr GeneratePeaks::createDataWorkspace(std::vector<double> binparameters) {
+MatrixWorkspace_sptr GeneratePeaks::createDataWorkspace(const std::vector<double> &binparameters) const {
   // Check validity
   if (m_spectraSet.empty())
     throw std::invalid_argument("Input spectra list is empty. Unable to generate a new workspace.");

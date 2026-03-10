@@ -136,7 +136,7 @@ class DrillExportModel:
             for param in params:
                 value = processingAlgo.getPropertyValue(param[1:-1])
                 criteria = criteria.replace(param, '"' + value + '"')
-            return bool(eval(criteria))
+            return bool(eval(criteria))  # noqa: S307
         except:
             return False
 
@@ -202,9 +202,7 @@ class DrillExportModel:
         """
         exportPath = config.getString("defaultsave.directory")
         if not exportPath:
-            logger.warning(
-                "Default save directory is not defined. Please " "specify one in the data directories dialog to " "enable exports."
-            )
+            logger.warning("Default save directory is not defined. Please specify one in the data directories dialog to enable exports.")
             return
         workspaceName = sample.getOutputName()
 
@@ -223,7 +221,7 @@ class DrillExportModel:
             if not active:
                 continue
             if not self._validCriteria(outputWs, algo):
-                logger.notice("Export of sample {} with {} was skipped " "because workspaces are not compatible.".format(outputWs, algo))
+                logger.notice("Export of sample {} with {} was skipped because workspaces are not compatible.".format(outputWs, algo))
                 continue
 
             for wsName in mtd.getObjectNames(contain=workspaceName):

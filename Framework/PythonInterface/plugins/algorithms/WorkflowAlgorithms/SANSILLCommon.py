@@ -27,7 +27,7 @@ class AcqMode(IntEnum):
 
 
 # Empty run rumber to act as a placeholder where a sample measurement is missing.
-EMPTY_TOKEN = "000000"
+EMPTY_TOKEN = "000000"  # noqa: S105
 # Quite often some samples are not measured at the some distances.
 # Still, it is preferred to reduce them together in one table.
 # Below is an example of why the blanks are needed:
@@ -143,10 +143,10 @@ def needs_processing(property_value, process_reduction_type):
                 if process == process_reduction_type:
                     logger.notice("Reusing {0} workspace: {1}".format(process_reduction_type, ws_name))
                 else:
-                    logger.warning("{0} workspace found, but processed " "differently: {1}".format(process_reduction_type, ws_name))
+                    logger.warning("{0} workspace found, but processed differently: {1}".format(process_reduction_type, ws_name))
                     do_process = True
             else:
-                logger.warning("{0} workspace found, but missing the " "ProcessedAs flag: {1}".format(process_reduction_type, ws_name))
+                logger.warning("{0} workspace found, but missing the ProcessedAs flag: {1}".format(process_reduction_type, ws_name))
                 do_process = True
         else:
             do_process = True

@@ -10,7 +10,8 @@
 #include "MantidAPI/Run.h"
 #include "MantidDataHandling/DllConfig.h"
 #include "MantidKernel/Quat.h"
-#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusClasses_fwd.h"
+#include "MantidNexus/NexusFile_fwd.h"
 
 namespace Mantid {
 
@@ -19,16 +20,17 @@ namespace DataHandling {
 /** LoadHelper : Auxiliary functions for Loading Files
  */
 namespace LoadHelper {
+using detid_t = int32_t;
 
-std::string findInstrumentNexusPath(const Mantid::NeXus::NXEntry &);
-std::string getStringFromNexusPath(const Mantid::NeXus::NXEntry &, const std::string &);
-double getDoubleFromNexusPath(const Mantid::NeXus::NXEntry &, const std::string &);
-std::vector<double> getTimeBinningFromNexusPath(const Mantid::NeXus::NXEntry &, const std::string &);
+std::string findInstrumentNexusAddress(const Mantid::Nexus::NXEntry &);
+std::string getStringFromNexusAddress(const Mantid::Nexus::NXEntry &, const std::string &);
+double getDoubleFromNexusAddress(const Mantid::Nexus::NXEntry &, const std::string &);
+std::vector<double> getTimeBinningFromNexusAddress(const Mantid::Nexus::NXEntry &, const std::string &);
 double calculateEnergy(double);
 double calculateTOF(double, double);
 double getInstrumentProperty(const API::MatrixWorkspace_sptr &, const std::string &);
-void addNexusFieldsToWsRun(NXhandle nxfileID, API::Run &runDetails, const std::string &entryName = "",
-                           bool useFullPath = false);
+void addNexusFieldsToWsRun(Nexus::File &filehandle, API::Run &runDetails, const std::string &entryName = "",
+                           bool useFullAddress = false);
 std::string dateTimeInIsoFormat(const std::string &);
 
 void moveComponent(const API::MatrixWorkspace_sptr &ws, const std::string &componentName, const Kernel::V3D &newPos);
@@ -36,29 +38,29 @@ void rotateComponent(const API::MatrixWorkspace_sptr &ws, const std::string &com
 Kernel::V3D getComponentPosition(const API::MatrixWorkspace_sptr &ws, const std::string &componentName);
 
 void loadEmptyInstrument(const API::MatrixWorkspace_sptr &ws, const std::string &instrumentName,
-                         const std::string &instrumentPath = "");
+                         const std::string &instrumentAddress = "");
 
-void fillStaticWorkspace(const API::MatrixWorkspace_sptr &, const Mantid::NeXus::NXInt &,
-                         const std::vector<double> &xAxis, int initialSpectrum = 0, bool pointData = false,
-                         const std::vector<int> &detectorIDs = std::vector<int>(),
-                         const std::set<int> &acceptedID = std::set<int>(),
+void fillStaticWorkspace(const API::MatrixWorkspace_sptr &, const Mantid::Nexus::NXInt &,
+                         const std::vector<double> &xAxis, int64_t initialSpectrum = 0, bool pointData = false,
+                         const std::vector<detid_t> &detectorIDs = std::vector<int>(),
+                         const std::set<detid_t> &acceptedID = std::set<int>(),
                          const std::tuple<short, short, short> &axisOrder = std::tuple<short, short, short>(0, 1, 2));
 
-void fillMovingWorkspace(const API::MatrixWorkspace_sptr &, const Mantid::NeXus::NXInt &,
-                         const std::vector<double> &xAxis, int initialSpectrum = 0,
-                         const std::set<int> &acceptedID = std::set<int>(),
-                         const std::vector<int> &customID = std::vector<int>(),
+void fillMovingWorkspace(const API::MatrixWorkspace_sptr &, const Mantid::Nexus::NXInt &,
+                         const std::vector<double> &xAxis, int64_t initialSpectrum = 0,
+                         const std::set<detid_t> &acceptedID = std::set<int>(),
+                         const std::vector<detid_t> &customID = std::vector<int>(),
                          const std::tuple<short, short, short> &axisOrder = std::tuple<short, short, short>(0, 1, 2));
 
 void loadingOrder(const std::tuple<short, short, short> &axisOrder, int *dataIndices);
 
-NeXus::NXInt getIntDataset(const NeXus::NXEntry &, const std::string &);
-NeXus::NXDouble getDoubleDataset(const NeXus::NXEntry &, const std::string &);
+Nexus::NXInt getIntDataset(const Nexus::NXEntry &, const std::string &);
+Nexus::NXDouble getDoubleDataset(const Nexus::NXEntry &, const std::string &);
 
 void replaceZeroErrors(const API::MatrixWorkspace_sptr &, double);
 
-void recurseAndAddNexusFieldsToWsRun(NXhandle nxfileID, API::Run &runDetails, const std::string &parent_name,
-                                     const std::string &parent_class, int level, bool useFullPath);
+void recurseAndAddNexusFieldsToWsRun(Nexus::File &filehandle, API::Run &runDetails, const std::string &parent_name,
+                                     const std::string &parent_class, int level, bool useFullAddress);
 } // namespace LoadHelper
 } // namespace DataHandling
 } // namespace Mantid

@@ -10,10 +10,11 @@ Class which loads and stores a single DNS datafile in a dictionary.
 """
 
 import re
-from dateutil.parser import parse
+from datetime import datetime
 import numpy as np
 from mantidqtinterfaces.dns_powder_tof.data_structures.object_dict import ObjectDict
 from mantidqtinterfaces.dns_powder_tof.helpers.file_processing import load_txt
+from ast import literal_eval
 
 
 class DNSFile(ObjectDict):
@@ -119,8 +120,8 @@ class DNSFile(ObjectDict):
         # start_time and end_time (if specified)
         time_format = "%Y-%m-%dT%H:%M:%S"
         try:
-            self["start_time"] = parse(block_7[5][10:].strip()).strftime(time_format)
-            self["end_time"] = parse(block_7[6][10:].strip()).strftime(time_format)
+            self["start_time"] = datetime.fromisoformat(block_7[5][10:].strip()).strftime(time_format)
+            self["end_time"] = datetime.fromisoformat(block_7[6][10:].strip()).strftime(time_format)
         except ValueError:
             # if start and end time are not given, let them empty
             pass
@@ -185,7 +186,7 @@ class DNSFile(ObjectDict):
 
     def format_xml_input_table(self, table):
         formatted_table = [",".join(x) for x in zip(table[0::5], table[1::5], table[2::5], table[3::5], table[4::5])]
-        stripped_table = [eval(x) for x in formatted_table]
+        stripped_table = [literal_eval(x) for x in formatted_table]
         return stripped_table
 
 

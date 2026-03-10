@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "MantidAPI/Column.h"
+#include "MantidDataObjects/DllConfig.h"
 #include "MantidKernel/FloatingPointComparison.h"
 #include "MantidKernel/V3D.h"
 
@@ -43,7 +44,12 @@ namespace DataObjects {
     \author Roman Tolchenov
     \date 31/10/2008
 */
+// Apply visibility attribute for non-MSVC builds (needed for clang/OSX).
+#if defined(_MSC_VER)
 template <class Type> class TableColumn : public API::Column {
+#else
+template <class Type> class MANTID_DATAOBJECTS_DLL TableColumn : public API::Column {
+#endif
   /// Helper struct helping to write a generic casting to double
   struct InconvertibleToDoubleType {
     /// Constructor
@@ -65,10 +71,10 @@ public:
     std::string name = std::string(typeid(Type).name());
     if ((name.find('i') != std::string::npos) || (name.find('l') != std::string::npos) ||
         (name.find('x') != std::string::npos)) {
-      if (length == 4) { // cppcheck-suppress knownConditionTrueFalse
+      if (length == 4) {
         this->m_type = "int";
       }
-      if (length == 8) { // cppcheck-suppress knownConditionTrueFalse
+      if (length == 8) {
         this->m_type = "int64";
       }
     }
@@ -79,10 +85,10 @@ public:
       this->m_type = "double";
     }
     if (name.find('u') != std::string::npos) {
-      if (length == 4) { // cppcheck-suppress knownConditionTrueFalse
+      if (length == 4) {
         this->m_type = "uint32_t";
       }
-      if (length == 8) { // cppcheck-suppress knownConditionTrueFalse
+      if (length == 8) {
         this->m_type = "uint64_t";
       }
     }
@@ -300,13 +306,12 @@ inline bool TableColumn<API::Boolean>::compareVectors(const std::vector<API::Boo
 template <>
 inline bool TableColumn<Kernel::V3D>::compareVectors(const std::vector<Kernel::V3D> &newVector, double tolerance,
                                                      bool const nanEqual) const {
-  for (size_t i = 0; i < m_data.size(); i++) {
-    for (std::size_t xyz = 0; xyz < m_data[i].size(); xyz++) {
-      double left = m_data[i][xyz], right = newVector[i][xyz];
-      if (nanEqual && std::isnan(left) && isnan(right))
-        continue;
-      else if (!Kernel::withinAbsoluteDifference(left, right, tolerance))
-        return false;
+  // must specify for it to use pass-by-references
+  for (std::size_t i = 0; i < m_data.size(); i++) {
+    if (nanEqual && Kernel::V3D::isnan(m_data[i]) && Kernel::V3D::isnan(newVector[i])) {
+      continue;
+    } else if (!Kernel::withinAbsoluteDifference(m_data[i], newVector[i], tolerance)) {
+      return false;
     }
   }
   return true;
@@ -330,13 +335,12 @@ inline bool TableColumn<API::Boolean>::compareVectorsRelError(const std::vector<
 template <>
 inline bool TableColumn<Kernel::V3D>::compareVectorsRelError(const std::vector<Kernel::V3D> &newVector,
                                                              double tolerance, bool const nanEqual) const {
+  // must specify for it to use pass-by-references
   for (size_t i = 0; i < m_data.size(); i++) {
-    for (std::size_t xyz = 0; xyz < m_data[i].size(); xyz++) {
-      double left = m_data[i][xyz], right = newVector[i][xyz];
-      if (nanEqual && std::isnan(left) && isnan(right))
-        continue;
-      else if (!Kernel::withinRelativeDifference(m_data[i][xyz], newVector[i][xyz], tolerance))
-        return false;
+    if (nanEqual && Kernel::V3D::isnan(m_data[i]) && Kernel::V3D::isnan(newVector[i])) {
+      continue;
+    } else if (!Kernel::withinRelativeDifference(m_data[i], newVector[i], tolerance)) {
+      return false;
     }
   }
   return true;

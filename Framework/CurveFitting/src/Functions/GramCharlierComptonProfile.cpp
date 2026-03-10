@@ -9,10 +9,10 @@
 //------------------------------------------------------------------------------------------------
 #include "MantidCurveFitting/Functions/GramCharlierComptonProfile.h"
 #include "MantidAPI/FunctionFactory.h"
+#include "MantidKernel/Spline.h"
 
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_gamma.h> // for factorial
-#include <gsl/gsl_spline.h>
 
 #include <boost/math/special_functions/hermite.hpp>
 
@@ -43,10 +43,7 @@ const int NFINE_Y = 1000;
 double trapzf(const std::vector<double> &xv, const std::vector<double> &yv) {
   const double stepsize = xv[1] - xv[0];
   const size_t endpoint = xv.size() - 1;
-  double area(0.0);
-  for (size_t i = 1; i < endpoint; i++) {
-    area += yv[i];
-  }
+  double area = std::accumulate(yv.cbegin() + 1, yv.cbegin() + endpoint, 0.0);
   area = stepsize / 2 * (yv[0] + 2 * area + yv[endpoint]); // final step
   return area;
 }
@@ -272,7 +269,7 @@ void GramCharlierComptonProfile::addMassProfile(double *result, const unsigned i
   const double hermiteCoeff = getParameter(os.str());
   const double factorial = gsl_sf_fact(npoly / 2);
   // Intel compiler doesn't overload pow for unsigned types
-  const double denom = ((std::pow(2.0, static_cast<int>(npoly)))*factorial);
+  const double denom = std::pow(2.0, static_cast<int>(npoly)) * factorial;
 
   for (int j = 0; j < NFINE_Y; ++j) {
     const double y = m_yfine[j] / M_SQRT2 / wg;
@@ -384,21 +381,14 @@ void GramCharlierComptonProfile::cacheYSpaceValues(const HistogramData::Points &
   m_qfine.resize(NFINE_Y);
   const double miny(sortedy.front()), maxy(sortedy.back());
   const double step = (maxy - miny) / static_cast<double>((NFINE_Y - 1));
-
-  // Set up GSL interpolater
-  gsl_interp_accel *acc = gsl_interp_accel_alloc();
-  gsl_spline *spline = gsl_spline_alloc(gsl_interp_linear, ncoarseY); // Actually a linear interpolater
-  gsl_spline_init(spline, sortedy.data(), sortedq.data(), ncoarseY);
   for (int i = 0; i < NFINE_Y - 1; ++i) {
     const double xi = miny + step * i;
     m_yfine[i] = xi;
-    m_qfine[i] = gsl_spline_eval(spline, xi, acc);
   }
   // Final value to ensure it ends at maxy
   m_yfine.back() = maxy;
-  m_qfine.back() = gsl_spline_eval(spline, maxy, acc);
-  gsl_spline_free(spline);
-  gsl_interp_accel_free(acc);
+  // Interpolate q values at fine y grid using linear spline
+  m_qfine = Mantid::Kernel::LinearSpline<double, double>::getSplinedYValues(m_yfine, sortedy, sortedq);
 
   // Cache voigt function over yfine
   std::vector<double> minusYFine(NFINE_Y);

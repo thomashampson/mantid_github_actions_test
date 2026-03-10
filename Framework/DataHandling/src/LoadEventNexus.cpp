@@ -17,9 +17,9 @@
 #include "MantidDataHandling/EventWorkspaceCollection.h"
 #include "MantidDataHandling/LoadEventNexusIndexSetup.h"
 #include "MantidDataHandling/LoadHelper.h"
-#include "MantidDataHandling/ParallelEventLoader.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidGeometry/Instrument.h"
+#include "MantidGeometry/Instrument/ComponentInfo.h"
 #include "MantidGeometry/Instrument/Goniometer.h"
 #include "MantidGeometry/Instrument/RectangularDetector.h"
 #include "MantidIndexing/IndexInfo.h"
@@ -33,6 +33,8 @@
 #include "MantidKernel/Timer.h"
 #include "MantidKernel/UnitFactory.h"
 #include "MantidKernel/VisibleWhenProperty.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 #include "MantidNexus/NexusIOHelper.h"
 
 #include <H5Cpp.h>
@@ -48,7 +50,7 @@ using std::vector;
 
 namespace Mantid::DataHandling {
 
-DECLARE_NEXUS_HDF5_FILELOADER_ALGORITHM(LoadEventNexus)
+DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadEventNexus)
 
 using namespace Kernel;
 using namespace DateAndTimeHelpers;
@@ -58,9 +60,6 @@ using namespace DataObjects;
 using Types::Core::DateAndTime;
 
 namespace {
-// detnotes the end of iteration for NeXus::getNextEntry
-const std::string NULL_STR("NULL");
-
 const std::vector<std::string> binningModeNames{"Default", "Linear", "Logarithmic"};
 enum class BinningMode { DEFAULT, LINEAR, LOGARITHMIC, enum_count };
 typedef Mantid::Kernel::EnumeratedString<BinningMode, &binningModeNames> BINMODE;
@@ -74,19 +73,28 @@ const std::string BAD_PULSES_CUTOFF("FilterBadPulsesLowerCutoff");
 } // namespace PropertyNames
 } // namespace
 
-/**
- * Based on the current group in the file, does the named sub-entry exist?
- * @param file : File handle. This is not modified, but cannot be const
- * @param name : sub entry name to look for
- * @return true only if it exists
- */
-bool exists(::NeXus::File &file, const std::string &name) {
-  const auto entries = file.getEntries();
-  return exists(entries, name);
-}
+bool doPerformISISEventShift(Nexus::File &file, std::string &topEntryName) {
+  std::string detectorEventsAddr = std::format("/{}/detector_1_events", topEntryName);
+  if (!file.hasAddress(detectorEventsAddr)) { // not an isis file
+    return false;
+  }
 
-bool exists(const std::map<std::string, std::string> &entries, const std::string &name) {
-  return entries.find(name) != entries.end();
+  const std::string eventTimeShiftAddr(detectorEventsAddr + "/event_time_offset_shift");
+  if (file.hasAddress(eventTimeShiftAddr)) { // almost certainly an isis file
+    std::string eventShiftType;
+    file.readData(eventTimeShiftAddr, eventShiftType);
+    return !(eventShiftType == "random"); // event correction already applied
+  }
+
+  const std::string programNameAddr = std::format("/{}/program_name", topEntryName);
+  if (file.hasAddress(programNameAddr)) { // check for ISIS control program
+    std::string program_name;
+    file.readData(programNameAddr, program_name);
+    if (program_name == "ISISICP.EXE") {
+      return true;
+    }
+  }
+  return false;
 }
 
 //----------------------------------------------------------------------------------------------
@@ -106,11 +114,9 @@ LoadEventNexus::LoadEventNexus()
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadEventNexus::confidence(Kernel::NexusHDF5Descriptor &descriptor) const {
-
+int LoadEventNexus::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   int confidence = 0;
-  const std::map<std::string, std::set<std::string>> &allEntries = descriptor.getAllEntries();
-  if (allEntries.count("NXevent_data") == 1) {
+  if (descriptor.classTypeExists("NXevent_data")) {
     if (descriptor.isEntry("/entry", "NXentry") || descriptor.isEntry("/raw_data_1", "NXentry")) {
       confidence = 80;
     }
@@ -284,17 +290,11 @@ void LoadEventNexus::init() {
                   "Load all the logs from the nxs, without checking or processing them; if checked, LoadLogs will be "
                   "ignored; use with caution");
 
-  std::vector<std::string> loadType{"Default"};
-
-#ifndef _WIN32
-  loadType.emplace_back("Multiprocess (experimental)");
-#endif // _WIN32
-
+  std::vector<std::string> loadType{"Default", "Multiprocess (experimental)"};
   auto loadTypeValidator = std::make_shared<StringListValidator>(loadType);
-  declareProperty("LoadType", "Default", loadTypeValidator,
-                  "Set type of loader. 2 options {Default, Multiproceess},"
-                  "'Multiprocess' should work faster for big files and it is "
-                  "experimental, available only in Linux");
+  declareProperty(
+      "LoadType", "Default", loadTypeValidator,
+      "Deprecated feature.  This option has no effect on algorithm behavior and will be removed in a future release.");
 
   declareProperty(std::make_unique<PropertyWithValue<bool>>("LoadNexusInstrumentXML", true, Direction::Input),
                   "Reads the embedded Instrument XML from the NeXus file "
@@ -317,6 +317,14 @@ void LoadEventNexus::init() {
 }
 
 std::map<std::string, std::string> LoadEventNexus::validateInputs() {
+
+  // Warn deprecated experimental feature, but do not throw error
+  if (!isDefault("LoadType")) {
+    g_log.warning() << "The experimental multiprocess loader has been discontinued.  The default loader will be used "
+                       "instead.  Please remove use of this property from all scripts.";
+  }
+  setProperty("LoadType", "Default");
+
   std::map<std::string, std::string> result;
 
   if (!isDefault(PropertyNames::BAD_PULSES_CUTOFF)) {
@@ -338,24 +346,18 @@ void LoadEventNexus::setTopEntryName() {
     return;
   }
 
-  try {
-    while (true) {
-      const auto entry = m_file->getNextEntry();
-      if (entry.second == "NXentry") {
-        if ((entry.first == "entry") || (entry.first == "raw_data_1")) {
-          m_top_entry_name = entry.first;
-          break;
-        }
-      } else if (entry.first == NULL_STR && entry.second == NULL_STR) {
-        g_log.error() << "Unable to determine name of top level NXentry - assuming "
-                         "\"entry\".\n";
-        m_top_entry_name = "entry";
-        break;
-      }
+  std::string firstGoodEntry("");
+  std::set<std::string> goodEntries{"entry", "raw_data_1"};
+  auto allEntries = m_file->getEntries();
+  for (std::string goodEntry : goodEntries) {
+    if (allEntries.count(goodEntry) != 0 && allEntries[goodEntry] != "SDS") {
+      firstGoodEntry = std::move(goodEntry);
+      break;
     }
-  } catch (const std::exception &) {
-    g_log.error() << "Unable to determine name of top level NXentry - assuming "
-                     "\"entry\".\n";
+  }
+  m_top_entry_name = std::move(firstGoodEntry);
+  if (m_top_entry_name.empty()) {
+    g_log.error() << "Unable to determine name of top level NXentry - assuming \"entry\".\n";
     m_top_entry_name = "entry";
   }
 }
@@ -425,7 +427,7 @@ LoadEventNexus::filterEventsByTime<EventWorkspaceCollection_sptr>(EventWorkspace
 /** Executes the algorithm. Reading in the file and creating and populating
  *  the output workspace
  */
-void LoadEventNexus::execLoader() {
+void LoadEventNexus::exec() {
   // Retrieve the filename from the properties
   m_filename = getPropertyValue("Filename");
 
@@ -445,7 +447,7 @@ void LoadEventNexus::execLoader() {
   bool load_monitors = this->getProperty("LoadMonitors");
 
   // this must make absolutely sure that m_file is a valid (and open)
-  // NeXus::File object
+  // Nexus::File object
   safeOpenFile(m_filename);
 
   setTopEntryName();
@@ -490,7 +492,7 @@ void LoadEventNexus::execLoader() {
   }
 }
 
-std::pair<DateAndTime, DateAndTime> firstLastPulseTimes(::NeXus::File &file, Kernel::Logger &logger) {
+std::pair<DateAndTime, DateAndTime> firstLastPulseTimes(Nexus::File &file, Kernel::Logger &logger) {
   file.openData("event_time_zero");
   DateAndTime offset;
   // According to the Nexus standard, if the offset is not present, it implies
@@ -509,7 +511,7 @@ std::pair<DateAndTime, DateAndTime> firstLastPulseTimes(::NeXus::File &file, Ker
   if (file.hasAttr("units"))
     file.getAttr("units", units);
   // Read in the pulse times
-  auto pulse_times = Mantid::NeXus::NeXusIOHelper::readNexusVector<double>(file, "event_time_zero");
+  auto pulse_times = Nexus::IOHelper::readNexusVector<double>(file, "event_time_zero");
   // Remember to close the entry
   file.closeData();
   if (pulse_times.empty()) {
@@ -530,26 +532,24 @@ std::pair<DateAndTime, DateAndTime> firstLastPulseTimes(::NeXus::File &file, Ker
  * @param oldNeXusFileNames Whether to try using old names. This variable will
  * be changed if it is determined that old names are being used.
  * @param prefix current entry name prefix (e.g. /entry)
- * @param descriptor input containing metadata information
  * @return The number of events.
  */
-std::size_t numEvents(::NeXus::File &file, bool &hasTotalCounts, bool &oldNeXusFileNames, const std::string &prefix,
-                      const NexusHDF5Descriptor &descriptor) {
+std::size_t numEvents(Nexus::File &file, bool &hasTotalCounts, bool &oldNeXusFileNames, const std::string &prefix) {
   // try getting the value of total_counts
   if (hasTotalCounts) {
     hasTotalCounts = false;
-    if (descriptor.isEntry(prefix + "/total_counts")) {
+    if (file.hasData(prefix + "/total_counts")) {
       try {
         file.openData("total_counts");
         auto info = file.getInfo();
         file.closeData();
-        if (info.type == ::NeXus::UINT64) {
+        if (info.type == NXnumtype::UINT64) {
           uint64_t eventCount;
           file.readData("total_counts", eventCount);
           hasTotalCounts = true;
           return eventCount;
         }
-      } catch (::NeXus::Exception &) {
+      } catch (Nexus::Exception const &) {
       }
     }
   }
@@ -560,12 +560,12 @@ std::size_t numEvents(::NeXus::File &file, bool &hasTotalCounts, bool &oldNeXusF
       file.openData("event_pixel_id");
     else
       file.openData("event_id");
-  } catch (::NeXus::Exception &) {
+  } catch (Nexus::Exception const &) {
     // Older files (before Nov 5, 2010) used this field.
     try {
       file.openData("event_pixel_id");
       oldNeXusFileNames = true;
-    } catch (::NeXus::Exception &) {
+    } catch (Nexus::Exception const &) {
       // Some groups have neither indicating there are not events here
       return 0;
     }
@@ -889,17 +889,13 @@ std::shared_ptr<BankPulseTimes> LoadEventNexus::runLoadNexusLogs<EventWorkspaceC
   return ret;
 }
 
-enum class LoadEventNexus::LoaderType { MULTIPROCESS, DEFAULT };
-
 //-----------------------------------------------------------------------------
 /**
  * Load events from the file.
  * @param prog :: A pointer to the progress reporting object
- * @param monitors :: If true the events from the monitors are loaded and not
- *the main banks
+ * @param monitors :: If true the events from the monitors are loaded and not the main banks
  *
- * This also loads the instrument, but only if it has not been set in the
- *workspace
+ * This also loads the instrument, but only if it has not been set in the workspace
  * being used as input (m_ws data member). Same applies to the logs.
  */
 void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) {
@@ -947,20 +943,19 @@ void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) 
       }
     } else {
       prog->doReport("Loading all logs");
-      // Open NeXus file
-      NXhandle nxHandle;
-      NXstatus nxStat = NXopen(m_filename.c_str(), NXACC_READ, &nxHandle);
-
-      if (nxStat != NX_ERROR) {
+      try {
+        // Open NeXus file
+        Nexus::File nxHandle(m_filename, NXaccess::READ);
         LoadHelper::addNexusFieldsToWsRun(nxHandle, m_ws->mutableRun(), "", true);
-        NXclose(&nxHandle);
+      } catch (Nexus::Exception const &e) {
+        g_log.debug() << "Failed to open nexus file \"" << m_filename << "\" in read mode: " << e.what() << "\n";
       }
     }
   } else {
     g_log.information() << "Skipping the loading of sample logs!\n"
                         << "Reading the start time directly from /" << m_top_entry_name << "/start_time\n";
     // start_time is read and set
-    m_file->openPath("/");
+    m_file->openAddress("/");
     m_file->openGroup(m_top_entry_name, "NXentry");
     std::string tmp;
     m_file->readData("start_time", tmp);
@@ -968,14 +963,14 @@ void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) 
     run_start = createFromSanitizedISO8601(tmp);
     m_ws->mutableRun().addProperty("run_start", run_start.toISO8601String(), true);
   }
-  // set more properties on the workspace
-  const std::shared_ptr<NexusHDF5Descriptor> descriptor = getFileInfo();
 
+  // set more properties on the workspace
+  Nexus::NexusDescriptor const &descriptor = m_file->getFileDescriptor();
   try {
     // this is a static method that is why it is passing the
     // file object and the file path
 
-    loadEntryMetadata<EventWorkspaceCollection_sptr>(m_filename, m_ws, m_top_entry_name, *descriptor);
+    loadEntryMetadata<EventWorkspaceCollection_sptr>(m_filename, m_ws, m_top_entry_name);
   } catch (std::runtime_error &e) {
     // Missing metadata is not a fatal error. Log and go on with your life
     g_log.error() << "Error loading metadata: " << e.what() << '\n';
@@ -998,17 +993,16 @@ void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) 
     // This may not be needed in the future if both LoadEventNexus and
     // LoadInstrument are made to use the same Nexus/HDF5 library
     m_file->close();
-    m_instrument_loaded_correctly = loadInstrument(m_filename, m_ws, m_top_entry_name, this, descriptor.get());
+    m_instrument_loaded_correctly = loadInstrument(m_filename, m_ws, m_top_entry_name, this, &descriptor);
 
     if (!m_instrument_loaded_correctly)
-      throw std::runtime_error("Instrument was not initialized correctly! "
-                               "Loading cannot continue.");
+      throw std::runtime_error("Instrument was not initialized correctly! Loading cannot continue.");
     // reopen file
     safeOpenFile(m_filename);
   }
 
   // top level file information
-  m_file->openPath("/");
+  m_file->openAddress("/");
   // Start with the base entry
   m_file->openGroup(m_top_entry_name, "NXentry");
 
@@ -1019,52 +1013,38 @@ void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) 
   bool oldNeXusFileNames(false);
   bool haveWeights = false;
   auto firstPulseT = DateAndTime::maximum();
-
-  const std::map<std::string, std::set<std::string>> &allEntries = descriptor->getAllEntries();
-
-  auto itClassEntries = allEntries.find(classType);
-
-  if (itClassEntries != allEntries.end()) {
-
-    const std::set<std::string> &classEntries = itClassEntries->second;
-    const std::regex classRegex("(/" + m_top_entry_name + "/)([^/]*)");
-    std::smatch groups;
-
-    for (const std::string &classEntry : classEntries) {
-
-      if (std::regex_match(classEntry, groups, classRegex)) {
-        const std::string entry_name(groups[2].str());
-
-        // skip entries with junk data
-        if (entry_name == "bank_error_events" || entry_name == "bank_unmapped_events")
-          continue;
-
-        m_file->openGroup(entry_name, classType);
-
-        // get the number of events
-        const std::string prefix = "/" + m_top_entry_name + "/" + entry_name;
-        bool hasTotalCounts = true;
-        std::size_t num = numEvents(*m_file, hasTotalCounts, oldNeXusFileNames, prefix, *descriptor);
-        bankNames.emplace_back(entry_name);
-        bankNumEvents.emplace_back(num);
-
-        if (takeTimesFromEvents && num > 0) {
-          /* If we are here, we are loading logs, but have failed to establish
-           * the run_start from the proton_charge log. We are going to get this
-           * from our event_time_zero instead
-           */
-          auto localFirstLast = firstLastPulseTimes(*m_file, this->g_log);
-          firstPulseT = std::min(firstPulseT, localFirstLast.first);
-        }
-
-        // Look for weights in simulated file
-        const std::string absoluteEventWeightName = prefix + "/event_weight";
-        haveWeights = descriptor->isEntry(absoluteEventWeightName);
-        m_file->closeGroup();
+  if (m_file->classTypeExists(classType)) {
+    std::map<std::string, std::string> entries = m_file->getEntries();
+    for (auto entry : entries) {
+      if (entry.second != classType) {
+        continue;
       }
+
+      // skip entries with junk data
+      if (entry.first == "bank_error_events" || entry.first == "bank_unmapped_events")
+        continue;
+
+      m_file->openGroup(entry.first, classType);
+      // get the number of events
+      const std::string prefix = "/" + m_top_entry_name + "/" + entry.first;
+      bool hasTotalCounts = true;
+      std::size_t num = numEvents(*m_file, hasTotalCounts, oldNeXusFileNames, prefix);
+      bankNames.emplace_back(entry.first);
+      bankNumEvents.emplace_back(num);
+      if (takeTimesFromEvents && num > 0) {
+        /* If we are here, we are loading logs, but have failed to establish
+         * the run_start from the proton_charge log. We are going to get this
+         * from our event_time_zero instead
+         */
+        auto localFirstLast = firstLastPulseTimes(*m_file, this->g_log);
+        firstPulseT = std::min(firstPulseT, localFirstLast.first);
+      }
+      // Look for weights in simulated file
+      const std::string absoluteEventWeightName = prefix + "/event_weight";
+      haveWeights = m_file->hasAddress(absoluteEventWeightName);
+      m_file->closeGroup();
     }
   }
-
   if (takeTimesFromEvents)
     run_start = firstPulseT;
 
@@ -1187,49 +1167,13 @@ void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) 
   shortest_tof = static_cast<double>(std::numeric_limits<uint32_t>::max()) * 0.1;
   longest_tof = 0.;
 
-  bool loaded{false};
-  auto loaderType = defineLoaderType(haveWeights, oldNeXusFileNames, classType);
-  if (loaderType == LoaderType::MULTIPROCESS) {
-    auto ws = m_ws->getSingleHeldWorkspace();
-    m_file->close();
-
-    struct ExceptionOutput {
-      static void out(decltype(g_log) &log, const std::exception &except, int level = 0) {
-        log.warning() << std::string(level, ' ') << "exception: " << except.what() << '\n';
-        try {
-          std::rethrow_if_nested(except);
-        } catch (const std::exception &e) {
-          ExceptionOutput::out(log, e, level + 1);
-        } catch (...) {
-        }
-      }
-    };
-
-    try {
-      ParallelEventLoader::loadMultiProcess(*ws, m_filename, m_top_entry_name, bankNames, event_id_is_spec,
-                                            getProperty("Precount"));
-      g_log.information() << "Used Multiprocess ParallelEventLoader.\n";
-      loaded = true;
-      shortest_tof = 0.0;
-      longest_tof = 1e10;
-    } catch (const std::exception &e) {
-      ExceptionOutput::out(g_log, e);
-      g_log.warning() << "\nMultiprocess event loader failed, falling back "
-                         "to default loader.\n";
-    }
-
-    safeOpenFile(m_filename);
-  }
-  if (!loaded) {
-    loaderType = LoaderType::DEFAULT; // to be used later
-    bool precount = getProperty("Precount");
-    int chunk = getProperty("ChunkNumber");
-    int totalChunks = getProperty("TotalChunks");
-    const auto startTime = std::chrono::high_resolution_clock::now();
-    DefaultEventLoader::load(this, *m_ws, haveWeights, event_id_is_spec, bankNames, periodLog->valuesAsVector(),
-                             classType, bankNumEvents, oldNeXusFileNames, precount, chunk, totalChunks);
-    addTimer("loadEvents", startTime, std::chrono::high_resolution_clock::now());
-  }
+  bool precount = getProperty("Precount");
+  int chunk = getProperty("ChunkNumber");
+  int totalChunks = getProperty("TotalChunks");
+  const auto startTime = std::chrono::high_resolution_clock::now();
+  DefaultEventLoader::load(this, *m_ws, haveWeights, event_id_is_spec, bankNames, periodLog->valuesAsVector(),
+                           classType, bankNumEvents, oldNeXusFileNames, precount, chunk, totalChunks);
+  addTimer("loadEvents", startTime, std::chrono::high_resolution_clock::now());
 
   // Info reporting
   const std::size_t eventsLoaded = m_ws->getNumberEvents();
@@ -1282,22 +1226,18 @@ void LoadEventNexus::loadEvents(API::Progress *const prog, const bool monitors) 
     m_ws->setAllX(HistogramData::BinEdges{0.0, 1.0});
 
   // if there is time_of_flight load it
-  adjustTimeOfFlightISISLegacy(*m_file, m_ws, m_top_entry_name, classType, descriptor.get());
+  if (doPerformISISEventShift(*m_file, m_top_entry_name)) {
+    adjustTimeOfFlightISISLegacy(*m_file, m_ws, m_top_entry_name, classType);
+  }
 
   if (m_is_time_filtered) {
-    if (loaderType == LoaderType::MULTIPROCESS) {
-      // Now filter out the run and events, using the DateAndTime type.
-      // This will sort both by pulse time
-      filterEventsByTime(m_ws, filter_time_start, filter_time_stop);
-    } else {
-      // events were filtered during read
-      // filter the logs the same way FilterByTime does
-      TimeROI timeroi(filter_time_start, filter_time_stop);
-      if (filter_bad_pulses)
-        timeroi.update_intersection(*bad_pulses_timeroi);
-      m_ws->mutableRun().setTimeROI(timeroi);
-      m_ws->mutableRun().removeDataOutsideTimeROI();
-    }
+    // events were filtered during read
+    // filter the logs the same way FilterByTime does
+    TimeROI timeroi(filter_time_start, filter_time_stop);
+    if (filter_bad_pulses)
+      timeroi.update_intersection(*bad_pulses_timeroi);
+    m_ws->mutableRun().setTimeROI(timeroi);
+    m_ws->mutableRun().removeDataOutsideTimeROI();
   } else if (filter_bad_pulses) {
     m_ws->mutableRun().setTimeROI(*bad_pulses_timeroi);
     m_ws->mutableRun().removeDataOutsideTimeROI();
@@ -1330,7 +1270,7 @@ bool LoadEventNexus::runLoadIDFFromNexus<EventWorkspaceCollection_sptr>(const st
  * not written properly within the instrument
  * @param hFile :: A reference to the NeXus file opened at the root entry
  */
-std::string LoadEventNexus::readInstrumentFromISIS_VMSCompat(::NeXus::File &hFile) {
+std::string LoadEventNexus::readInstrumentFromISIS_VMSCompat(Nexus::File &hFile) {
   std::string instrumentName;
   try {
     hFile.openGroup("isis_vms_compat", "IXvms");
@@ -1368,7 +1308,7 @@ template <>
 bool LoadEventNexus::runLoadInstrument<EventWorkspaceCollection_sptr>(const std::string &nexusfilename,
                                                                       EventWorkspaceCollection_sptr localWorkspace,
                                                                       const std::string &top_entry_name, Algorithm *alg,
-                                                                      const Kernel::NexusHDF5Descriptor *descriptor) {
+                                                                      const Nexus::NexusDescriptor *descriptor) {
   auto ws = localWorkspace->getSingleHeldWorkspace();
   auto hasLoaded = runLoadInstrument<MatrixWorkspace_sptr>(nexusfilename, ws, top_entry_name, alg, descriptor);
   localWorkspace->setInstrument(ws->getInstrument());
@@ -1425,6 +1365,11 @@ void LoadEventNexus::deleteBanks(const EventWorkspaceCollection_sptr &workspace,
   }
   if (detList.empty())
     return;
+
+  // Get ComponentInfo from the first workspace in the collection
+  auto ws = workspace->getSingleHeldWorkspace();
+  const auto &componentInfo = ws->componentInfo();
+
   for (auto &det : detList) {
     bool keep = false;
     std::string det_name = det->getName();
@@ -1436,19 +1381,13 @@ void LoadEventNexus::deleteBanks(const EventWorkspaceCollection_sptr &workspace,
         break;
     }
     if (!keep) {
-      std::shared_ptr<const IComponent> parent = inst->getComponentByName(det_name);
-      std::vector<Geometry::IComponent_const_sptr> children;
-      std::shared_ptr<const Geometry::ICompAssembly> asmb =
-          std::dynamic_pointer_cast<const Geometry::ICompAssembly>(parent);
-      asmb->getChildren(children, false);
-      for (auto &col : children) {
-        std::shared_ptr<const Geometry::ICompAssembly> asmb2 =
-            std::dynamic_pointer_cast<const Geometry::ICompAssembly>(col);
-        std::vector<Geometry::IComponent_const_sptr> grandchildren;
-        asmb2->getChildren(grandchildren, false);
+      const size_t parentIndex = componentInfo.indexOfAny(det_name);
+      const auto children = componentInfo.children(parentIndex);
+      for (const auto &colIndex : children) {
+        const auto grandchildren = componentInfo.children(colIndex);
 
-        for (auto &row : grandchildren) {
-          auto *d = dynamic_cast<Detector *>(const_cast<IComponent *>(row.get()));
+        for (const auto &rowIndex : grandchildren) {
+          auto *d = dynamic_cast<Detector *>(const_cast<IComponent *>(componentInfo.componentID(rowIndex)));
           if (d)
             inst->removeDetector(d);
         }
@@ -1559,8 +1498,8 @@ LoadEventNexus::loadISISVMSSpectraMapping(const std::string &entry_name) {
   const std::string vms_str = "/isis_vms_compat";
   try {
     g_log.debug() << "Attempting to load custom spectra mapping from '" << entry_name << vms_str << "'.\n";
-    m_file->openPath("/" + entry_name + vms_str);
-  } catch (::NeXus::Exception &) {
+    m_file->openAddress("/" + entry_name + vms_str);
+  } catch (Nexus::Exception const &) {
     return nullptr; // Doesn't exist
   }
 
@@ -1653,10 +1592,10 @@ void LoadEventNexus::setTimeFilters(const bool monitors) {
  * @param file : handle to the nexus file
  * @param WS : pointer to the workspace
  */
-void LoadEventNexus::loadSampleDataISIScompatibility(::NeXus::File &file, EventWorkspaceCollection &WS) {
+void LoadEventNexus::loadSampleDataISIScompatibility(Nexus::File &file, EventWorkspaceCollection &WS) {
   try {
     file.openGroup("isis_vms_compat", "IXvms");
-  } catch (::NeXus::Exception &) {
+  } catch (Nexus::Exception const &) {
     // No problem, it just means that this entry does not exist
     return;
   }
@@ -1672,7 +1611,7 @@ void LoadEventNexus::loadSampleDataISIScompatibility(::NeXus::File &file, EventW
     WS.setThickness(rspb[3]);
     WS.setHeight(rspb[4]);
     WS.setWidth(rspb[5]);
-  } catch (::NeXus::Exception &ex) {
+  } catch (Nexus::Exception const &ex) {
     // it means that the data was not as expected, report the problem
     std::stringstream s;
     s << "Wrong definition found in isis_vms_compat :> " << ex.what();
@@ -1684,14 +1623,14 @@ void LoadEventNexus::loadSampleDataISIScompatibility(::NeXus::File &file, EventW
 }
 
 /**
- * Makes sure that m_file is a valid and open NeXus::File object.
+ * Makes sure that m_file is a valid and open Nexus::File object.
  * Throws if there is an exception opening the file.
  *
  * @param fname name of the nexus file to open
  */
 void LoadEventNexus::safeOpenFile(const std::string &fname) {
   try {
-    m_file = std::make_unique<::NeXus::File>(m_filename, NXACC_READ);
+    m_file = std::make_unique<Nexus::File>(m_filename, NXaccess::READ);
   } catch (std::runtime_error &e) {
     throw std::runtime_error("Severe failure when trying to open NeXus file: " + std::string(e.what()));
   }
@@ -1702,29 +1641,5 @@ void LoadEventNexus::safeOpenFile(const std::string &fname) {
                              "file: " +
                              fname);
   }
-}
-
-/// The parallel loader currently has no support for a series of special
-/// cases, as indicated by the return value of this method.
-LoadEventNexus::LoaderType LoadEventNexus::defineLoaderType(const bool haveWeights, const bool oldNeXusFileNames,
-                                                            const std::string &classType) const {
-  auto propVal = getPropertyValue("LoadType");
-  if (propVal == "Default")
-    return LoaderType::DEFAULT;
-
-  bool noParallelConstrictions = true;
-  noParallelConstrictions &= !(m_ws->nPeriods() != 1);
-  noParallelConstrictions &= !haveWeights;
-  noParallelConstrictions &= !oldNeXusFileNames;
-  noParallelConstrictions &= !(filter_tof_range);
-  noParallelConstrictions &= !((filter_time_start != Types::Core::DateAndTime::minimum() ||
-                                filter_time_stop != Types::Core::DateAndTime::maximum()));
-  noParallelConstrictions &= !((!isDefault(PropertyNames::COMPRESS_TOL) || !isDefault("SpectrumMin") ||
-                                !isDefault("SpectrumMax") || !isDefault("SpectrumList") || !isDefault("ChunkNumber")));
-  noParallelConstrictions &= !(classType != "NXevent_data");
-
-  if (!noParallelConstrictions)
-    return LoaderType::DEFAULT;
-  return LoaderType::MULTIPROCESS;
 }
 } // namespace Mantid::DataHandling

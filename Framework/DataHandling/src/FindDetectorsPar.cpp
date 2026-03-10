@@ -23,7 +23,7 @@
 #include "MantidKernel/Exception.h"
 #include "MantidKernel/MultiThreaded.h"
 
-#include <Poco/File.h>
+#include <filesystem>
 #include <limits>
 
 namespace Mantid::DataHandling {
@@ -70,7 +70,7 @@ void FindDetectorsPar::exec() {
   // try to load par file if one is availible
   std::string fileName = this->getProperty("ParFile");
   if (!(fileName.empty() || fileName == "not_used.par")) {
-    if (!Poco::File(fileName).exists()) {
+    if (!std::filesystem::exists(fileName)) {
       g_log.error() << " FindDetectorsPar: attempting to load par file: " << fileName << " but it does not exist\n";
       throw(Kernel::Exception::FileError(" file not exist", fileName));
     }
@@ -454,7 +454,7 @@ void FindDetectorsPar::populate_values_from_file(const API::MatrixWorkspace_sptr
 }
 //
 int FindDetectorsPar::count_changes(const char *const Buf, size_t buf_size) {
-  bool is_symbol(false), is_space(true);
+  bool is_space(true);
   int space_to_symbol_change(0);
   size_t symbols_start(0);
   // supress leading spaces;
@@ -478,12 +478,8 @@ int FindDetectorsPar::count_changes(const char *const Buf, size_t buf_size) {
         is_space = false;
         space_to_symbol_change++;
       }
-      is_symbol = true;
     }
     if (Buf[i] == ' ') { // this is a space
-      if (is_symbol) {
-        is_symbol = false;
-      }
       is_space = true;
     }
   }
@@ -629,7 +625,7 @@ void FindDetectorsPar::load_plain(std::ifstream &stream, std::vector<double> &Da
   char par_format[] = " %g %g %g %g %g";
   char phx_format[] = " %g %g %g %g %g %g";
   float data_buf[7];
-  char *format;
+  const char *format;
   int BlockSize;
   char EOL = FILE_TYPE.line_end;
 

@@ -20,10 +20,11 @@
 class FileResource {
 
 public:
-  FileResource(const std::string &fileName, bool debugMode = false);
+  FileResource(const std::string &fileName, const bool debugMode = false, const bool randomize = false);
   void setDebugMode(bool mode);
   std::string fullPath() const;
   ~FileResource();
+  bool exists();
 
 private:
   bool m_debugMode;

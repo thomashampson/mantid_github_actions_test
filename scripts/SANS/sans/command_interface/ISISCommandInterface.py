@@ -9,6 +9,7 @@ import os
 import re
 
 import types
+from typing import Union, Dict
 
 from SANSadd2 import add_runs
 from mantid.api import AnalysisDataService, WorkspaceGroup
@@ -40,22 +41,21 @@ from sans.common.general_functions import (
     convert_bank_name_to_detector_type_isis,
     get_output_name,
     is_part_of_reduced_output_workspace_group,
+    parse_simple_range_of_number_pairs,
 )
-from sans.gui_logic.models.RowEntries import RowEntries
+from sans.data_objects.row_entries import RowEntries
 from sans.sans_batch import SANSBatchReduction, SANSCentreFinder
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Globals
 # ----------------------------------------------------------------------------------------------------------------------
 DefaultTrans = True
 
-
 # ----------------------------------------------------------------------------------------------------------------------
 # CommandInterfaceStateDirector global instance
 # ----------------------------------------------------------------------------------------------------------------------
 director = CommandInterfaceStateDirector(SANSFacility.ISIS)
-_plot_missing_str = "Plotting is not implemented for workbench yet, please contact us via the forum:\n" "https://forum.mantidproject.org/"
+_plot_missing_str = "Plotting is not implemented for workbench yet, please contact us via the forum:\nhttps://forum.mantidproject.org/"
 
 
 def deprecated(obj):
@@ -90,7 +90,7 @@ def deprecated(obj):
         return obj
 
     assert False, (
-        "Programming error.  You have incorrectly applied the " "@deprecated decorator.  This is only for use with functions " "or classes."
+        "Programming error.  You have incorrectly applied the @deprecated decorator.  This is only for use with functions or classes."
     )
 
 
@@ -499,19 +499,51 @@ def SetPhiLimit(phimin, phimax, use_mirror=True):
     # a beam centre of [0,0,0] makes sense if the detector has been moved such that beam centre is at [0,0,0]
     phimin = float(phimin)
     phimax = float(phimax)
-    centre_command = NParameterCommand(command_id=NParameterCommandId.PHI_LIMIT, values=[phimin, phimax, use_mirror])
-    director.add_command(centre_command)
+    phi_limit_command = NParameterCommand(command_id=NParameterCommandId.PHI_LIMIT, values=[phimin, phimax, use_mirror, []])
+    director.add_command(phi_limit_command)
 
 
-def set_save(save_algorithms, save_as_zero_error_free):
+def set_save(
+    save_algorithms: Union[None, Dict] = None, save_as_zero_error_free: bool = False, output_mode: OutputMode = OutputMode.PUBLISH_TO_ADS
+) -> OutputMode:
     """
-    Mainly internally used by BatchMode. Provides the save settings.
+    Mainly used internally by WavRangeReduction. Prepares the save state on the director.
 
-    @param save_algorithms: A list of SaveType enums.
+    @param save_algorithms: A dict containing the name of the save algorithms as keys and extension as values.
     @param save_as_zero_error_free: True if a zero error correction should be performed.
+    @param output_mode: Decides if output_mode publishes to ads and saves to file or only one of the two when save_algorithms are valid
+    @return The OutputMode enum: PUBLISH_TO_ADS, SAVE_TO_FILE, BOTH
     """
-    save_command = NParameterCommand(command_id=NParameterCommandId.SAVE, values=[save_algorithms, save_as_zero_error_free])
+
+    if not save_algorithms:
+        return OutputMode.PUBLISH_TO_ADS
+
+    # Set up the save algorithms
+    save_algs = []
+    if save_algorithms:
+        for key in save_algorithms.keys():
+            match key:
+                case "SaveRKH":
+                    save_algs.append(SaveType.RKH)
+                case "SaveNexus":
+                    save_algs.append(SaveType.NEXUS)
+                case "SaveNistQxy":
+                    save_algs.append(SaveType.NIST_QXY)
+                case "SaveCanSAS" | "SaveCanSAS1D":
+                    save_algs.append(SaveType.CAN_SAS)
+                case "SaveCSV":
+                    save_algs.append(SaveType.CSV)
+                case "SaveNXcanSAS":
+                    save_algs.append(SaveType.NX_CAN_SAS)
+                case "SavePolarizedNXcanSAS":
+                    save_algs.append(SaveType.POL_NX_CAN_SAS)
+                case _:
+                    raise RuntimeError(f"The save format {key} is not known")
+
+    save_command = NParameterCommand(command_id=NParameterCommandId.SAVE, values=[save_algs, save_as_zero_error_free])
     director.add_command(save_command)
+
+    return output_mode.BOTH if (output_mode == OutputMode.PUBLISH_TO_ADS) else output_mode
 
 
 # --------------------------
@@ -562,7 +594,7 @@ def TransFit(mode, lambdamin=None, lambdamax=None, selector="BOTH"):
     elif selector == "BOTH":
         fit_data = FitData.Both
     else:
-        raise RuntimeError("TransFit: The selected fit data {0} is not valid. You have to either SAMPLE, " "CAN or BOTH.".format(selector))
+        raise RuntimeError("TransFit: The selected fit data {0} is not valid. You have to either SAMPLE, CAN or BOTH.".format(selector))
 
     # Output message
     message = mode
@@ -742,7 +774,7 @@ def _validate_wavrange_types(start, end):
     # If one input is a list, they must both be lists of the same length
     if is_list(start) != is_list(end):
         raise RuntimeError(
-            "WavRangeReduction: The wav_start and wav_end inputs must both be the same type (got" " a mixture of single value and list)"
+            "WavRangeReduction: The wav_start and wav_end inputs must both be the same type (got a mixture of single value and list)"
         )
     if is_list(start) and is_list(end) and len(start) != len(end):
         raise RuntimeError("WavRangeReduction: the wav_start and wav_end inputs must contain the same number of values")
@@ -775,6 +807,8 @@ def WavRangeReduction(
     output_name=None,
     output_mode=OutputMode.PUBLISH_TO_ADS,
     use_reduction_mode_as_suffix=False,
+    saveAlgs=None,
+    save_as_zero_error_free=False,
 ):
     """
     Run reduction from loading the raw data to calculating Q. Its optional arguments allows specifics
@@ -798,6 +832,9 @@ def WavRangeReduction(
                                               current detector
                                               before running this method. If front apply rescale+shift)
     @param resetSetup: if true reset setup at the end
+    @param saveAlgs: A dictionary  containing the names of the algorithms to save the data  as keys with extension
+                     as values (ex: saveAlgs={'SaveRKH': 'txt'}), it raises error if the algorithm name is not valid.
+    @param save_as_zero_error_free: Should the reduced workspaces contain zero errors or not
     @param out_fit_settings: An output parameter. It is used, specially when resetSetup is True, in order
                              to remember the 'scale and fit' of the fitting algorithm.
     @param output_name: name of the output workspace/file, if none is specified then one is generated internally.
@@ -809,6 +846,9 @@ def WavRangeReduction(
     print_message("WavRangeReduction(" + str(wav_start) + ", " + str(wav_end) + ", " + str(full_trans_wav) + ")")
     _ = resetSetup
     _ = out_fit_settings
+
+    # Set the save state
+    output_mode = set_save(save_algorithms=saveAlgs, save_as_zero_error_free=save_as_zero_error_free, output_mode=output_mode)
 
     # Set the provided parameters
     if combineDet is None:
@@ -866,9 +906,9 @@ def WavRangeReduction(
     return output_workspace_base_name
 
 
-def BatchReduce(  # noqa
+def BatchReduce(
     filename,
-    format,
+    format=None,
     plotresults=False,
     saveAlgs=None,
     verbose=False,
@@ -876,22 +916,22 @@ def BatchReduce(  # noqa
     reducer=None,
     combineDet=None,
     save_as_zero_error_free=False,
+    output_mode=OutputMode.PUBLISH_TO_ADS,
 ):
     """
     @param filename: the CSV file with the list of runs to analyse
     @param format: type of file to load, nxs for Nexus, etc.
     @param plotresults: if true and this function is run from mantid a graph will be created for the results of each reduction
-    @param saveAlgs: this named algorithm will be passed the name of the results workspace and filename (default = 'SaveRKH').
-        Pass a tuple of strings to save to multiple file formats
+    @param saveAlgs: A dictionary  containing the names of the algorithms to save the data  as keys with extension
+                     as values (ex: saveAlgs={'SaveRKH': 'txt'}), it raises error if the algorithm name is not valid.
     @param verbose: set to true to write more information to the log (default=False)
     @param centreit: do centre finding (default=False)
     @param reducer: if to use the command line (default) or GUI reducer object
     @param combineDet: that will be forward to WavRangeReduction (rear, front, both, merged, None)
     @param save_as_zero_error_free: Should the reduced workspaces contain zero errors or not
-    @return final_setings: A dictionary with some values of the Reduction - Right Now:(scale, shift)
+    @param output_mode: the way the data should be put out: Can be PublishToADS, SaveToFile or Both
+    @return final_settings: A dictionary with some values of the Reduction - Right Now:(scale, shift)
     """
-    if saveAlgs is None:
-        saveAlgs = {"SaveRKH": "txt"}
 
     # From the old interface
     _ = format
@@ -902,29 +942,6 @@ def BatchReduce(  # noqa
         raise RuntimeError("The beam centre finder is currently not supported.")
     if plotresults:
         raise RuntimeError("Plotting the results is currently not supported.")
-
-    # Set up the save algorithms
-    save_algs = []
-
-    if saveAlgs:
-        for key, _ in list(saveAlgs.items()):
-            if key == "SaveRKH":
-                save_algs.append(SaveType.RKH)
-            elif key == "SaveNexus":
-                save_algs.append(SaveType.NEXUS)
-            elif key == "SaveNistQxy":
-                save_algs.append(SaveType.NIST_QXY)
-            elif key == "SaveCanSAS" or key == "SaveCanSAS1D":
-                save_algs.append(SaveType.CAN_SAS)
-            elif key == "SaveCSV":
-                save_algs.append(SaveType.CSV)
-            elif key == "SaveNXcanSAS":
-                save_algs.append(SaveType.NX_CAN_SAS)
-            else:
-                raise RuntimeError("The save format {0} is not known.".format(key))
-        output_mode = OutputMode.BOTH
-    else:
-        output_mode = OutputMode.PUBLISH_TO_ADS
 
     # Get the information from the csv file
     batch_csv_parser = BatchCsvParser()
@@ -977,16 +994,14 @@ def BatchReduce(  # noqa
         # suffix that the user can set already -- was there previously, so we have to provide that)
         use_reduction_mode_as_suffix = combineDet is not None
 
-        # Apply save options
-        if save_algs:
-            set_save(save_algorithms=save_algs, save_as_zero_error_free=save_as_zero_error_free)
-
         # Run the reduction for a single
         reduced_workspace_name = WavRangeReduction(
             combineDet=combineDet,
             output_name=output_name,
             output_mode=output_mode,
             use_reduction_mode_as_suffix=use_reduction_mode_as_suffix,
+            saveAlgs=saveAlgs,
+            save_as_zero_error_free=save_as_zero_error_free,
         )
 
         # Remove the settings which were very specific for this single reduction which are:
@@ -1034,7 +1049,7 @@ def CompWavRanges(wavelens, plot=True, combineDet=None, resetSetup=True):
 
     if not isinstance(wavelens, list) or len(wavelens) < 2:
         if not isinstance(wavelens, tuple):
-            raise RuntimeError("Error CompWavRanges() requires a list of wavelengths between which " "reductions will be performed.")
+            raise RuntimeError("Error CompWavRanges() requires a list of wavelengths between which reductions will be performed.")
 
     # Perform a reduction over the full wavelength range which was specified
     reduced_workspace_names = []
@@ -1057,31 +1072,32 @@ def CompWavRanges(wavelens, plot=True, combineDet=None, resetSetup=True):
     return reduced_workspace_names[0]
 
 
-def PhiRanges(phis, plot=True):
+def PhiRanges(phis, use_mirror=True, plot=False):
     """
-    Given a list of phi ranges [a, b, c, d] it reduces in the phi ranges a-b and c-d
+    Given a list of phi ranges as lists [a, b, c, d] or string "a,b,c,d", it reduces in the phi ranges a-b and c-d
     @param phis: the list of phi ranges
+    @param use_mirror: whether to use mirror for each phi mask
     @param plot: set this to true to plot the result (must be run in Mantid), default is true
     """
 
     print_message("PhiRanges( %s,plot=%s)" % (str(phis), plot))
 
-    # todo covert their string into Python array
+    if isinstance(phis, str):
+        phis = parse_simple_range_of_number_pairs(phis)
 
     if len(phis) % 2 != 0:
         raise RuntimeError("Phi ranges must be given as pairs")
 
-    reduced_workspace_names = []
-    for i in range(0, len(phis), 2):
-        SetPhiLimit(phis[i], phis[i + 1])
-        reduced_workspace_name = WavRangeReduction()
-        reduced_workspace_names.append(reduced_workspace_name)
+    phi_limit_command = NParameterCommand(command_id=NParameterCommandId.PHI_LIMIT, values=[0.0, 0.0, use_mirror, phis])
+    director.add_command(phi_limit_command)
+
+    reduced_workspace_name = WavRangeReduction()
 
     if plot:
         raise NotImplementedError(_plot_missing_str)
 
     # Return just the workspace name of the full range
-    return reduced_workspace_names[0]
+    return reduced_workspace_name
 
 
 def FindBeamCentre(

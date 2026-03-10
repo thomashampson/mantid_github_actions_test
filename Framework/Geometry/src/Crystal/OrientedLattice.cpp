@@ -5,9 +5,7 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidGeometry/Crystal/OrientedLattice.h"
-#include "MantidKernel/Exception.h"
-
-#include <nexus/NeXusException.hpp>
+#include "MantidNexus/NexusException.h"
 
 namespace Mantid::Geometry {
 using Mantid::Kernel::DblMatrix;
@@ -233,7 +231,7 @@ const DblMatrix &OrientedLattice::setUFromVectors(const V3D &u, const V3D &v) {
   bwVec /= norm;
   // 2nd unit vector, perpendicular to Bu, in the Bu,Bv plane
   bvVec = bwVec.cross_prod(buVec);
-  DblMatrix tau(3, 3), lab(3, 3), U(3, 3);
+  DblMatrix tau(3, 3), lab(3, 3);
   /*lab      = U tau
    / 0 1 0 \     /bu[0] bv[0] bw[0]\
    | 0 0 1 | = U |bu[1] bv[1] bw[1]|
@@ -252,8 +250,7 @@ const DblMatrix &OrientedLattice::setUFromVectors(const V3D &u, const V3D &v) {
   tau[2][1] = bvVec[2];
   tau[2][2] = bwVec[2];
   tau.Invert();
-  U = lab * tau;
-  this->setU(U);
+  this->setU(lab * tau);
   return getU();
 }
 
@@ -261,7 +258,7 @@ const DblMatrix &OrientedLattice::setUFromVectors(const V3D &u, const V3D &v) {
  * @param file :: open NeXus file
  * @param group :: name of the group to create
  */
-void OrientedLattice::saveNexus(::NeXus::File *file, const std::string &group) const {
+void OrientedLattice::saveNexus(Nexus::File *file, const std::string &group) const {
   file->makeGroup(group, "NXcrystal", true);
   file->writeData("unit_cell_a", this->a());
   file->writeData("unit_cell_b", this->b());
@@ -277,7 +274,7 @@ void OrientedLattice::saveNexus(::NeXus::File *file, const std::string &group) c
   file->writeData("unit_cell_gamma_error", this->errorgamma());
   // Save the UB matrix
   std::vector<double> ub = this->UB.getVector();
-  std::vector<int> dims(2, 3); // 3x3 matrix
+  const Nexus::DimVector dims(2, 3); // 3x3 matrix
   file->writeData("orientation_matrix", ub, dims);
 
   // Save the modulated UB matrix
@@ -295,7 +292,7 @@ void OrientedLattice::saveNexus(::NeXus::File *file, const std::string &group) c
  * @param file :: open NeXus file
  * @param group :: name of the group to open
  */
-void OrientedLattice::loadNexus(::NeXus::File *file, const std::string &group) {
+void OrientedLattice::loadNexus(Nexus::File *file, const std::string &group) {
   file->openGroup(group, "NXcrystal");
   std::vector<double> ub;
   file->readData("orientation_matrix", ub);
@@ -330,7 +327,7 @@ void OrientedLattice::loadNexus(::NeXus::File *file, const std::string &group) {
     int crossTerm;
     file->readData("cross_term", crossTerm);
     this->setCrossTerm(crossTerm);
-  } catch (::NeXus::Exception &) {
+  } catch (Nexus::Exception const &) {
     // Old files don't have these. Ignore
   }
   file->closeGroup();

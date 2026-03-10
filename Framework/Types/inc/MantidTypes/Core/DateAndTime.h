@@ -59,6 +59,7 @@ public:
   std::string toSimpleString() const;
   std::string toFormattedString(const std::string &format = "%Y-%b-%d %H:%M:%S") const;
   std::string toISO8601String() const;
+  std::string toHttpFormat() const;
 
   /// Stream output operator
   friend MANTID_TYPES_DLL std::ostream &operator<<(std::ostream &stream, const DateAndTime &t);
@@ -114,6 +115,7 @@ public:
   static time_duration durationFromNanoseconds(int64_t dur);
   static const DateAndTime &defaultTime();
   static void createVector(const DateAndTime start, const std::vector<double> &seconds, std::vector<DateAndTime> &out);
+  static std::string getLocalTimeISO8601String(std::time_t time = 0);
 
   /// The difference in seconds between standard unix and gps epochs.
   static const uint32_t EPOCH_DIFF;
@@ -124,7 +126,7 @@ public:
   /// Const of one second time duration
   static const time_duration ONE_SECOND;
 
-  static time_t utc_mktime(struct tm *utctime);
+  static time_t utc_mktime(const struct tm *utctime);
 
 private:
   /// A signed 64-bit int of the # of nanoseconds since Jan 1, 1990.

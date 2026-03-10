@@ -9,8 +9,8 @@
 #include "MantidAPI/SpectraAxis.h"
 #include "MantidAPI/WorkspaceFactory.h"
 #include "MantidDataObjects/OffsetsWorkspace.h"
+
 #include "MantidKernel/IPropertyManager.h"
-#include "MantidKernel/System.h"
 
 namespace Mantid::DataObjects {
 // Register the workspace
@@ -46,7 +46,7 @@ IPropertyManager::getValue<Mantid::DataObjects::OffsetsWorkspace_sptr>(const std
 template <>
 DLLExport Mantid::DataObjects::OffsetsWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::OffsetsWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop =
+  auto const *prop =
       dynamic_cast<PropertyWithValue<Mantid::DataObjects::OffsetsWorkspace_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();

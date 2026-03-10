@@ -15,9 +15,9 @@
 #include "MantidKernel/Exception.h"
 
 #include <H5Cpp.h>
-#include <Poco/File.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <string>
 
 namespace Mantid::DataObjects {
@@ -127,7 +127,7 @@ bool BoxControllerNeXusIO::openFile(const std::string &fileName, const std::stri
   }
 
   // open file if it exists or create it if not in the mode requested
-  m_fileName = API::FileFinder::Instance().getFullPath(fileName);
+  m_fileName = API::FileFinder::Instance().getFullPath(fileName).string();
   if (m_fileName.empty()) {
     if (!m_ReadOnly) {
       std::string filePath = Kernel::ConfigService::Instance().getString("defaultsave.directory");
@@ -142,7 +142,7 @@ bool BoxControllerNeXusIO::openFile(const std::string &fileName, const std::stri
   auto nDims = static_cast<int>(this->m_bc->getNDims());
 
   bool group_exists;
-  m_File = std::unique_ptr<::NeXus::File>(MDBoxFlatTree::createOrOpenMDWSgroup(
+  m_File = std::unique_ptr<Mantid::Nexus::File>(MDBoxFlatTree::createOrOpenMDWSgroup(
       m_fileName, nDims, m_EventsTypesSupported[m_EventType], m_ReadOnly, group_exists));
 
   // we are in MD workspace Class  group now
@@ -154,8 +154,7 @@ bool BoxControllerNeXusIO::openFile(const std::string &fileName, const std::stri
     CreateEventGroup();
   // we are in MDEvent group now (either created or opened)
 
-  // read if exist and create if not the group, which is responsible for saving
-  // DiskBuffer information;
+  // read if exist and create if not the group, which is responsible for saving DiskBuffer information;
   getDiskBufferFileData();
 
   if (m_ReadOnly)
@@ -176,12 +175,12 @@ void BoxControllerNeXusIO::copyFileTo(const std::string &destFilename) {
   // To copy the file must be closed, copied and reopened. To avoid
   // paying for this where not necessary first try without closing first
   try {
-    Poco::File(this->getFileName()).copyTo(destFilename);
+    std::filesystem::copy_file(this->getFileName(), destFilename, std::filesystem::copy_options::overwrite_existing);
     return;
-  } catch (const Poco::Exception &) {
+  } catch (const std::filesystem::filesystem_error &) {
     try {
       this->closeFile();
-      Poco::File(this->getFileName()).copyTo(destFilename);
+      std::filesystem::copy_file(this->getFileName(), destFilename, std::filesystem::copy_options::overwrite_existing);
     } catch (...) {
       // if an exception happened during the copy attempt to reopen the original
       this->openFile(this->getFileName(), m_ReadOnly ? "r" : "w");
@@ -237,14 +236,14 @@ void BoxControllerNeXusIO::prepareNxSToWrite_CurVersion() {
 
     // Now the chunk size.
     // m_Blocksize == (number_events_to_write_at_a_time, data_items_per_event)
-    std::vector<int64_t> chunk(m_BlockSize);
-    chunk[0] = static_cast<int64_t>(m_dataChunk);
+    Nexus::DimVector chunk(m_BlockSize);
+    chunk[0] = m_dataChunk;
 
     // Make and open the data
     if (m_CoordSize == 4)
-      m_File->makeCompData("event_data", ::NeXus::FLOAT32, m_BlockSize, ::NeXus::NONE, chunk, true);
+      m_File->makeCompData("event_data", NXnumtype::FLOAT32, m_BlockSize, NXcompression::NONE, chunk, true);
     else
-      m_File->makeCompData("event_data", ::NeXus::FLOAT64, m_BlockSize, ::NeXus::NONE, chunk, true);
+      m_File->makeCompData("event_data", NXnumtype::FLOAT64, m_BlockSize, NXcompression::NONE, chunk, true);
 
     // A little bit of description for humans to read later
     m_File->putAttr("description", m_EventsTypeHeaders[m_EventType]);
@@ -257,21 +256,17 @@ void BoxControllerNeXusIO::prepareNxSToWrite_CurVersion() {
 void BoxControllerNeXusIO::prepareNxSdata_CurVersion() {
   // Open the data
   m_File->openData("event_data");
-  // There are rummors that this is faster. Not sure if it is important
-  //      int type = ::NeXus::FLOAT32;
-  //      int rank = 0;
-  //      NXgetinfo(file->getHandle(), &rank, dims, &type);
 
-  NeXus::Info info = m_File->getInfo();
-  int Type = info.type;
+  Nexus::Info info = m_File->getInfo();
+  NXnumtype Type = info.type;
 
   m_ReadConversion = noConversion;
   switch (Type) {
-  case (::NeXus::FLOAT64):
+  case (NXnumtype::FLOAT64):
     if (m_CoordSize == 4)
       m_ReadConversion = doubleToFolat;
     break;
-  case (::NeXus::FLOAT32):
+  case (NXnumtype::FLOAT32):
     if (m_CoordSize == 8)
       m_ReadConversion = floatToDouble;
     break;
@@ -300,9 +295,9 @@ void BoxControllerNeXusIO::getDiskBufferFileData() {
     freeSpaceBlocks.resize(2, 0); // Needs a minimum size
 
   //    // Get a vector of the free space blocks to save to the file
-  std::vector<int64_t> free_dims(2, 2);
+  Nexus::DimVector free_dims(2, 2);
   free_dims[0] = int64_t(freeSpaceBlocks.size() / 2);
-  std::vector<int64_t> free_chunk(2, 2);
+  Nexus::DimVector free_chunk(2, 2);
   free_chunk[0] = int64_t(m_dataChunk);
 
   std::map<std::string, std::string> groupEntries;
@@ -327,13 +322,13 @@ void BoxControllerNeXusIO::getDiskBufferFileData() {
  *@param blockPosition -- The starting place to save data to   */
 template <typename Type>
 void BoxControllerNeXusIO::saveGenericBlock(const std::vector<Type> &DataBlock, const uint64_t blockPosition) const {
-  std::vector<int64_t> start(2, 0);
+  Nexus::DimVector start(2, 0);
   // Specify the dimensions
-  std::vector<int64_t> dims(m_BlockSize);
+  Nexus::DimVector dims(m_BlockSize);
 
   std::lock_guard<std::mutex> _lock(m_fileMutex);
-  start[0] = int64_t(blockPosition);
-  dims[0] = int64_t(DataBlock.size() / this->getNDataColums());
+  start[0] = blockPosition;
+  dims[0] = Nexus::dimsize_t(DataBlock.size() / this->getNDataColums());
 
   // ugly cast but why would putSlab change the data?. This is NeXus bug which
   // makes putSlab method non-constant
@@ -396,10 +391,10 @@ void BoxControllerNeXusIO::setEventDataVersion(const size_t &traitsCount) {
   }
 }
 
-int64_t BoxControllerNeXusIO::dataEventCount(void) const {
+uint64_t BoxControllerNeXusIO::dataEventCount(void) const {
   // m_BlockSize[1] is the number of data events associated to an MDLeanEvent
   // or MDEvent object.
-  int64_t size(m_BlockSize[1]);
+  uint64_t size(m_BlockSize[1]);
   switch (m_EventDataVersion) {
   case (EventDataVersion::EDVLean):
     break;                              // no adjusting is necessary
@@ -507,11 +502,11 @@ void BoxControllerNeXusIO::loadGenericBlock(std::vector<Type> &Block, const uint
   if (blockPosition + nPoints > this->getFileLength())
     throw Kernel::Exception::FileError("Attemtp to read behind the file end", m_fileName);
 
-  std::vector<int64_t> start(2, 0);
-  start[0] = static_cast<int64_t>(blockPosition);
+  Nexus::DimVector start(2, 0);
+  start[0] = blockPosition;
 
-  std::vector<int64_t> size(m_BlockSize);
-  size[0] = static_cast<int64_t>(nPoints);
+  Nexus::DimVector size(m_BlockSize);
+  size[0] = nPoints;
   size[1] = dataEventCount(); // data item count per event in the Nexus file
 
   std::lock_guard<std::mutex> _lock(m_fileMutex);
@@ -591,8 +586,8 @@ void BoxControllerNeXusIO::closeFile() {
       std::vector<uint64_t> freeSpaceBlocks;
       this->getFreeSpaceVector(freeSpaceBlocks);
       if (!freeSpaceBlocks.empty()) {
-        std::vector<int64_t> free_dims(2, 2);
-        free_dims[0] = int64_t(freeSpaceBlocks.size() / 2);
+        Nexus::DimVector free_dims(2, 2);
+        free_dims[0] = Nexus::dimsize_t(freeSpaceBlocks.size() / 2);
 
         m_File->writeUpdatedData(g_DBDataName, freeSpaceBlocks, free_dims);
       }

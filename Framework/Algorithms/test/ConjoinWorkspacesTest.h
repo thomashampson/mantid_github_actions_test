@@ -98,12 +98,14 @@ public:
     // Check it fails if input overlap
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace1", "top"));
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace2", "top"));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute());
     TS_ASSERT(!conj.isExecuted());
 
     // Now it should succeed
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace1", "top"));
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace2", "bottom"));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute());
     TS_ASSERT(conj.isExecuted());
 
@@ -132,6 +134,36 @@ public:
     TS_ASSERT_EQUALS(output->getHistory().size(), 3);
   }
 
+  void testExecTwoSpectra() {
+    // Create two workspaces, with spectra numbers 1, 2 respectively
+    Workspace2D_sptr in1 = WorkspaceCreationHelper::create2DWorkspace(1, 2);
+    Workspace2D_sptr in2 = WorkspaceCreationHelper::create2DWorkspace(1, 2);
+    in1->getSpectrum(0).setSpectrumNo(1);
+    in2->getSpectrum(0).setSpectrumNo(2);
+    AnalysisDataService::Instance().addOrReplace("in1", in1);
+    AnalysisDataService::Instance().addOrReplace("in2", in2);
+
+    // conjoin
+    ConjoinWorkspaces conj;
+    conj.initialize();
+    TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace1", "in1"));
+    TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace2", "in2"));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckOverlapping", false));
+    TS_ASSERT_THROWS_NOTHING(conj.execute());
+    TS_ASSERT(conj.isExecuted());
+
+    // verify
+    MatrixWorkspace_sptr out = getWSFromADS("in1");
+    TS_ASSERT_EQUALS(out->getNumberHistograms(), 2);
+    TS_ASSERT_EQUALS(out->getSpectrum(0).getSpectrumNo(), 1);
+    TS_ASSERT_EQUALS(out->getSpectrum(1).getSpectrumNo(), 2);
+
+    // cleanup
+    AnalysisDataService::Instance().remove("in1");
+    AnalysisDataService::Instance().remove("in2");
+  }
+
   //----------------------------------------------------------------------------------------------
   void testExecMismatchedWorkspaces() {
     MatrixWorkspace_sptr ews = WorkspaceCreationHelper::createEventWorkspace(10, 10);
@@ -157,6 +189,7 @@ public:
 
     ConjoinWorkspaces conj;
     conj.initialize();
+    conj.setProperty("CheckMatchingBins", false);
     conj.setRethrows(true);
 
     conj.setProperty("InputWorkspace1", "testMismatchedEventWorkspace1");
@@ -164,6 +197,45 @@ public:
 
     TS_ASSERT_THROWS(conj.execute(), const std::invalid_argument &);
     TS_ASSERT(!conj.isExecuted());
+  }
+
+  void testNonMatchingBinsThrowsError() {
+    MatrixWorkspace_sptr ws1, ws2;
+    ws1 = WorkspaceCreationHelper::createEventWorkspace(10, 5);
+    ws2 = WorkspaceCreationHelper::createEventWorkspace(10, 10);
+
+    ConjoinWorkspaces conj;
+    conj.initialize();
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("InputWorkspace1", ws1));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("InputWorkspace2", ws2));
+    conj.setRethrows(true);
+
+    try {
+      conj.execute();
+      TS_FAIL("Expected an exception but none was thrown.");
+    } catch (const std::invalid_argument &e) {
+      std::string expectedMessage = "The bins do not match in the input workspaces. "
+                                    "Consider using RebinToWorkspace to preprocess "
+                                    "the workspaces before conjoining them.";
+      TS_ASSERT_EQUALS(std::string(e.what()), expectedMessage);
+      TS_ASSERT(!conj.isExecuted());
+    }
+  }
+
+  void testMatchingBinsThrowsNoError() {
+    MatrixWorkspace_sptr ws1 = WorkspaceCreationHelper::createEventWorkspace(10, 5);
+    MatrixWorkspace_sptr ws2 = WorkspaceCreationHelper::createEventWorkspace(10, 5);
+
+    // CheckMatchingBins is true by default, so don't set it here.
+    ConjoinWorkspaces conj;
+    conj.initialize();
+    conj.setProperty("CheckOverlapping", false);
+    conj.setProperty("InputWorkspace1", ws1);
+    conj.setProperty("InputWorkspace2", ws2);
+    conj.setAlwaysStoreInADS(false);
+    conj.setRethrows(true);
+
+    TS_ASSERT_THROWS_NOTHING(conj.execute());
   }
 
   void testDoCheckForOverlap() {
@@ -180,6 +252,7 @@ public:
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace1", ws1Name));
     TS_ASSERT_THROWS_NOTHING(conj.setProperty("InputWorkspace2", ws2));
     TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckOverlapping", true));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute());
     // Falls over as they overlap
     TS_ASSERT(!conj.isExecuted());
@@ -228,6 +301,7 @@ public:
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace1", ws1Name));
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace2", ws2Name));
     TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckOverlapping", false));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute();)
     TS_ASSERT(conj.isExecuted());
 
@@ -267,6 +341,7 @@ public:
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace1", ws1Name));
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("InputWorkspace2", ws2Name));
     TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckOverlapping", false));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute();)
     TS_ASSERT(conj.isExecuted());
 
@@ -316,6 +391,7 @@ public:
 
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("YAxisLabel", label));
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("YAxisUnit", unit));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
 
     TS_ASSERT_THROWS_NOTHING(conj.execute());
 
@@ -341,6 +417,7 @@ public:
     const std::string unit = "Modified y unit";
 
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("YAxisUnit", unit));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute());
 
     auto result = getWSFromADS(ws1Name);
@@ -363,6 +440,7 @@ public:
     const std::string label = "Modified y label";
 
     TS_ASSERT_THROWS_NOTHING(conj.setPropertyValue("YAxisLabel", label));
+    TS_ASSERT_THROWS_NOTHING(conj.setProperty("CheckMatchingBins", false));
     TS_ASSERT_THROWS_NOTHING(conj.execute());
 
     auto result = getWSFromADS(ws1Name);
@@ -380,7 +458,6 @@ private:
     MatrixWorkspace_sptr ews = WorkspaceCreationHelper::createEventWorkspace(10, 10);
     AnalysisDataService::Instance().addOrReplace(name, ews);
 
-    // Crop ews to have first 3 spectra, ews2 to have second 3
     CropWorkspace crop;
     crop.setChild(true);
     crop.initialize();

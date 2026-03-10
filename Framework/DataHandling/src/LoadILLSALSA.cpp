@@ -14,6 +14,8 @@
 #include "MantidDataObjects/WorkspaceCreation.h"
 #include "MantidHistogramData/Points.h"
 #include "MantidKernel/BoundedValidator.h"
+#include "MantidNexus/H5Util.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <iterator>
 #include <sstream>
@@ -32,10 +34,10 @@ const size_t LoadILLSALSA::HORIZONTAL_NUMBER_PIXELS = 256;
  *
  * @return An integer specifying the confidence level. 0 indicates it will not be used
  */
-int LoadILLSALSA::confidence(Kernel::NexusDescriptor &descriptor) const {
-  if ((descriptor.pathExists("/entry0/data_scan") || descriptor.pathExists("/entry0/data")) &&
-      descriptor.pathExists("/entry0/instrument/Tx") && descriptor.pathExists("/entry0/instrument/Ty") &&
-      descriptor.pathExists("/entry0/instrument/Tz"))
+int LoadILLSALSA::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
+  if ((descriptor.isEntry("/entry0/data_scan") || descriptor.isEntry("/entry0/data")) &&
+      descriptor.isEntry("/entry0/instrument/Tx") && descriptor.isEntry("/entry0/instrument/Ty") &&
+      descriptor.isEntry("/entry0/instrument/Tz"))
     return 80;
   else
     return 0;
@@ -60,7 +62,7 @@ void LoadILLSALSA::init() {
  */
 void LoadILLSALSA::exec() {
   const std::string filename = getPropertyValue("Filename");
-  H5::H5File h5file(filename, H5F_ACC_RDONLY);
+  H5::H5File h5file(filename, H5F_ACC_RDONLY, Nexus::H5Util::defaultFileAcc());
 
   enum FileType { NONE, V1, V2 };
 
@@ -79,7 +81,6 @@ void LoadILLSALSA::exec() {
   switch (fileType) {
   case NONE:
     throw std::runtime_error("The Nexus file your are trying to open is not supported by the SALSA loader.");
-    break;
   case V1:
     loadNexusV1(h5file);
 
@@ -205,7 +206,7 @@ void LoadILLSALSA::loadNexusV2(const H5::H5File &h5file) {
   H5::DataSpace scanVarNamesSpace = scanVarNames.getSpace();
 
   nDims = scanVarNamesSpace.getSimpleExtentNdims();
-  dimsSize = std::vector<hsize_t>(nDims);
+  dimsSize.resize(nDims);
   scanVarNamesSpace.getSimpleExtentDims(dimsSize.data(), nullptr);
 
   std::vector<char *> rdata(dimsSize[0]);
@@ -227,17 +228,22 @@ void LoadILLSALSA::loadNexusV2(const H5::H5File &h5file) {
   H5::DataSpace scanVarSpace = scanVar.getSpace();
 
   nDims = scanVarSpace.getSimpleExtentNdims();
-  dimsSize = std::vector<hsize_t>(nDims);
-  scanVarSpace.getSimpleExtentDims(dimsSize.data(), nullptr);
-  if ((nDims != 2) || (dimsSize[1] != numberOfScans))
+  std::vector<double> monitorData;
+  dimsSize.resize(nDims);
+  if (dimsSize.size() < 2) {
     throw std::runtime_error("Scanned variables are not formatted properly. Check you nexus file.");
+  } else {
+    scanVarSpace.getSimpleExtentDims(dimsSize.data(), nullptr);
 
-  std::vector<double> scanVarData(dimsSize[0] * dimsSize[1]);
-  scanVar.read(scanVarData.data(), scanVar.getDataType());
-  std::vector<double> monitorData(dimsSize[1]);
-  for (size_t i = 0; i < monitorData.size(); i++)
-    monitorData[i] = scanVarData[monitorIndex * dimsSize[1] + i];
+    if (dimsSize[1] != numberOfScans)
+      throw std::runtime_error("Scanned variables are not formatted properly. Check you nexus file.");
 
+    std::vector<double> scanVarData(dimsSize[0] * dimsSize[1]);
+    scanVar.read(scanVarData.data(), scanVar.getDataType());
+    monitorData.resize(dimsSize[1]);
+    for (size_t i = 0; i < monitorData.size(); i++)
+      monitorData[i] = scanVarData[monitorIndex * dimsSize[1] + i];
+  }
   scanVar.close();
 
   // fill the workspace
@@ -254,9 +260,8 @@ void LoadILLSALSA::loadNexusV2(const H5::H5File &h5file) {
 
 void LoadILLSALSA::fillWorkspaceMetadata(const std::string &filename) {
   API::Run &runDetails = m_outputWorkspace->mutableRun();
-  NXhandle nxHandle;
-  NXopen(filename.c_str(), NXACC_READ, &nxHandle);
+
+  Nexus::File nxHandle(filename, NXaccess::READ);
   LoadHelper::addNexusFieldsToWsRun(nxHandle, runDetails);
-  NXclose(&nxHandle);
 }
 } // namespace Mantid::DataHandling

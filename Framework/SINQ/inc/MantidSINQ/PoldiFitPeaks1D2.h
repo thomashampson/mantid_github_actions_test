@@ -7,8 +7,6 @@
 #pragma once
 
 #include "MantidAPI/Algorithm.h"
-#include "MantidKernel/System.h"
-
 #include "MantidAPI/IPeakFunction.h"
 #include "MantidAPI/TableRow.h"
 #include "MantidAPI/WorkspaceGroup_fwd.h"
@@ -36,7 +34,7 @@ public:
 
   void merge(const RefinedRange &other);
 
-  const std::vector<PoldiPeak_sptr> getPeaks() const { return m_peaks; }
+  const std::vector<PoldiPeak_sptr> &getPeaks() const { return m_peaks; }
 
   double getXStart() const { return m_xStart; }
   double getXEnd() const { return m_xEnd; }

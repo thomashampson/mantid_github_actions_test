@@ -423,6 +423,7 @@ signals:
   void overplotMDHistoWithErrorsClicked(const QStringList &workspaceNames);
   void sampleMaterialClicked(const QStringList &workspaceNames);
   void sampleShapeClicked(const QStringList &workspaceNames);
+  void showNewInstrumentViewClicked(const QStringList &workspaceNames);
 };
 
 class AlgorithmHistoryWindow : public QDialog {
@@ -800,8 +801,8 @@ public:
     Cell deadCell() const;
 
     std::vector<MantidQt::MantidWidgets::Batch::RowLocation> selectedRowLocations() const;
-    boost::optional<std::vector<std::vector<Row>>> selectedSubtrees() const;
-    boost::optional<std::vector<MantidQt::MantidWidgets::Batch::RowLocation>> selectedSubtreeRoots() const;
+    std::optional<std::vector<std::vector<Row>>> selectedSubtrees() const;
+    std::optional<std::vector<MantidQt::MantidWidgets::Batch::RowLocation>> selectedSubtreeRoots() const;
 };
 
 class Cell {

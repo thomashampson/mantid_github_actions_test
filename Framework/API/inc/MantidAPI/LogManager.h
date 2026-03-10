@@ -7,16 +7,11 @@
 #pragma once
 
 #include "MantidAPI/DllConfig.h"
-#include "MantidKernel/NexusHDF5Descriptor.h"
 #include "MantidKernel/PropertyWithValue.h"
 #include "MantidKernel/Statistics.h"
 
 #include <memory>
 #include <vector>
-
-namespace NeXus {
-class File;
-}
 
 namespace Mantid {
 namespace Types {
@@ -184,14 +179,12 @@ public:
   virtual void setTimeROI(const Kernel::TimeROI &timeroi);
 
   /// Save the run to a NeXus file with a given group name
-  virtual void saveNexus(::NeXus::File *file, const std::string &group, bool keepOpen = false) const;
+  virtual void saveNexus(Nexus::File *file, const std::string &group, bool keepOpen = false) const;
 
-  /// Load the run from a NeXus file with a given group name. Overload that uses NexusHDF5Descriptor for faster
-  virtual void loadNexus(::NeXus::File *file, const std::string &group,
-                         const Mantid::Kernel::NexusHDF5Descriptor &fileInfo, const std::string &prefix,
-                         bool keepOpen = false);
+  /// Load the run from a NeXus file with a given group name. Overload that uses the file's NexusDescriptor for faster
+  virtual void loadNexus(Nexus::File *file, std::string const &group, std::string const &prefix, bool keepOpen = false);
   /// Load the run from a NeXus file with a given group name
-  virtual void loadNexus(::NeXus::File *file, const std::string &group, bool keepOpen = false);
+  virtual void loadNexus(Nexus::File *file, std::string const &group, bool keepOpen);
   /// Clear the logs
   void clearLogs();
 
@@ -201,26 +194,28 @@ public:
   // returns true if the log has a matching invalid values log filter
   bool hasInvalidValuesFilter(const std::string &logName) const;
 
-  // returns the invalid values log if the log has a matching invalid values log filter
-  Kernel::TimeSeriesProperty<bool> *getInvalidValuesFilter(const std::string &logName) const;
-
   bool operator==(const LogManager &other) const;
   bool operator!=(const LogManager &other) const;
+
+  const std::string &getProtonChargeLogName() const { return PROTON_CHARGE_LOG_NAME; }
+  const std::string &getProtonChargeUnfilteredName() const { return PROTON_CHARGE_UNFILTERED_LOG_NAME; }
 
 protected:
   bool hasStartTime() const;
   bool hasEndTime() const;
   bool hasValidProtonChargeLog(std::string &error) const;
 
-  void loadNexus(::NeXus::File *file, const Mantid::Kernel::NexusHDF5Descriptor &fileInfo, const std::string &prefix);
+  void loadNexus(Nexus::File *file, const std::string &prefix);
   /// Load the run from a NeXus file with a given group name
-  void loadNexus(::NeXus::File *file, const std::map<std::string, std::string> &entries);
+  void loadNexus(Nexus::File *file, const std::map<std::string, std::string> &entries);
   /// A pointer to a property manager
   std::unique_ptr<Kernel::PropertyManager> m_manager;
   std::unique_ptr<Kernel::TimeROI> m_timeroi;
   /// Name of the log entry containing the proton charge when retrieved using
   /// getProtonCharge
-  static const char *PROTON_CHARGE_LOG_NAME;
+  static const std::string PROTON_CHARGE_LOG_NAME;
+  /// Flag to signify if a filter has been applied to the proton charge log
+  static const std::string PROTON_CHARGE_UNFILTERED_LOG_NAME;
 
 private:
   /// Cache for the retrieved single values

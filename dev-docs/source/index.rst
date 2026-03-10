@@ -20,6 +20,7 @@ Guides
    Architecture
    BuildingOnOSX
    BuildingWithCMake
+   LocalMantidBuildWithPixi
    CMakeBestPractices
    Standards/index
    Testing/index
@@ -39,6 +40,9 @@ Guides
 
 :doc:`Architecture`
    Describes the architecture of the mantid libraries and applications.
+
+:doc:`LocalMantidBuildWithPixi`
+   How to set up a pixi environment to use a local Mantid build instead of conda packages in other projects.
 
 :doc:`Standards <Standards/index>`
    Details of coding and documentation standards for the project. Includes specifics regarding algorithms.
@@ -121,6 +125,7 @@ Tools
    ProfilingOverview
    Timers
    ProfilingWithPerf
+   ProfilingWithJemalloc
    ProfilingWithValgrind
    FlowchartCreation
    VisualStudioBuildImpact
@@ -166,7 +171,7 @@ Tools
    Guide for setting up an environment to perform a benchmark of Mantid fitting minimizers.
 
 :doc:`CondaPackageManager`
-   Guide on how to use the Conda package manager in Mantid, including tips and a ``pip`` policy.
+   Guide on how to use the conda package manager in Mantid, including tips and a ``pip`` policy.
 
 =======
 Testing
@@ -185,6 +190,7 @@ Testing
    DataFilesForTesting
    TestingUtilities
    RunningSanitizers
+   UnittestMonitor
 
 :doc:`RunningTheUnitTests`
    Details on how to run the suite of unit tests.
@@ -215,6 +221,9 @@ Testing
 
 :doc:`RunningSanitizers`
    How to run the various sanitizers locally.
+
+:doc:`UnittestMonitor`
+   Monitor failing and flakey unittests from the Jenkins nightly pipelines.
 
 ===============
 GUI Development
@@ -292,5 +301,6 @@ Component Overviews
    ScriptRepository
    Widgets/Plotting
    WritingAnAlgorithm
+   DynamicProperties
    WritingCustomConvertToMDTransformation
    ISISEnergyTransferTab

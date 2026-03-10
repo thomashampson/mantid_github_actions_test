@@ -10,16 +10,14 @@
 #include "MantidGeometry/Instrument.h"
 #include "MantidKernel/ConfigService.h"
 #include "MantidKernel/Strings.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <Poco/DOM/DOMParser.h>
 #include <Poco/DOM/Document.h>
 #include <Poco/DOM/Element.h>
 #include <Poco/DOM/NodeIterator.h>
 #include <Poco/DOM/NodeList.h>
-#include <Poco/File.h>
-#include <Poco/Path.h>
-#include <nexus/NeXusFile.hpp>
-
+#include <filesystem>
 using Poco::XML::Document;
 using Poco::XML::DOMParser;
 using Poco::XML::Element;
@@ -44,21 +42,19 @@ void LoadIDFFromNexus::init() {
                   "The name of the workspace in which to attach the imported instrument");
 
   const std::vector<std::string> exts{".nxs", ".nxs.h5"};
-  declareProperty(std::make_unique<FileProperty>("Filename", "", FileProperty::Load, exts),
-                  "The name (including its full or relative path) of the Nexus file to "
-                  "attempt to load the instrument from.");
+  declareProperty(
+      std::make_unique<FileProperty>("Filename", "", FileProperty::Load, exts),
+      "The name (including its full or relative path) of the Nexus file to attempt to load the instrument from.");
 
-  declareProperty("InstrumentParentPath", std::string(""),
-                  "Path name within the Nexus tree of the folder containing "
-                  "the instrument folder. "
-                  "For example it is 'raw_data_1' for an ISIS raw Nexus file "
-                  "and 'mantid_workspace_1' for a processed nexus file. "
-                  "Only a one level path is curently supported",
-                  Direction::Input);
+  declareProperty(
+      "InstrumentParentPath", std::string(""),
+      "Path name within the Nexus tree of the folder containing the instrument folder. "
+      "For example it is 'raw_data_1' for an ISIS raw Nexus file and 'mantid_workspace_1' for a processed nexus file. "
+      "Only a one level path is curently supported",
+      Direction::Input);
   declareProperty("ParameterCorrectionFilePath", std::string(""),
                   "Full path name of Parameter Correction file. "
-                  "This should only be used in a situation,"
-                  "where the default full file path is inconvenient.",
+                  "This should only be used in a situation,where the default full file path is inconvenient.",
                   Direction::Input);
 }
 
@@ -74,13 +70,13 @@ void LoadIDFFromNexus::exec() {
   // Get the input workspace
   const MatrixWorkspace_sptr localWorkspace = getProperty("Workspace");
 
-  // Get the instrument path
-  std::string instrumentParentPath = getPropertyValue("InstrumentParentPath");
+  // Get the instrument address
+  std::string instrumentParentAddress = getPropertyValue("InstrumentParentPath");
 
   // Get the instrument group in the Nexus file
-  ::NeXus::File nxfile(filename);
+  Nexus::File nxfile(filename);
   // Assume one level in instrument path
-  nxfile.openPath(instrumentParentPath);
+  nxfile.openAddress(instrumentParentAddress);
 
   // Take instrument info from nexus file.
   localWorkspace->loadInstrumentInfoNexus(filename, &nxfile);
@@ -115,17 +111,17 @@ void LoadIDFFromNexus::exec() {
 
   // Load parameters from correction parameter file, if it exists
   if (!correctionParameterFile.empty()) {
-    Poco::Path corrFilePath(parameterCorrectionFile);
-    g_log.debug() << "Correction file path: " << corrFilePath.toString() << "\n";
-    Poco::Path corrDirPath = corrFilePath.parent();
-    g_log.debug() << "Correction directory path: " << corrDirPath.toString() << "\n";
-    Poco::Path corrParamFile(corrDirPath, correctionParameterFile);
+    std::filesystem::path corrFilePath(parameterCorrectionFile);
+    g_log.debug() << "Correction file path: " << corrFilePath.string() << "\n";
+    std::filesystem::path corrDirPath = corrFilePath.parent_path();
+    g_log.debug() << "Correction directory path: " << corrDirPath.string() << "\n";
+    std::filesystem::path corrParamFile(corrDirPath / correctionParameterFile);
     if (append) {
-      g_log.notice() << "Using correction parameter file: " << corrParamFile.toString() << " to append parameters.\n";
+      g_log.notice() << "Using correction parameter file: " << corrParamFile.string() << " to append parameters.\n";
     } else {
-      g_log.notice() << "Using correction parameter file: " << corrParamFile.toString() << " to replace parameters.\n";
+      g_log.notice() << "Using correction parameter file: " << corrParamFile.string() << " to replace parameters.\n";
     }
-    loadParameterFile(corrParamFile.toString(), localWorkspace);
+    loadParameterFile(corrParamFile.string(), localWorkspace);
   } else {
     g_log.notice() << "No correction parameter file applies to the date for "
                       "correction file.\n";
@@ -143,15 +139,13 @@ std::string LoadIDFFromNexus::getParameterCorrectionFile(const std::string &inst
   for (auto &directoryName : directoryNames) {
     // This will iterate around the directories from user ->etc ->install, and
     // find the first appropriate file
-    Poco::Path iPath(directoryName,
-                     "embedded_instrument_corrections"); // Go to correction file subfolder
+    std::filesystem::path iPath =
+        std::filesystem::path(directoryName) / "embedded_instrument_corrections"; // Go to correction file subfolder
     // First see if the directory exists
-    Poco::File ipDir(iPath);
-    if (ipDir.exists() && ipDir.isDirectory()) {
-      iPath.append(instName + "_Parameter_Corrections.xml"); // Append file name to pathname
-      Poco::File ipFile(iPath);
-      if (ipFile.exists() && ipFile.isFile()) {
-        return ipFile.path(); // Return first found
+    if (std::filesystem::exists(iPath) && std::filesystem::is_directory(iPath)) {
+      std::filesystem::path ipFile = iPath / (instName + "_Parameter_Corrections.xml"); // Append file name to pathname
+      if (std::filesystem::exists(ipFile) && std::filesystem::is_regular_file(ipFile)) {
+        return ipFile.string(); // Return first found
       }
     } // Directory
   } // Loop
@@ -240,7 +234,7 @@ void LoadIDFFromNexus::readParameterCorrectionFile(const std::string &correction
  *
  *  @throw FileError Thrown if unable to parse XML file
  */
-void LoadIDFFromNexus::LoadParameters(::NeXus::File *nxfile, const MatrixWorkspace_sptr &localWorkspace) {
+void LoadIDFFromNexus::LoadParameters(Nexus::File *nxfile, const MatrixWorkspace_sptr &localWorkspace) {
 
   std::string parameterString;
 
@@ -257,11 +251,11 @@ void LoadIDFFromNexus::LoadParameters(::NeXus::File *nxfile, const MatrixWorkspa
     // No parameters have been found in Nexus file, so we look for them in a
     // parameter file.
     std::vector<std::string> directoryNames = ConfigService::Instance().getInstrumentDirectories();
-    const std::string instrumentName = localWorkspace->getInstrument()->getName();
+    const std::string instrParameterFileName = localWorkspace->getInstrument()->getName() + "_Parameters.xml";
     for (const auto &directoryName : directoryNames) {
-      // This will iterate around the directories from user ->etc ->install, and
-      // find the first appropriate file
-      const std::string paramFile = directoryName + instrumentName + "_Parameters.xml";
+      // This will iterate around the directories from user->etc->install, and find the first appropriate file
+      const std::filesystem::path direc(directoryName);
+      const std::string paramFile = (direc / instrParameterFileName).string();
 
       // Attempt to load specified file, if successful, use file and stop
       // search.
@@ -279,7 +273,6 @@ void LoadIDFFromNexus::LoadParameters(::NeXus::File *nxfile, const MatrixWorkspa
 // Private function to load parameter file specified by a full path name into
 // given workspace, returning success.
 bool LoadIDFFromNexus::loadParameterFile(const std::string &fullPathName, const MatrixWorkspace_sptr &localWorkspace) {
-
   try {
     // load and also populate instrument parameters from this 'fallback'
     // parameter file

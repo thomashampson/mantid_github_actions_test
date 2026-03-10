@@ -5,7 +5,7 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidDataHandling/BankPulseTimes.h"
-#include <nexus/NeXusFile.hpp>
+#include "MantidNexus/NexusFile.h"
 #include <numeric>
 
 using namespace Mantid::Kernel;
@@ -50,7 +50,7 @@ BankPulseTimes::BankPulseTimes(const std::vector<Mantid::Types::Core::DateAndTim
  * @param file :: nexus file open in the right bank entry
  * @param periodNumbers :: Period numbers to index into. Index via frame/pulse
  */
-BankPulseTimes::BankPulseTimes(::NeXus::File &file, const std::vector<int> &periodNumbers)
+BankPulseTimes::BankPulseTimes(Nexus::File &file, const std::vector<int> &periodNumbers)
     : startTime(DEFAULT_START_TIME), periodNumbers(periodNumbers), have_period_info(true),
       m_sorting_info(PulseSorting::UNKNOWN) {
 
@@ -70,8 +70,8 @@ BankPulseTimes::BankPulseTimes(::NeXus::File &file, const std::vector<int> &peri
 
   // number of pulse times
   const auto dataInfo = file.getInfo();
-  const int64_t numValues =
-      std::accumulate(dataInfo.dims.cbegin(), dataInfo.dims.cend(), int64_t{1}, std::multiplies<>());
+  const uint64_t numValues =
+      std::accumulate(dataInfo.dims.cbegin(), dataInfo.dims.cend(), uint64_t{1}, std::multiplies<>());
   if (numValues == 0)
     throw std::runtime_error("event_time_zero field has no data!");
 
@@ -79,9 +79,9 @@ BankPulseTimes::BankPulseTimes(::NeXus::File &file, const std::vector<int> &peri
 
   // Nexus only requires event_time_zero to be a NXNumber, we support two
   // possilites
-  if (heldTimeZeroType == ::NeXus::FLOAT64) {
+  if (heldTimeZeroType == NXnumtype::FLOAT64) {
     this->readData<double>(file, numValues, start);
-  } else if (heldTimeZeroType == ::NeXus::UINT64) {
+  } else if (heldTimeZeroType == NXnumtype::UINT64) {
     this->readData<uint64_t>(file, numValues, start);
   } else {
     throw std::invalid_argument("Unsupported type for event_time_zero");
@@ -92,9 +92,9 @@ BankPulseTimes::BankPulseTimes(::NeXus::File &file, const std::vector<int> &peri
 }
 
 template <typename ValueType>
-void BankPulseTimes::readData(::NeXus::File &file, int64_t numValues, Mantid::Types::Core::DateAndTime &start) {
-  std::vector<int64_t> indexStart{0};
-  std::vector<int64_t> indexStep{std::min(numValues, static_cast<int64_t>(12 * 3600 * 60))}; // 12 hour at 60Hz
+void BankPulseTimes::readData(Nexus::File &file, std::size_t numValues, Mantid::Types::Core::DateAndTime &start) {
+  Nexus::DimVector indexStart{0};
+  Nexus::DimVector indexStep{std::min(numValues, std::size_t(12 * 3600 * 60))}; // 12 hour at 60Hz
 
   // getSlab needs the data allocated already
   std::vector<ValueType> rawData(indexStep[0]);

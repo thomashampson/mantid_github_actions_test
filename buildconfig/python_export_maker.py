@@ -120,7 +120,7 @@ void export_%(class)s()
         cppfile.write(cppcode % {"header": include, "namespace": namespace, "class": classname})
 
     print('Generated export file "%s"' % os.path.basename(exportfile))
-    print("")
+    print()
     print(
         "  ** Add this to the EXPORT_FILES variable in '%s'"
         % os.path.join(get_modulepath(get_frameworkdir(headerfile), get_submodule(headerfile)), "CMakeLists.txt")
@@ -136,7 +136,7 @@ def write_unittest(headerfile, overwrite):
     filename = get_unittest_file(headerfile)
     print('Writing unit test "%s" ' % os.path.basename(filename))
     if os.path.exists(filename) and not overwrite:
-        raise RuntimeError("A unit test file '%s' already exists, use the --overwrite-test option to overwrite the " "file." % filename)
+        raise RuntimeError("A unit test file '%s' already exists, use the --overwrite-test option to overwrite the file." % filename)
 
     classname = get_classname(headerfile)
     pytest = """import unittest
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     unittest.close()
 
     print('Generated unit test file "%s"' % os.path.basename(filename))
-    print("")
+    print()
     print("  ** Add this to the TEST_PY_FILES variable in '%s'" % os.path.join("PythonInterface", "CMakeLists.txt"))
 
 
@@ -163,7 +163,7 @@ def main():
     """Main function"""
     parser = optparse.OptionParser(
         usage="usage: %prog [options] headerfile ",
-        description="Creates a simple template for exporting a class to Python along with a" " unit test",
+        description="Creates a simple template for exporting a class to Python along with a unit test",
     )
     parser.add_option(
         "--overwrite", "-o", dest="overwrite", action="store_true", default=False, help="If the file already exists, overwrite it"

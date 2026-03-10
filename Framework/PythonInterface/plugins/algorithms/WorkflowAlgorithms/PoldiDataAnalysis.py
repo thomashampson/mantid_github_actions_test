@@ -13,7 +13,6 @@ from mantid.kernel import (
 from mantid.simpleapi import (
     plotSpectrum,
     DeleteWorkspace,
-    Integration,
     GroupWorkspaces,
     Plus,
     PoldiAnalyseResiduals,
@@ -23,7 +22,6 @@ from mantid.simpleapi import (
     PoldiPeakSearch,
     PoldiAutoCorrelation,
     RenameWorkspace,
-    SumSpectra,
 )
 
 
@@ -82,7 +80,7 @@ class PoldiDataAnalysis(PythonAlgorithm):
             "MinimumPeakHeight",
             0.0,
             direction=Direction.Input,
-            doc=("Minimum height of peaks. If it is left at 0, the minimum peak height is calculated" "from background noise."),
+            doc=("Minimum height of peaks. If it is left at 0, the minimum peak height is calculated from background noise."),
         )
 
         self.declareProperty(
@@ -145,9 +143,7 @@ class PoldiDataAnalysis(PythonAlgorithm):
             "MultipleRuns",
             False,
             direction=Direction.Input,
-            doc=(
-                "If this is activated, peaks are searched again in the" "residuals and the 1D- and 2D-fit is repeated " "with these data."
-            ),
+            doc=("If this is activated, peaks are searched again in the residuals and the 1D- and 2D-fit is repeated with these data."),
         )
 
         self.declareProperty(
@@ -174,7 +170,7 @@ class PoldiDataAnalysis(PythonAlgorithm):
             "OutputRawFitParameters",
             False,
             direction=Direction.Input,
-            doc=("Activating this option produces an output workspace which contains the raw " "fit parameters."),
+            doc=("Activating this option produces an output workspace which contains the raw fit parameters."),
         )
 
         self.declareProperty(
@@ -221,19 +217,11 @@ class PoldiDataAnalysis(PythonAlgorithm):
         self.setProperty("OutputWorkspace", outputWs)
 
     def workspaceHasCounts(self, workspace):
-        integrated = Integration(workspace)
-        summed = SumSpectra(integrated)
-
-        counts = summed.readY(0)[0]
-
-        DeleteWorkspace(integrated)
-        DeleteWorkspace(summed)
-
-        return counts > 0
+        return workspace.extractY().sum() > 0
 
     def runCorrelation(self):
         correlationName = self.baseName + "_correlation"
-        PoldiAutoCorrelation(self.inputWorkspace, OutputWorkspace=correlationName)
+        PoldiAutoCorrelation(self.inputWorkspace, OutputWorkspace=correlationName, Version=5)
 
         return AnalysisDataService.retrieve(correlationName)
 

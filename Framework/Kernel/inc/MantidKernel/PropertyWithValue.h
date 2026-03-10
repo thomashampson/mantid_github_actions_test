@@ -6,16 +6,11 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
-#include "MantidKernel/Exception.h"
 #include "MantidKernel/Logger.h"
 #include "MantidKernel/NullValidator.h"
 #include "MantidKernel/Property.h"
 
 #include <vector>
-
-namespace NeXus {
-class File;
-}
 
 namespace Mantid {
 
@@ -39,12 +34,13 @@ public:
   PropertyWithValue(std::string name, TYPE defaultValue, IValidator_sptr validator = IValidator_sptr(new NullValidator),
                     const unsigned int direction = Direction::Input);
   PropertyWithValue(std::string name, TYPE defaultValue, const unsigned int direction);
-  PropertyWithValue(const std::string &name, TYPE defaultValue, const std::string &defaultValueStr,
+  PropertyWithValue(const std::string &name, const TYPE &defaultValue, const std::string &defaultValueStr,
                     IValidator_sptr validator, const unsigned int direction);
   PropertyWithValue(const PropertyWithValue<TYPE> &right);
+  PropertyWithValue() = delete;
   PropertyWithValue<TYPE> *clone() const override;
 
-  void saveProperty(::NeXus::File *file) override;
+  void saveProperty(Nexus::File *file) override;
   std::string value() const override;
   std::string valueAsPrettyStr(const size_t maxLength = 0, const bool collapseLists = true) const override;
   Json::Value valueAsJson() const override;
@@ -88,20 +84,17 @@ private:
 
   /// Static reference to the logger class
   static Logger g_logger;
-
-  /// Private default constructor
-  PropertyWithValue() = default;
 };
 
-template <> MANTID_KERNEL_DLL void PropertyWithValue<float>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<double>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<int32_t>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<uint32_t>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<int64_t>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<uint64_t>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<std::string>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<std::vector<double>>::saveProperty(::NeXus::File *file);
-template <> MANTID_KERNEL_DLL void PropertyWithValue<std::vector<int32_t>>::saveProperty(::NeXus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<float>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<double>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<int32_t>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<uint32_t>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<int64_t>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<uint64_t>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<std::string>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<std::vector<double>>::saveProperty(Nexus::File *file);
+template <> MANTID_KERNEL_DLL void PropertyWithValue<std::vector<int32_t>>::saveProperty(Nexus::File *file);
 
 template <typename TYPE> Logger PropertyWithValue<TYPE>::g_logger("PropertyWithValue");
 

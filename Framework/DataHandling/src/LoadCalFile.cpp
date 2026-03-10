@@ -16,8 +16,8 @@
 #include "MantidDataObjects/OffsetsWorkspace.h"
 #include "MantidDataObjects/Workspace2D.h"
 #include "MantidKernel/OptionalBool.h"
-#include "MantidKernel/System.h"
-#include <Poco/Path.h>
+
+#include <filesystem>
 #include <fstream>
 
 using Mantid::Geometry::Instrument_const_sptr;
@@ -54,7 +54,7 @@ void LoadCalFile::getInstrument3WaysInit(Algorithm *alg) {
   alg->setPropertyGroup("InstrumentFilename", grpName);
 }
 
-bool LoadCalFile::instrumentIsSpecified(API::Algorithm *alg) {
+bool LoadCalFile::instrumentIsSpecified(API::Algorithm const *alg) {
   MatrixWorkspace_sptr inWS = alg->getProperty("InputWorkspace");
   if (bool(inWS))
     return true;
@@ -156,7 +156,7 @@ void LoadCalFile::exec() {
   MaskWorkspace_sptr maskWS;
 
   // Title of all workspaces = the file without path
-  std::string title = Poco::Path(CalFilename).getFileName();
+  std::string title = std::filesystem::path(CalFilename).filename().string();
 
   // Initialize all required workspaces.
   if (MakeGroupingWorkspace) {
@@ -304,8 +304,7 @@ void LoadCalFile::readCalFile(const std::string &calFileName, const GroupingWork
         } else {
           // Selected, set the value to be 0
           maskWS->mutableY(wi)[0] = 0.0;
-          if (!hasUnmasked)
-            hasUnmasked = true;
+          hasUnmasked = true;
         }
       } else {
         // Ignore the error if the IS is actually for a monitor

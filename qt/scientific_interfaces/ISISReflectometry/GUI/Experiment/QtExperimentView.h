@@ -51,6 +51,9 @@ public:
   bool getDebugOption() const override;
   void setDebugOption(bool enable) override;
 
+  bool getDiagnosticsOption() const override;
+  void setDiagnosticsOption(bool enable) override;
+
   std::vector<LookupRow::ValueArray> getLookupTable() const override;
   void setLookupTable(std::vector<LookupRow::ValueArray> rows) override;
   void showLookupRowAsInvalid(int row, int column) override;
@@ -83,6 +86,8 @@ public:
   std::string getPolarizationEfficienciesFilePath() const override;
   void setPolarizationEfficienciesWorkspace(std::string const &workspace) override;
   void setPolarizationEfficienciesFilePath(std::string const &filePath) override;
+  std::string getFredrikzeSpinStateOrder() const override;
+  void setFredrikzeSpinStateOrder(std::string const &spinStates) override;
 
   std::string getFloodCorrectionType() const override;
   void setFloodCorrectionType(std::string const &correction) override;
@@ -123,6 +128,8 @@ public:
   void disablePolarizationCorrections() override;
   void enablePolarizationEfficiencies() override;
   void disablePolarizationEfficiencies() override;
+  void enableFredrikzeSpinStateOrder() override;
+  void disableFredrikzeSpinStateOrder() override;
 
   void enableFloodCorrectionInputs() override;
   void disableFloodCorrectionInputs() override;
@@ -171,27 +178,27 @@ private:
   void connectSettingsChange(QTableWidget &edit);
   void connectSettingsChange(QDoubleSpinBox &edit);
   void connectSettingsChange(QSpinBox &edit);
-  void disconnectSettingsChange(QLineEdit &edit);
-  void disconnectSettingsChange(QComboBox &edit);
-  void disconnectSettingsChange(QCheckBox &edit);
-  void disconnectSettingsChange(QTableWidget &edit);
-  void disconnectSettingsChange(QDoubleSpinBox &edit);
-  void disconnectSettingsChange(QSpinBox &edit);
+  void disconnectSettingsChange(QLineEdit const &edit);
+  void disconnectSettingsChange(QComboBox const &edit);
+  void disconnectSettingsChange(QCheckBox const &edit);
+  void disconnectSettingsChange(QTableWidget const &edit);
+  void disconnectSettingsChange(QDoubleSpinBox const &edit);
+  void disconnectSettingsChange(QSpinBox const &edit);
   QLineEdit &stitchOptionsLineEdit() const;
   void setSelected(QComboBox &box, std::string const &str);
   void setText(QLineEdit &lineEdit, int value);
   void setText(QLineEdit &lineEdit, double value);
   void setText(QLineEdit &lineEdit, std::string const &value);
-  void setText(QLineEdit &lineEdit, boost::optional<int> value);
-  void setText(QLineEdit &lineEdit, boost::optional<double> value);
-  void setText(QLineEdit &lineEdit, boost::optional<std::string> const &value);
+  void setText(QLineEdit &lineEdit, std::optional<int> value);
+  void setText(QLineEdit &lineEdit, std::optional<double> value);
+  void setText(QLineEdit &lineEdit, std::optional<std::string> const &value);
   std::string textFromCell(QTableWidgetItem const *maybeNullItem) const;
   //  void setText(QTableWidget &table, std::string const &propertyName,
   //               double value);
   //  void setText(QTableWidget &table, std::string const &propertyName,
-  //               boost::optional<double> value);
+  //               std::optional<double> value);
   //  void setText(QTableWidget &table, std::string const &propertyName,
-  //               boost::optional<std::string> value);
+  //                std::optional<std::string> value);
   //  void setText(QTableWidget &table, std::string const &propertyName,
   //               std::string const &value);
   //  void setText(QTableWidget &table, std::string const &propertyName,

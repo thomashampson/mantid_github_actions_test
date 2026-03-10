@@ -8,8 +8,14 @@ set(SRC_FILES
     src/CalMuonDeadTime.cpp
     src/CalMuonDetectorPhases.cpp
     src/ConvertFitFunctionForMuonTFAsymmetry.cpp
-    src/LoadAndApplyMuonDetectorGrouping.cpp
     src/EstimateMuonAsymmetryFromCounts.cpp
+    src/LoadAndApplyMuonDetectorGrouping.cpp
+    src/LoadInstrumentFromNexus.cpp
+    src/LoadMuonNexus.cpp
+    src/LoadMuonNexus1.cpp
+    src/LoadMuonNexus2.cpp
+    src/LoadMuonNexus3.cpp
+    src/LoadMuonLog.cpp
     src/MuonAlgorithmHelper.cpp
     src/MuonAsymmetryHelper.cpp
     src/MuonGroupDetectors.cpp
@@ -22,6 +28,7 @@ set(SRC_FILES
     src/PlotAsymmetryByLogValue.cpp
     src/RemoveExpDecay.cpp
     src/RRFMuon.cpp
+    src/MuonNexusReader.cpp
 )
 
 set(INC_FILES
@@ -35,6 +42,12 @@ set(INC_FILES
     inc/MantidMuon/CalMuonDetectorPhases.h
     inc/MantidMuon/ConvertFitFunctionForMuonTFAsymmetry.h
     inc/MantidMuon/LoadAndApplyMuonDetectorGrouping.h
+    inc/MantidMuon/LoadInstrumentFromNexus.h
+    inc/MantidMuon/LoadMuonNexus.h
+    inc/MantidMuon/LoadMuonNexus1.h
+    inc/MantidMuon/LoadMuonNexus2.h
+    inc/MantidMuon/LoadMuonNexus3.h
+    inc/MantidMuon/LoadMuonLog.h
     inc/MantidMuon/EstimateMuonAsymmetryFromCounts.h
     inc/MantidMuon/MuonAlgorithmHelper.h
     inc/MantidMuon/MuonAsymmetryHelper.h
@@ -48,6 +61,7 @@ set(INC_FILES
     inc/MantidMuon/PlotAsymmetryByLogValue.h
     inc/MantidMuon/RemoveExpDecay.h
     inc/MantidMuon/RRFMuon.h
+    inc/MantidMuon/MuonNexusReader.h
 )
 
 set(TEST_FILES
@@ -61,6 +75,11 @@ set(TEST_FILES
     CalMuonDetectorPhasesTest.h
     ConvertFitFunctionForMuonTFAsymmetryTest.h
     LoadAndApplyMuonDetectorGroupingTest.h
+    LoadInstrumentFromNexusTest.h
+    LoadMuonNexus1Test.h
+    LoadMuonNexus2Test.h
+    LoadMuonNexus3Test.h
+    LoadMuonLogTest.h
     MuonAlgorithmHelperTest.h
     EstimateMuonAsymmetryFromCountsTest.h
     MuonGroupDetectorsTest.h
@@ -81,8 +100,7 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Add a precompiled header where they are supported enable_precompiled_headers (inc/MantidAlgorithms/PrecompiledHeader.h
-# SRC_FILES ) Add the target for this directory
+# Add the target for this directory
 add_library(Muon ${SRC_FILES} ${C_SRC_FILES} ${INC_FILES})
 add_library(Mantid::Muon ALIAS Muon)
 

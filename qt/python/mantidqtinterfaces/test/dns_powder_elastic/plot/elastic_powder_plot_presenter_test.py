@@ -25,7 +25,7 @@ class DNSElasticPowderPlotPresenterTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.parent = mock.Mock()
-        cls.view = mock.create_autospec(DNSElasticPowderPlotView)
+        cls.view = mock.create_autospec(DNSElasticPowderPlotView, instance=True)
         cls.view.sig_plot.connect = mock.Mock()
         cls.view.sig_grid_state_change.connect = mock.Mock()
         cls.view.sig_error_bar_change.connect = mock.Mock()
@@ -33,7 +33,7 @@ class DNSElasticPowderPlotPresenterTest(unittest.TestCase):
         cls.view.sig_log_change.connect = mock.Mock()
         cls.view.get_check_plots.return_value = [0, 1]
         cls.view.get_data_list.return_value = [3, 4]
-        cls.model = mock.create_autospec(DNSElasticPowderPlotModel)
+        cls.model = mock.create_autospec(DNSElasticPowderPlotModel, instance=True)
         cls.model.get_x_y_yerr.return_value = [[1, 2], [3, 4], [4, 5]]
         cls.model.get_updated_ws_list.return_value = [["mat_test"], True]
         cls.presenter = DNSElasticPowderPlotPresenter(view=cls.view, model=cls.model, parent=cls.parent)
@@ -71,7 +71,7 @@ class DNSElasticPowderPlotPresenterTest(unittest.TestCase):
         self.presenter._change_log(False)
         self.view.set_y_scale.assert_called_once_with("linear")
 
-    @patch("mantidqtinterfaces.dns_powder_elastic.plot." "elastic_powder_plot_presenter." "DNSElasticPowderPlotPresenter._plot")
+    @patch("mantidqtinterfaces.dns_powder_elastic.plot.elastic_powder_plot_presenter.DNSElasticPowderPlotPresenter._plot")
     def test_change_linestyle(self, mock_plot):
         self.presenter._change_line_style()
         self.assertEqual(self.presenter._line_style, 0)
@@ -81,7 +81,7 @@ class DNSElasticPowderPlotPresenterTest(unittest.TestCase):
         self.presenter._change_line_style()
         self.assertEqual(self.presenter._line_style, 2)
 
-    @patch("mantidqtinterfaces.dns_powder_elastic.plot." "elastic_powder_plot_presenter." "DNSElasticPowderPlotPresenter._plot")
+    @patch("mantidqtinterfaces.dns_powder_elastic.plot.elastic_powder_plot_presenter.DNSElasticPowderPlotPresenter._plot")
     def test_change_errorbar(self, mock_plot):
         self.presenter._change_error_bar()
         self.assertEqual(self.presenter._error_bar, 0)

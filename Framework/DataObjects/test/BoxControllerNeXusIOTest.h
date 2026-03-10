@@ -9,15 +9,12 @@
 #include "MantidAPI/FileFinder.h"
 #include "MantidDataObjects/BoxControllerNeXusIO.h"
 #include "MantidFrameworkTestHelpers/MDEventsTestHelper.h"
-
-#include <map>
-#include <memory>
+#include "MantidNexus/NexusFile.h"
 
 #include <cxxtest/TestSuite.h>
-
-#include <nexus/NeXusFile.hpp>
-
-#include <Poco/File.h>
+#include <filesystem>
+#include <map>
+#include <memory>
 
 class BoxControllerNeXusIOTest : public CxxTest::TestSuite {
 public:
@@ -33,9 +30,9 @@ public:
   }
 
   void setUp() override {
-    std::string FullPathFile = Mantid::API::FileFinder::Instance().getFullPath(this->xxfFileName);
+    auto FullPathFile = Mantid::API::FileFinder::Instance().getFullPath(this->xxfFileName);
     if (!FullPathFile.empty())
-      Poco::File(FullPathFile).remove();
+      std::filesystem::remove(FullPathFile);
   }
 
   void test_constructor_does_not_throw() { TS_ASSERT_THROWS_NOTHING(createTestBoxController()); }
@@ -128,8 +125,8 @@ public:
     TS_ASSERT_THROWS_NOTHING(pSaver->closeFile());
     TS_ASSERT(!pSaver->isOpened());
 
-    if (Poco::File(FullPathFile).exists())
-      Poco::File(FullPathFile).remove();
+    if (std::filesystem::exists(FullPathFile))
+      std::filesystem::remove(FullPathFile);
   }
 
   void test_free_space_index_is_written_out_and_read_in() {
@@ -160,8 +157,8 @@ public:
 
     TS_ASSERT_THROWS_NOTHING(pSaver->closeFile());
 
-    if (Poco::File(FullPathFile).exists())
-      Poco::File(FullPathFile).remove();
+    if (std::filesystem::exists(FullPathFile))
+      std::filesystem::remove(FullPathFile);
   }
 
   void test_copyToFile_successfully_copies_open_file_handle() {
@@ -173,10 +170,10 @@ public:
 
     TS_ASSERT_THROWS_NOTHING(pSaver->copyFileTo(destFilename));
 
-    TSM_ASSERT("File not copied successfully.", Poco::File(destFilename).exists());
+    TSM_ASSERT("File not copied successfully.", std::filesystem::exists(destFilename));
 
-    if (Poco::File(destFilename).exists())
-      Poco::File(destFilename).remove();
+    if (std::filesystem::exists(destFilename))
+      std::filesystem::remove(destFilename);
   }
 
   //---------------------------------------------------------------------------------------------------------
@@ -246,8 +243,8 @@ public:
     }
 
     pSaver->closeFile();
-    if (Poco::File(FullPathFile).exists())
-      Poco::File(FullPathFile).remove();
+    if (std::filesystem::exists(FullPathFile))
+      std::filesystem::remove(FullPathFile);
   }
 
   void test_WriteFloatReadReadFloat() { this->WriteReadRead<float, float>(); }

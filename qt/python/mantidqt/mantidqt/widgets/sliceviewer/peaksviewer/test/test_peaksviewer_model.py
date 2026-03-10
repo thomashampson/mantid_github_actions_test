@@ -23,14 +23,14 @@ from mantidqt.widgets.sliceviewer.peaksviewer.test.modeltesthelpers import creat
 class PeaksViewerModelTest(unittest.TestCase):
     # -------------------------- Success Tests --------------------------------
     def test_peaks_workspace_returns_same_workspace_given_to_model(self):
-        peaks_workspace = create_autospec(PeaksWorkspace)
+        peaks_workspace = create_autospec(PeaksWorkspace, instance=True)
         model = PeaksViewerModel(peaks_workspace, "b", "1.0")
 
         self.assertEqual(peaks_workspace, model.peaks_workspace)
 
     def test_color_returns_string_identifier_given_to_model(self):
         fg_color, bg_color = "b", "0.5"
-        model = PeaksViewerModel(create_autospec(PeaksWorkspace), fg_color, bg_color)
+        model = PeaksViewerModel(create_autospec(PeaksWorkspace, instance=True), fg_color, bg_color)
 
         self.assertEqual(fg_color, model.fg_color)
         self.assertEqual(bg_color, model.bg_color)
@@ -61,6 +61,33 @@ class PeaksViewerModelTest(unittest.TestCase):
         self.assertAlmostEqual(0.03, call_args[2], places=3)
         self.assertAlmostEqual(0.356, call_kwargs["alpha"], places=3)
         self.assertEqual(fg_color, call_kwargs["color"])
+
+    def test_draw_peaks_with_calc_hkl(self):
+        peak_center = (0.5, 0.2, 0.25)
+
+        # without calcHKL
+        _, mock_painter = draw_peaks((peak_center,), "r", slice_value=0.5, slice_width=30, frame=SpecialCoordinateSystem.HKL, calcHKL=False)
+
+        self.assertEqual(1, mock_painter.cross.call_count)
+        call_args, _ = mock_painter.cross.call_args
+        self.assertEqual(peak_center[0], call_args[0])
+        self.assertEqual(peak_center[1], call_args[1])
+
+        # with calcHKL, the HKL peak position should change
+        _, mock_painter = draw_peaks((peak_center,), "r", slice_value=0.5, slice_width=30, frame=SpecialCoordinateSystem.HKL, calcHKL=True)
+        self.assertEqual(1, mock_painter.cross.call_count)
+        call_args, _ = mock_painter.cross.call_args
+        self.assertAlmostEqual(0.159002, call_args[0], places=6)
+        self.assertAlmostEqual(0.127324, call_args[1], places=6)
+
+        # with calcHKL but with QSample frame, the peak position should not change
+        _, mock_painter = draw_peaks(
+            (peak_center,), "r", slice_value=0.5, slice_width=30, frame=SpecialCoordinateSystem.QSample, calcHKL=True
+        )
+        self.assertEqual(1, mock_painter.cross.call_count)
+        call_args, _ = mock_painter.cross.call_args
+        self.assertAlmostEqual(peak_center[0], call_args[0], places=6)
+        self.assertAlmostEqual(peak_center[1], call_args[1], places=6)
 
     def test_clear_peaks_removes_all_drawn(self):
         # create 2 peaks: 1 visible, 1 not (far outside Z range)
@@ -114,7 +141,7 @@ class PeaksViewerModelTest(unittest.TestCase):
         self.assertEqual((None, None), ylim)
 
     def test_peaks_workspace_add_peak(self):
-        peaks_workspace = create_autospec(PeaksWorkspace)
+        peaks_workspace = create_autospec(PeaksWorkspace, instance=True)
         model = PeaksViewerModel(peaks_workspace, "b", "1.0")
 
         model.add_peak([1, 1, 1], SpecialCoordinateSystem.QLab)
@@ -126,7 +153,7 @@ class PeaksViewerModelTest(unittest.TestCase):
 
     # -------------------------- Failure Tests --------------------------------
     def test_model_accepts_only_peaks_workspaces(self):
-        self.assertRaises(ValueError, PeaksViewerModel, create_autospec(MatrixWorkspace), "w", "1.0")
+        self.assertRaises(ValueError, PeaksViewerModel, create_autospec(MatrixWorkspace, instance=True), "w", "1.0")
 
 
 if __name__ == "__main__":

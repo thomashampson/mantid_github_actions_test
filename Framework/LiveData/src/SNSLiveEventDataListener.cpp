@@ -75,8 +75,10 @@ namespace Mantid::LiveData {
 DECLARE_LISTENER(SNSLiveEventDataListener)
 
 namespace {
+
 /// static logger
 Kernel::Logger g_log("SNSLiveEventDataListener");
+
 } // namespace
 
 /// Constructor
@@ -91,9 +93,7 @@ SNSLiveEventDataListener::SNSLiveEventDataListener()
   initWorkspacePart1();
 
   // Initialize m_keepPausedEvents from the config file.
-  // NOTE: To the best of my knowledge, the existence of this property is not
-  // documented anywhere and this lack of documentation is deliberate.
-  auto keepPausedEvents = ConfigService::Instance().getValue<bool>("livelistener.keeppausedevents");
+  auto keepPausedEvents = ConfigService::Instance().getValue<bool>("SNSLiveEventDataListener.keepPausedEvents");
 
   // If the property hasn't been set, assume false
   m_keepPausedEvents = keepPausedEvents.value_or(false);
@@ -126,7 +126,7 @@ SNSLiveEventDataListener::~SNSLiveEventDataListener() {
 /// Connect to the SMS daemon.
 
 /// Attempts to connect to the SMS daemon at the specified address.  Note:
-/// if the address is '0.0.0.0', it looks on localhost:31415 (useful for
+/// if the address hasn't been set, it uses the "testaddress" (useful for
 /// debugging and testing).
 /// @param address The address to attempt to connect to
 /// @return Returns true if the connection succeeds.  False otherwise.
@@ -138,30 +138,42 @@ bool SNSLiveEventDataListener::connect(const Poco::Net::SocketAddress &address)
 // and it doesn't check the return value.  (It does, however, trap the Poco
 // exceptions.)
 {
-  // If we don't have an address, force a connection to the test server running
-  // on
-  // localhost on the default port
-  if (address.host().toString() == "0.0.0.0") {
-    Poco::Net::SocketAddress tempAddress("localhost:31415");
+  // If we don't have an address, make a connection to the test server running
+  //   on localhost on the default port.
+  if (address == Poco::Net::SocketAddress()) {
+    // WARNING: check the config setting: system admin may not allow loopback!
+    const auto maybeTestAddress =
+        ConfigService::Instance().getValue<std::string>("SNSLiveEventDataListener.testAddress");
+    if (!maybeTestAddress.has_value())
+      throw std::runtime_error("SNSLiveEventDataListener: 'testAddress' is not set in `Config`");
+    Poco::Net::SocketAddress testAddress(maybeTestAddress.value());
+
     try {
-      m_socket.connect(tempAddress); // BLOCKING connect
+      m_socket.connect(testAddress); // BLOCKING connect
     } catch (...) {
-      g_log.error() << "Connection to " << tempAddress.toString() << " failed.\n";
+      g_log.error() << "Connection to " << testAddress.toString() << " failed.\n";
       return false;
     }
   } else {
     try {
       m_socket.connect(address); // BLOCKING connect
+    } catch (const Poco::Exception &e) {
+      g_log.error() << "POCO Exception in connect(): " << e.displayText();
+      return false;
+    } catch (const std::exception &e) {
+      g_log.error() << "STD Exception in connect(): " << e.what() << ": "
+                    << " type: " << typeid(e).name();
+      return false;
     } catch (...) {
-      g_log.debug() << "Connection to " << address.toString() << " failed.\n";
+      g_log.error() << "Unknown exception in connect()";
       return false;
     }
   }
 
   m_socket.setReceiveTimeout(Poco::Timespan(RECV_TIMEOUT, 0)); // POCO timespan is seconds, microseconds
   g_log.debug() << "Connected to " << m_socket.address().toString() << '\n';
-
   m_isConnected = true;
+
   return true;
 }
 
@@ -179,22 +191,21 @@ bool SNSLiveEventDataListener::isConnected() { return m_isConnected; }
 /// before continuing the current 'live' data.  Use 0 to indicate no
 /// historical data.
 void SNSLiveEventDataListener::start(const Types::Core::DateAndTime startTime) {
-  // Save the startTime and kick off the background thread
-  // (Can't really do anything else until we send the hello packet and the SMS
-  // sends us back the various metadata packets
+  // Save the startTime and kick off the background thread (Can't really do anything else until we send the hello packet
+  // and the SMS sends us back the various metadata packets)
   m_startTime = startTime;
 
   if (m_startTime.totalNanoseconds() == 1000000000) {
     // 1 billion nanoseconds - ie: 1 second past the EPOCH
-    // Start live listener sends us this when it wants to start processing
-    // at the start of the previous run (and it doesn't know when the previous
-    // run started).  This value for a start time will cause the SMS to replay
-    // all of its historical data and it will be up to us to filter out
-    // everything before the start of the previous run.
-    // See the description of the 'Client Hello' packet in the SNS DAS design
-    // doc for more details
+    // Start live listener sends us this when it wants to start processing at the start of the previous run (and it
+    // doesn't know when the previous run started).  This value for a start time will cause the SMS to replay all of its
+    // historical data and it will be up to us to filter out everything before the start of the previous run. See the
+    // description of the 'Client Hello' packet in the SNS DAS design doc for more details
     m_filterUntilRunStart = true;
   }
+  // make sure all monitors are considered ok
+  m_badMonitors.clear();
+
   m_thread.start(*this);
 }
 
@@ -218,7 +229,8 @@ void SNSLiveEventDataListener::run() {
     // to update the StartLiveListener GUI, though.
 
     Poco::Timestamp now;
-    auto now_usec = static_cast<uint32_t>(now.epochMicroseconds() - now.epochTime());
+    uint32_t now_usec = static_cast<uint32_t>(now.epochMicroseconds() % 1000000);
+
     helloPkt[2] = static_cast<uint32_t>(now.epochTime() - ADARA::EPICS_EPOCH_OFFSET);
     helloPkt[3] = now_usec * 1000;
     helloPkt[4] = static_cast<uint32_t>(m_startTime.totalNanoseconds() /
@@ -235,7 +247,7 @@ void SNSLiveEventDataListener::run() {
 
     while (!m_stopThread) // loop until the foreground thread tells us to stop
     {
-
+      // cppcheck-suppress knownConditionTrueFalse
       while (m_pauseNetRead && !m_stopThread) {
         // foreground thread doesn't want us to process any more packets until
         // it's ready.  See comments in rxPacket( const ADARA::RunStatusPkt
@@ -243,6 +255,7 @@ void SNSLiveEventDataListener::run() {
         Poco::Thread::sleep(100); // 100 milliseconds
       }
 
+      // cppcheck-suppress knownConditionTrueFalse
       if (m_stopThread) {
         // it's possible that a stop request came in while we were sleeping...
         break;
@@ -441,24 +454,22 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::BankedEventPkt &pkt) {
 
 /// Parse a beam monitor event packet
 
-/// Overrides the default function defined in ADARA::Parser and processes
-/// data from ADARA::BeamMonitorPkt packets.  Parsed events are counted and
-/// the counts are accumulated in the temporary workspace until the forground
-/// thread retrieves them.
-/// @see extractData()
-/// @param pkt The packet to be parsed
-/// @return Returns false if there were no problems.  Returns true if there
-/// was an error and packet parsing should be interrupted
+/** Overrides the default function defined in ADARA::Parser and processes data from ADARA::BeamMonitorPkt packets.
+ * Parsed events are counted and the counts are accumulated in the temporary workspace until the foreground thread
+ * retrieves them.
+ *
+ * @see extractData()
+ * @param pkt The packet to be parsed
+ * @return false if no problems, true if error occurred and packet parsing should be interrupted
+ */
 bool SNSLiveEventDataListener::rxPacket(const ADARA::BeamMonitorPkt &pkt) {
-  // Check to see if we should process this packet (depending on what
-  // the user selected for start up options, the SMS might be replaying
-  // historical data that we don't care about).
+  // Check to see if we should process this packet (depending on what the user selected for start up options, the SMS
+  // might be replaying historical data that we don't care about).
   if (ignorePacket(pkt)) {
     return false;
   }
 
-  // We'll likely be modifying m_eventBuffer (specifically,
-  // m_eventBuffer->m_monitorWorkspace), so lock the mutex
+  // We'll likely be modifying m_eventBuffer (specifically, m_eventBuffer->m_monitorWorkspace), so lock the mutex
   std::lock_guard<std::mutex> scopedLock(m_mutex);
 
   if (!m_eventBuffer->monitorWorkspace())
@@ -468,21 +479,18 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::BeamMonitorPkt &pkt) {
   const auto pktTime = timeFromPacket(pkt);
 
   while (pkt.nextSection()) {
-    unsigned monitorID = pkt.getSectionMonitorID();
+    const detid_t monitorID = static_cast<detid_t>(pkt.getSectionMonitorID());
 
     if (monitorID > 5) {
-      // Currently, we only handle monitors 0-5.  At the present time, that's
-      // sufficient.
+      // Currently, we only handle monitors 0-5.  At the present time, that's sufficient.
       g_log.error() << "Mantid cannot handle monitor ID's higher than 5.  If " << monitorID
-                    << " is actually valid, then an appropriate "
-                       "entry must be made to the "
-                    << " ADDABLE list at the top of Framework/API/src/Run.cpp\n";
+                    << " is actually valid, then an appropriate entry must be made to the ADDABLE list at the top of "
+                       "Framework/API/src/Run.cpp\n";
     } else {
       std::string monName("monitor");
       monName += static_cast<char>(monitorID + 48); // The +48 converts to the ASCII character
       monName += "_counts";
-      // Note: The monitor name must exactly match one of the entries in the
-      // ADDABLE list at the top of Run.cpp!
+      // Note: The monitor name must exactly match one of the entries in the ADDABLE list at the top of Run.cpp!
 
       int events = pkt.getSectionEventCount();
       if (m_eventBuffer->run().hasProperty(monName)) {
@@ -495,19 +503,20 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::BeamMonitorPkt &pkt) {
       // Update the property value (overwriting the old value if there was one)
       m_eventBuffer->mutableRun().addProperty<int>(monName, events, true);
 
-      auto it = m_monitorIndexMap.find(
-          // cppcheck-suppress signConversion
-          -1 * monitorID); // Monitor IDs are negated in Mantid IDFs
+      const auto it = m_monitorIndexMap.find(-1 * monitorID); // Monitor IDs are negated in Mantid IDFs
       if (it != m_monitorIndexMap.end()) {
         bool risingEdge;
         uint32_t cycle, tof;
         while (pkt.nextEvent(risingEdge, cycle, tof)) {
-          // Add the event. Note that they're in units of 100 ns in the packet,
-          // need to change to microseconds.
+          // Add the event. Note that they're in units of 100 ns in the packet, need to change to microseconds.
           monitorBuffer->getSpectrum(it->second).addEventQuickly(Types::Event::TofEvent(tof / 10.0, pktTime));
         }
       } else {
-        g_log.error() << "Event from unknown monitor ID (" << monitorID << ") seen.\n";
+        // only notify about the first bad monitor id
+        if (!m_badMonitors.contains(monitorID)) {
+          m_badMonitors.insert(monitorID);
+          g_log.error() << "Event from unknown monitor ID (" << monitorID << ") seen.\n";
+        }
       }
     }
   }
@@ -747,6 +756,7 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::RunStatusPkt &pkt) {
     // disconnect us.
     // This flag will be cleared down in runStatus(), which is guaranteed to be
     // called after extractData().
+
     m_pauseNetRead = true;
 
     // Set the run number & start time if we don't already have it
@@ -1065,12 +1075,18 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::DeviceDescriptorPkt &pkt) {
               // in the middle of a run (after the call to initWorkspacePart2),
               // so we really do need to the lock the mutex here.
               std::lock_guard<std::mutex> scopedLock(m_mutex);
-              m_eventBuffer->mutableRun().addLogData(prop);
-            }
+              if (m_eventBuffer->run().hasProperty(pvName)) {
+                g_log.error() << "Ignoring duplicate process variable " << pvName << " for devId=" << pkt.devId()
+                              << ", pvId=" << pvIdNum << "; skipping.\n";
+                delete prop;
+              } else {
+                m_eventBuffer->mutableRun().addLogData(prop);
 
-            // Add the pv id, device id and pv name to the name map so we can
-            // find the name when we process the variable value packets
-            m_nameMap[std::make_pair(pkt.devId(), pvIdNum)] = pvName;
+                // Add the pv id, device id and pv name to the name map so we can
+                // find the name when we process the variable value packets
+                m_nameMap[std::make_pair(pkt.devId(), pvIdNum)] = pvName;
+              }
+            }
           }
         }
       }
@@ -1103,6 +1119,7 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::AnnotationPkt &pkt) {
     std::lock_guard<std::mutex> scopedLock(m_mutex);
     // We have to lock the mutex prior to calling mutableRun()
     switch (pkt.marker_type()) {
+
     case ADARA::MarkerType::GENERIC:
       // Do nothing.  We log the comment field below for all types
       break;
@@ -1132,6 +1149,10 @@ bool SNSLiveEventDataListener::rxPacket(const ADARA::AnnotationPkt &pkt) {
       break;
 
     case ADARA::MarkerType::OVERALL_RUN_COMMENT:
+      // Do nothing.  We log the comment field below for all types
+      break;
+
+    case ADARA::MarkerType::SYSTEM:
       // Do nothing.  We log the comment field below for all types
       break;
     }
@@ -1515,20 +1536,16 @@ ILiveListener::RunStatus SNSLiveEventDataListener::runStatus() {
   return rv;
 }
 
-// Called by the rxPacket() functions to determine if the packet should be
-// processed
-// (Depending on when it last indexed its data, SMS might send us packets that
-// are
-// older than we requested.)
-// Returns false if the packet should be processed, true if is should be ignored
+// Called by the rxPacket() functions to determine if the packet should be processed
+// (Depending on when it last indexed its data, SNS might send us packets that are older than we requested)
+// Returns false if the packet should be processed, true if it should be ignored
 bool SNSLiveEventDataListener::ignorePacket(const ADARA::PacketHeader &hdr, const ADARA::RunStatus::Enum status) {
-  // Since we're filtering based on time (either the absolute timestamp or
-  // nothing
-  // before the start of the most recent run), once we've determined a given
-  // packet should be processed, we know all packets after that should also be
-  // processed.  Thus, we can reduce most calls to this function to a simple
-  // boolean test...
-  if (!m_ignorePackets)
+  // Since we're filtering based on time (either the absolute timestamp or nothing
+  // before the start of the most recent run),
+  // once we've determined a given packet should be processed,
+  // we know all packets after that should also be processed.
+  // Thus, we can reduce most calls to this function to a simple boolean test
+  if (!m_ignorePackets) // don't ignore
     return false;
 
   // Are we looking for the start of the run?
@@ -1546,7 +1563,7 @@ bool SNSLiveEventDataListener::ignorePacket(const ADARA::PacketHeader &hdr, cons
 
   // If we've just hit our start-up condition, then process
   // all the variable value packets we've been hanging on to.
-  if (!m_ignorePackets) {
+  if (!m_ignorePackets) { // don't ignore
     replayVariableCache();
   }
 
@@ -1555,12 +1572,9 @@ bool SNSLiveEventDataListener::ignorePacket(const ADARA::PacketHeader &hdr, cons
 
 // Process all the variable value packets stored in m_variableMap
 void SNSLiveEventDataListener::replayVariableCache() {
-  auto it = m_variableMap.begin();
-  while (it != m_variableMap.end()) {
-    rxPacket(*(*it).second); // call rxPacket() on the stored packet
-    it++;
+  for (const auto &varPacketPair : m_variableMap) {
+    rxPacket(*varPacketPair.second); // call rxPacket() on the stored packet
   }
-
   m_variableMap.clear(); // empty the map to save a little ram
 }
 

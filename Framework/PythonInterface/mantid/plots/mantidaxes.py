@@ -28,13 +28,15 @@ from mpl_toolkits.mplot3d import Axes3D
 
 from mantid import logger
 from mantid.api import AnalysisDataService as ads
+from mantid.api import MatrixWorkspace
 from mantid.plots import datafunctions, axesfunctions, axesfunctions3D
 from mantid.plots.legend import LegendProperties
 from mantid.plots.datafunctions import get_normalize_by_bin_width
-from mantid.plots.utility import artists_hidden, autoscale_on_update, legend_set_draggable, MantidAxType
+from mantid.plots.utility import artists_hidden, autoscale_on_update, legend_set_draggable, MantidAxType, get_plot_specific_properties
 
 
 WATERFALL_XOFFSET_DEFAULT, WATERFALL_YOFFSET_DEFAULT = 10, 20
+
 
 # -----------------------------------------------------------------------------
 # Decorators
@@ -49,6 +51,7 @@ def plot_decorator(func):
         # Saves saving it on array objects
         if datafunctions.validate_args(*args, **kwargs):
             # Fill out kwargs with the values of args
+
             kwargs["workspaces"] = args[0].name()
             kwargs["function"] = func_name
 
@@ -326,7 +329,7 @@ class MantidAxes(Axes):
     def artists_workspace_has_errors(self, artist):
         """Check if the given artist's workspace has errors"""
         if artist not in self.get_tracked_artists():
-            raise ValueError("Artist '{}' is not tracked and so does not have " "an associated workspace.".format(artist))
+            raise ValueError("Artist '{}' is not tracked and so does not have an associated workspace.".format(artist))
         workspace, spec_num = self.get_artists_workspace_and_spec_num(artist)
         if artist.axes.creation_args[0].get("axis", None) == MantidAxType.BIN:
             if any([workspace.readE(i)[spec_num] != 0 for i in range(0, workspace.getNumberHistograms())]):
@@ -477,8 +480,11 @@ class MantidAxes(Axes):
         :param new_name : the new name of workspace
         :param old_name : the old name of workspace
         """
+
         for cargs in self.creation_args:
-            if cargs["workspaces"] == old_name:
+            # If a workspace plot is overplotted with a line (e.g ax.axvline), the second set of creation args
+            # will not have a "workspaces" key
+            if cargs.get("workspaces") == old_name:
                 cargs["workspaces"] = new_name
         for ws_name, ws_artist_list in list(self.tracked_workspaces.items()):
             for ws_artist in ws_artist_list:
@@ -694,6 +700,8 @@ class MantidAxes(Axes):
             spec_num = self.get_spec_number_or_bin(workspace, kwargs)
             normalize_by_bin_width, kwargs = get_normalize_by_bin_width(workspace, self, **kwargs)
             is_normalized = normalize_by_bin_width or (hasattr(workspace, "isDistribution") and workspace.isDistribution())
+            if isinstance(workspace, MatrixWorkspace):
+                kwargs = get_plot_specific_properties(workspace, workspace.getPlotType(), kwargs)
             with autoscale_on_update(self, autoscale_on):
                 artist = self.track_workspace_artist(
                     workspace,
@@ -1196,7 +1204,7 @@ class MantidAxes(Axes):
                 # that they can use the update_waterfall function to do this.
                 if x_offset != self.waterfall_x_offset or y_offset != self.waterfall_y_offset:
                     logger.information(
-                        "If your plot is already a waterfall plot you can use update_waterfall(x, y) to" " change its offset values."
+                        "If your plot is already a waterfall plot you can use update_waterfall(x, y) to change its offset values."
                     )
                 else:
                     # Nothing needs to be changed.
@@ -1208,7 +1216,7 @@ class MantidAxes(Axes):
                 datafunctions.set_initial_dimensions(self)
         else:
             if bool(x_offset) or bool(y_offset) or fill:
-                raise RuntimeError("You have set waterfall to false but have given a non-zero value for the offset or " "set fill to true.")
+                raise RuntimeError("You have set waterfall to false but have given a non-zero value for the offset or set fill to true.")
 
             if not self.is_waterfall():
                 # Nothing needs to be changed.
@@ -1317,7 +1325,7 @@ class MantidAxes(Axes):
         :returns: None
         """
         for index, creation_arg in enumerate(self.creation_args):  # type: int, dict
-            if workspace_name == creation_arg["workspaces"]:
+            if "workspaces" in creation_arg and workspace_name == creation_arg["workspaces"]:
                 if creation_arg.get("wkspIndex", -1) == workspace_index or creation_arg.get("specNum", -1) == spec_num:
                     del self.creation_args[index]
                     return
@@ -1709,6 +1717,8 @@ class _WorkspaceArtists(object):
         :param plot_kwargs: Key word args to pass to plotting function
         """
         if plot_kwargs:
+            if "specNum" in plot_kwargs and plot_kwargs["specNum"] is None:
+                del plot_kwargs["specNum"]
             new_artists = self._data_replace_cb(self._artists, workspace, plot_kwargs)
         else:
             new_artists = self._data_replace_cb(self._artists, workspace)
@@ -1733,4 +1743,9 @@ class _WorkspaceArtists(object):
         for artist in self._artists:
             old_workspace_name = self.workspace_name
             prev_label = artist.get_label()
+            if new_workspace_name.startswith("_"):
+                # matplotlib does not display legends starting with _
+                # so we add a hidden character to the start U+206A
+                hiddenChar = "⁪"
+                new_workspace_name = hiddenChar + new_workspace_name
             artist.set_label(re.sub(rf"\b{old_workspace_name}\b", new_workspace_name, prev_label))

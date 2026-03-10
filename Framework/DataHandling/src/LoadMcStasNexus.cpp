@@ -12,16 +12,19 @@
 #include "MantidAPI/WorkspaceFactory.h"
 #include "MantidAPI/WorkspaceGroup.h"
 #include "MantidKernel/Unit.h"
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 namespace Mantid::DataHandling {
 using namespace Kernel;
 using namespace API;
 
-DECLARE_NEXUS_HDF5_FILELOADER_ALGORITHM(LoadMcStasNexus)
+DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadMcStasNexus)
+
+LoadMcStasNexus::LoadMcStasNexus() {
+  useAlgorithm("LoadMcStas");
+  deprecatedDate("2026-01-14");
+}
 
 //----------------------------------------------------------------------------------------------
 /// Algorithm's name for identification. @see Algorithm::name
@@ -39,16 +42,11 @@ const std::string LoadMcStasNexus::category() const { return "DataHandling\\Nexu
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadMcStasNexus::confidence(Kernel::NexusHDF5Descriptor &descriptor) const {
+int LoadMcStasNexus::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   int confidence(0);
-  const auto &entries = descriptor.getAllEntries();
-  for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
-    const auto grouped_entries = iter->second;
-    if (std::any_of(grouped_entries.cbegin(), grouped_entries.cend(),
-                    [](const auto &path) { return path.ends_with("information"); })) {
-      confidence = 40;
-      break;
-    }
+  std::string const firstEntry = descriptor.firstEntryNameType().first;
+  if (descriptor.isEntry("/" + firstEntry + "/instrument/information", "SDS")) {
+    confidence = 40;
   }
   return confidence;
 }
@@ -74,7 +72,7 @@ void LoadMcStasNexus::exec() {
   std::string filename = getPropertyValue("Filename");
   g_log.debug() << "Opening file " << filename << '\n';
 
-  ::NeXus::File nxFile(filename);
+  Nexus::File nxFile(filename);
   auto entries = nxFile.getEntries();
   auto itend = entries.end();
   WorkspaceGroup_sptr outputGroup(new WorkspaceGroup);
@@ -97,7 +95,7 @@ void LoadMcStasNexus::exec() {
       // Find the axis names
       auto nxdataEntries = nxFile.getEntries();
       std::string axis1Name, axis2Name;
-      for (auto &nxdataEntry : nxdataEntries) {
+      for (const auto &nxdataEntry : nxdataEntries) {
         if (nxdataEntry.second == "NXparameters")
           continue;
         nxFile.openData(nxdataEntry.first);
@@ -130,7 +128,7 @@ void LoadMcStasNexus::exec() {
       std::vector<double> errors;
       try {
         nxFile.readData<double>("errors", errors);
-      } catch (::NeXus::Exception &) {
+      } catch (Nexus::Exception const &) {
         g_log.information() << "Field " << dataName << " contains no error information.\n";
       }
 

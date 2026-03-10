@@ -9,7 +9,6 @@
 #include "MantidAPI/MatrixWorkspace_fwd.h"
 #include "MantidAPI/Run.h"
 #include "MantidGeometry/Instrument.h"
-#include "MantidKernel/System.h"
 #include "MantidSINQ/DllConfig.h"
 
 #include <map>
@@ -103,7 +102,7 @@ protected:
   bool chopperSpeedMatchesTarget(const API::Run &runInformation, double chopperSpeed) const;
 
   double extractPropertyFromRun(const API::Run &runInformation, const std::string &propertyName) const;
-  AbstractDoubleValueExtractor_sptr getExtractorForProperty(Kernel::Property *chopperSpeedProperty) const;
+  AbstractDoubleValueExtractor_sptr getExtractorForProperty(const Kernel::Property *const chopperSpeedProperty) const;
 
   void setSpectrum(const Geometry::Instrument_const_sptr &mantidInstrument);
 

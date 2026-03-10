@@ -35,6 +35,8 @@ void ConjoinWorkspaces::init() {
                   "The label to set the Y axis to");
   declareProperty(std::make_unique<PropertyWithValue<std::string>>("YAxisUnit", "", Direction::Input),
                   "The unit to set the Y axis to");
+  declareProperty(std::make_unique<PropertyWithValue<bool>>("CheckMatchingBins", true, Direction::Input),
+                  "If true, the algorithm will check that the two input workspaces have matching bins.");
 }
 
 //----------------------------------------------------------------------------------------------
@@ -54,8 +56,18 @@ void ConjoinWorkspaces::exec() {
   if (((eventWs1) && (!eventWs2)) || ((!eventWs1) && (eventWs2))) {
     const std::string message("Only one of the input workspaces are of type "
                               "EventWorkspace; please use matching workspace "
-                              "types (both EventWorkspace's or both "
-                              "Workspace2D's).");
+                              "types (both EventWorkspace or both "
+                              "Workspace2D).");
+    g_log.error(message);
+    throw std::invalid_argument(message);
+  }
+
+  // Check whether bins match
+  bool checkBins = getProperty("CheckMatchingBins");
+  if (checkBins && !checkBinning(ws1, ws2)) {
+    const std::string message("The bins do not match in the input workspaces. "
+                              "Consider using RebinToWorkspace to preprocess "
+                              "the workspaces before conjoining them.");
     g_log.error(message);
     throw std::invalid_argument(message);
   }
@@ -75,6 +87,24 @@ void ConjoinWorkspaces::exec() {
 
   // Delete the second input workspace from the ADS
   AnalysisDataService::Instance().remove(getPropertyValue("InputWorkspace2"));
+}
+
+//----------------------------------------------------------------------------------------------
+/** Checks whether the binning is consistent between two workspaces
+ *  @param ws1 :: The first input workspace
+ *  @param ws2 :: The second input workspace
+ *  @return :: true if both workspaces have consistent binning.
+ */
+bool ConjoinWorkspaces::checkBinning(const API::MatrixWorkspace_const_sptr &ws1,
+                                     const API::MatrixWorkspace_const_sptr &ws2) const {
+  if (ws1->isRaggedWorkspace() || ws2->isRaggedWorkspace()) {
+    return false;
+  }
+
+  // If neither workspace is ragged, we only need to check the first specrum.
+  // Otherwise the matchingBins() function requires the two workspaces to have
+  // the same number of spectra.
+  return WorkspaceHelpers::matchingBins(ws1, ws2, true);
 }
 
 //----------------------------------------------------------------------------------------------
@@ -195,12 +225,13 @@ void ConjoinWorkspaces::fixSpectrumNumbers(const MatrixWorkspace &ws1, const Mat
     return;
   }
 
-  // Because we were told not to check overlapping, fix up any errors we might
-  // run into
+  // Because we were told not to check overlapping, fix up any errors we might run into
+  // check that the number of spectra in the span from min to max (and avoiding fencepost errors)
+  // is equal to the total number of histograms
   specnum_t min = -1;
   specnum_t max = -1;
   getMinMax(output, min, max);
-  if (max - min >= static_cast<specnum_t>(output.getNumberHistograms())) // nothing to do then
+  if (max - min + 1 >= static_cast<specnum_t>(output.getNumberHistograms())) // nothing to do then
     return;
 
   // information for remapping the spectra numbers
@@ -208,8 +239,7 @@ void ConjoinWorkspaces::fixSpectrumNumbers(const MatrixWorkspace &ws1, const Mat
   specnum_t ws1max = -1;
   getMinMax(ws1, ws1min, ws1max);
 
-  // change the axis by adding the maximum existing spectrum number to the
-  // current value
+  // change the axis by adding the maximum existing spectrum number to the current value
   for (size_t i = ws1.getNumberHistograms(); i < output.getNumberHistograms(); i++) {
     specnum_t origid = output.getSpectrum(i).getSpectrumNo();
     output.getSpectrum(i).setSpectrumNo(origid + ws1max);

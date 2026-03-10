@@ -9,9 +9,11 @@ permissions:
 
 jobs:
   stale:
+    # Do not run in forks.
+    if: ${{ github.repository_owner == 'mantidproject' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v10
         with:
           days-before-issue-stale: 365
           days-before-pr-stale: 90

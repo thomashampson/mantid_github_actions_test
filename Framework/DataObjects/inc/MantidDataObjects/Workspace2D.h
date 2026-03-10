@@ -51,6 +51,7 @@ public:
   std::size_t size() const override;
 
   std::size_t blocksize() const override;
+
   /// Returns the number of bins for a given histogram index.
   std::size_t getNumberBins(const std::size_t &index) const override;
   /// Returns the maximum number of bins in a workspace (works on ragged data).
@@ -105,3 +106,12 @@ private:
 };
 } // namespace DataObjects
 } // Namespace Mantid
+
+#ifndef DataObjects_EXPORTS
+#include "MantidAPI/WorkspaceProperty.h"
+namespace Mantid::API {
+/// @cond
+extern template class MANTID_DATAOBJECTS_DLL WorkspaceProperty<DataObjects::Workspace2D>;
+/// @endcond
+} // namespace Mantid::API
+#endif

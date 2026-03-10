@@ -9,6 +9,7 @@ if(CXXTEST_FOUND)
     add_definitions(-DHAVE_STDINT_H)
   endif()
 
+  set(TESTHELPER_SRCS PolarizationCorrections/PolarizationCorrectionsTestUtils.cpp)
   # Generate the MultiplyTest.h and DivideTest.h
   set(MULTIPLYDIVIDETEST_CLASS MultiplyTest)
   set(MULTIPLYDIVIDETEST_DO_DIVIDE false)
@@ -43,15 +44,32 @@ if(CXXTEST_FOUND)
             Mantid::Kernel
             Boost::boost
             ${BCRYPT}
-            gmock
   )
+
+  target_precompile_headers(
+    AlgorithmsTest
+    PRIVATE
+    <cxxtest/WrappedTestSuite.h>
+    <MantidAPI/Algorithm.h>
+    <MantidFrameworkTestHelpers/WorkspaceCreationHelper.h>
+    <set>
+    <string>
+    <vector>
+  )
+
+  # Prefer imported GTest targets when available, otherwise fall back to plain targets
+  if(TARGET GTest::gmock AND TARGET GTest::gtest)
+    target_link_libraries(AlgorithmsTest PRIVATE GTest::gmock GTest::gtest)
+  else()
+    target_link_libraries(AlgorithmsTest PRIVATE gmock gtest)
+  endif()
 
   add_framework_test_helpers(AlgorithmsTest)
 
   add_dependencies(AlgorithmsTest Crystal CurveFitting)
   add_dependencies(FrameworkTests AlgorithmsTest)
   # Test data
-  add_dependencies(AlgorithmsTest StandardTestData)
+  add_dependencies(AlgorithmsTest UnitTestData)
 
   # Add to the 'FrameworkTests' group in VS
   set_property(TARGET AlgorithmsTest PROPERTY FOLDER "UnitTests")

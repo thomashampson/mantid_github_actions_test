@@ -7,6 +7,7 @@
 #include "MantidDataObjects/Workspace2D.h"
 #include "MantidAPI/ISpectrum.h"
 #include "MantidAPI/RefAxis.h"
+#include "MantidAPI/Run.h"
 #include "MantidAPI/SpectraAxis.h"
 #include "MantidAPI/WorkspaceFactory.h"
 #include "MantidHistogramData/LinearGenerator.h"
@@ -370,7 +371,8 @@ IPropertyManager::getValue<Mantid::DataObjects::Workspace2D_sptr>(const std::str
 template <>
 DLLExport Mantid::DataObjects::Workspace2D_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::Workspace2D_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::DataObjects::Workspace2D_sptr> *>(getPointerToProperty(name));
+  const auto *prop =
+      dynamic_cast<PropertyWithValue<Mantid::DataObjects::Workspace2D_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();
   } else {

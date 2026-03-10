@@ -13,16 +13,14 @@
 #include "MantidAPI/ITableWorkspace.h"
 #include "MantidAPI/IWorkspaceProperty.h"
 #include "MantidAPI/MultipleFileProperty.h"
-#include "MantidAPI/NexusFileLoader.h"
 #include "MantidAPI/WorkspaceGroup.h"
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/FacilityInfo.h"
 
-#include <Poco/Path.h>
-
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <numeric>
 #include <set>
@@ -57,8 +55,8 @@ std::string generateWsNameFromFileNames(const std::vector<std::string> &filename
     if (!wsName.empty())
       wsName += "_";
 
-    Poco::Path path(filename);
-    wsName += path.getBaseName();
+    std::filesystem::path path(filename);
+    wsName += path.stem().string();
   }
 
   return wsName;
@@ -139,7 +137,7 @@ void Load::setPropertyValue(const std::string &name, const std::string &value) {
         // fileNames[0].substr(fileNames[0].find_last_of("."));
 
         auto ifl = std::dynamic_pointer_cast<IFileLoader<Kernel::FileDescriptor>>(loader);
-        auto iflNexus = std::dynamic_pointer_cast<IFileLoader<Kernel::NexusDescriptor>>(loader);
+        auto iflNexus = std::dynamic_pointer_cast<IFileLoader<Nexus::NexusDescriptor>>(loader);
 
         for (size_t i = 1; i < fileNames.size(); ++i) {
           // If it's loading into a single file, perform a cursory check on file
@@ -202,24 +200,19 @@ API::IAlgorithm_sptr Load::getFileLoader(const std::string &filePath) {
 }
 
 void Load::findFilenameProperty(const API::IAlgorithm_sptr &loader) {
-  const auto nxsLoader = std::dynamic_pointer_cast<NexusFileLoader>(loader);
-  if (nxsLoader) {
-    // NexusFileLoader has a method for giving back the name directly
-    m_filenamePropName = nxsLoader->getFilenamePropertyName();
-  } else {
-    // Use the first file property as the main Filename
-    const auto &props = loader->getProperties();
-    for (auto const &prop : props) {
-      auto const *multiprop = dynamic_cast<API::MultipleFileProperty *>(prop);
-      auto const *singleprop = dynamic_cast<API::FileProperty *>(prop);
-      if (multiprop) {
-        m_filenamePropName = multiprop->name();
-        break;
-      }
-      if (singleprop) {
-        m_filenamePropName = singleprop->name();
-        break;
-      }
+  // Use the first file property as the main Filename
+  m_filenamePropName.clear();
+  const auto &props = loader->getProperties();
+  for (auto const &prop : props) {
+    auto const *multiprop = dynamic_cast<API::MultipleFileProperty *>(prop);
+    auto const *singleprop = dynamic_cast<API::FileProperty *>(prop);
+    if (multiprop) {
+      m_filenamePropName = multiprop->name();
+      break;
+    }
+    if (singleprop) {
+      m_filenamePropName = singleprop->name();
+      break;
     }
   }
 
@@ -327,7 +320,7 @@ void Load::exec() {
   if (!m_loader)
     m_loader = getFileLoader(fileNames[0][0]);
   auto ifl = std::dynamic_pointer_cast<IFileLoader<Kernel::FileDescriptor>>(m_loader);
-  auto iflNexus = std::dynamic_pointer_cast<IFileLoader<Kernel::NexusDescriptor>>(m_loader);
+  auto iflNexus = std::dynamic_pointer_cast<IFileLoader<Nexus::NexusDescriptor>>(m_loader);
 
   if (isSingleFile(fileNames) || (ifl && ifl->loadMutipleAsOne()) || (iflNexus && iflNexus->loadMutipleAsOne())) {
     // This is essentially just the same code that was called before multiple

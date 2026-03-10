@@ -129,24 +129,29 @@ function usage() {
   local exitcode=$1
   echo "Usage: $0 [options]"
   echo
-  echo "Create a DragNDrop bundle out of a Conda package. The package is built in $BUILD_DIR."
+  echo "Create a DragNDrop bundle out of a conda package. The package is built in $BUILD_DIR."
   echo "The final name will be '${BUNDLENAME}${suffix}.app'"
   echo "This directory will be created if it does not exist or purged if it already exists."
   echo "The final .dmg will be created in the current working directory."
   echo "Options:"
-  echo "  -c Optional Conda channel overriding the default mantid"
+  echo "  -c Optional conda channel overriding the default mantid"
   echo "  -s Optional Add a suffix to the output mantid file, has to be Unstable, or Nightly or not used"
-  echo
+  echo "  -p Target platform, e.g. osx-arm64"
   exit $exitcode
 }
 
 ## Script begin
 # Optional arguments
 conda_channel=mantid
+platform=""
 suffix=
 while [ ! $# -eq 0 ]
 do
   case "$1" in
+    -p)
+        platform="$2"
+        shift
+        ;;
     -c)
         conda_channel="$2"
         shift
@@ -180,7 +185,7 @@ bundle_name="$BUNDLE_PREFIX$suffix"
 bundle_icon="${ICON_DIR}/mantid_workbench$(echo $suffix | tr '[:upper:]' '[:lower:]').icns"
 bundle_dirname="$bundle_name".app
 bundle_contents="$BUILD_DIR"/"$bundle_dirname"/Contents
-echo "Building '$bundle_dirname' in '$BUILD_DIR' from '$conda_channel' Conda channel"
+echo "Building '$bundle_dirname' in '$BUILD_DIR' from '$conda_channel' conda channel"
 echo "Using bundle icon ${bundle_icon}"
 
 # Build directory needs to be empty before we start
@@ -201,10 +206,20 @@ mkdir -p "$bundle_contents"/{Resources,MacOS}
 # --platform osx-64 is required to allow ARM-based systems to install the osx-64 mantid packages.
 bundle_conda_prefix="$bundle_contents"/Resources
 
-echo "Creating Conda environment in '$bundle_conda_prefix'"
-"$CONDA_EXE" create --quiet --prefix "$bundle_conda_prefix" --copy --platform osx-64 \
-  --channel "$conda_channel" --channel conda-forge --channel mantid --yes \
+# The mantid channel is required as the source for installing mslice
+mantid_channel=mantid
+# If it's a Nightly or Unstable package, use the mantid/label/nightly label so it picks up
+# the nightly version of mslice
+if [[ "$suffix" == "Unstable" ]] || [[ "$suffix" == "Nightly" ]]; then
+  mantid_channel=mantid/label/nightly
+fi
+
+echo "Creating conda environment in '$bundle_conda_prefix'"
+CONDA_SUBDIR="$platform" "$CONDA_EXE" create --quiet --prefix "$bundle_conda_prefix" --copy \
+  --channel "$conda_channel" --channel conda-forge --channel $mantid_channel --yes \
   mantidworkbench \
+  mantiddocs \
+  mslice \
   jq  # used for processing the version string
 echo
 
@@ -216,9 +231,6 @@ echo
 
 # Remove jq
 "$CONDA_EXE" remove --quiet --prefix "$bundle_conda_prefix" --yes jq
-
-# Pip install quickBayes until there's a conda package
-$bundle_conda_prefix/bin/python -m pip install quickBayes==1.0.0b15
 
 # Trim and fixup bundle
 trim_conda "$bundle_conda_prefix"
@@ -232,6 +244,6 @@ create_plist "$bundle_contents" "$bundle_name" "$bundle_icon" "$version"
 # `create-dmg` returns error code by default due to lack of signing - this is suppressed using a command list.
 # Failure of the following `mv` command likely signifies `create-dmg` error.
 export PATH=$PATH:/opt/homebrew/bin/
-version_name="$bundle_name"-"$version"
+version_name="$bundle_name"-"$platform"-"$version"
 create-dmg "$BUILD_DIR"/"$bundle_dirname" || true
 mv "${bundle_name} ${version}.dmg" "${version_name}.dmg"

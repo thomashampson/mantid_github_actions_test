@@ -105,7 +105,7 @@ void ConvertToConstantL2::exec() {
       throw std::runtime_error(errorMsg.str());
     }
 
-    // subract the diference in l2
+    // subtract the difference in l2
     double thisDetL2 = inputSpecInfo.l2(i);
     double deltaL2 = std::abs(thisDetL2 - m_l2);
     double deltaTOF = calculateTOF(deltaL2);
@@ -141,7 +141,7 @@ double ConvertToConstantL2::getRunProperty(const std::string &s) {
   if (!run.hasProperty(s)) {
     throw Exception::NotFoundError("Sample log property not found", s);
   }
-  Mantid::Kernel::Property *prop = run.getProperty(s);
+  Mantid::Kernel::Property const *prop = run.getProperty(s);
   double val;
   if (!Strings::convert(prop->value(), val)) {
     const std::string mesg = "Cannot convert sample log '" + s + "' to a number.";

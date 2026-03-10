@@ -10,6 +10,7 @@
 #include "MantidAPI/Sample.h"
 #include "MantidCrystal/AnvredCorrection.h"
 #include "MantidGeometry/Crystal/OrientedLattice.h"
+#include "MantidGeometry/Instrument/ComponentInfo.h"
 #include "MantidGeometry/Instrument/RectangularDetector.h"
 #include "MantidGeometry/Objects/ShapeFactory.h"
 #include "MantidKernel/BoundedValidator.h"
@@ -19,10 +20,9 @@
 #include "MantidKernel/Unit.h"
 #include "MantidKernel/UnitFactory.h"
 #include "MantidKernel/Utils.h"
-#include <fstream>
-
-#include <Poco/File.h>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 
 using namespace Mantid::Geometry;
 using namespace Mantid::DataObjects;
@@ -155,7 +155,7 @@ void SaveHKL::exec() {
   std::set<int> uniqueRuns;
   runMap_t runMap;
   for (size_t i = 0; i < peaks.size(); ++i) {
-    Peak &p = peaks[i];
+    Peak const &p = peaks[i];
     int run = p.getRunNumber();
     int bank = 0;
     std::string bankName = p.getBankName();
@@ -366,14 +366,15 @@ void SaveHKL::exec() {
           double eff_center = 1.0 - std::exp(-mu * depth); // efficiency at center of detector
 
           // Distance to center of detector
-          std::shared_ptr<const IComponent> det0 = inst->getComponentByName(p.getBankName());
+          const IComponent *det0 = inst->getComponentByName(p.getBankName()).get();
           if (inst->getName() == "CORELLI") // for Corelli with sixteenpack under bank
           {
-            std::vector<Geometry::IComponent_const_sptr> children;
-            std::shared_ptr<const Geometry::ICompAssembly> asmb =
-                std::dynamic_pointer_cast<const Geometry::ICompAssembly>(inst->getComponentByName(p.getBankName()));
-            asmb->getChildren(children, false);
-            det0 = children[0];
+            const auto &componentInfo = m_ws->componentInfo();
+            const size_t bankIndex = componentInfo.indexOfAny(p.getBankName());
+            const auto children = componentInfo.children(bankIndex);
+            if (!children.empty()) {
+              det0 = componentInfo.componentID(children[0]);
+            }
           }
           IComponent_const_sptr sample = inst->getSample();
           double cosA = det0->getDistance(*sample) / p.getL2();
@@ -510,7 +511,7 @@ void SaveHKL::exec() {
   peaksW->removePeaks(std::move(badPeaks));
 
   bool append = getProperty("AppendFile");
-  if (append && Poco::File(filename.c_str()).exists()) {
+  if (append && std::filesystem::exists(filename)) {
     auto load_alg = createChildAlgorithm("LoadHKL");
     load_alg->setPropertyValue("Filename", filename);
     load_alg->setProperty("OutputWorkspace", "peaks");
@@ -576,8 +577,8 @@ double SaveHKL::absorbSphere(double radius, double twoth, double wl, double &tba
   return transmission;
 }
 
-double SaveHKL::spectrumCalc(double TOF, int iSpec, std::vector<std::vector<double>> time,
-                             std::vector<std::vector<double>> spectra, size_t id) {
+double SaveHKL::spectrumCalc(double TOF, int iSpec, const std::vector<std::vector<double>> &time,
+                             const std::vector<std::vector<double>> &spectra, size_t id) {
   double spect = 0;
   if (iSpec == 1) {
     //"Calculate the spectrum using spectral coefficients for the GSAS Type 2
@@ -621,22 +622,18 @@ void SaveHKL::sizeBanks(const std::string &bankName, int &nCols, int &nRows) {
     nCols = RDet->xpixels();
     nRows = RDet->ypixels();
   } else {
+    const auto &componentInfo = m_ws->componentInfo();
+    size_t parentIndex = componentInfo.indexOfAny(bankName);
+
     if (m_ws->getInstrument()->getName() == "CORELLI") // for Corelli with sixteenpack under bank
     {
-      std::vector<Geometry::IComponent_const_sptr> children;
-      std::shared_ptr<const Geometry::ICompAssembly> asmb =
-          std::dynamic_pointer_cast<const Geometry::ICompAssembly>(parent);
-      asmb->getChildren(children, false);
-      parent = children[0];
+      auto children = componentInfo.children(parentIndex);
+      if (!children.empty()) {
+        parentIndex = children[0];
+      }
     }
-    std::vector<Geometry::IComponent_const_sptr> children;
-    std::shared_ptr<const Geometry::ICompAssembly> asmb =
-        std::dynamic_pointer_cast<const Geometry::ICompAssembly>(parent);
-    asmb->getChildren(children, false);
-    std::shared_ptr<const Geometry::ICompAssembly> asmb2 =
-        std::dynamic_pointer_cast<const Geometry::ICompAssembly>(children[0]);
-    std::vector<Geometry::IComponent_const_sptr> grandchildren;
-    asmb2->getChildren(grandchildren, false);
+    auto children = componentInfo.children(parentIndex);
+    auto grandchildren = componentInfo.children(children[0]);
     nRows = static_cast<int>(grandchildren.size());
     nCols = static_cast<int>(children.size());
   }

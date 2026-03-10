@@ -102,7 +102,6 @@ void PDFFourierTransform2::init() {
   setPropertySettings("DeltaQ", std::make_unique<EnabledWhenProperty>("Direction", IS_EQUAL_TO, BACKWARD));
   declareProperty("Qmin", EMPTY_DBL(), mustBePositive,
                   "Minimum Q in S(Q) to calculate in Fourier transform (optional).");
-  setPropertySettings("Qmin", std::make_unique<EnabledWhenProperty>("Direction", IS_EQUAL_TO, FORWARD));
   declareProperty("Qmax", EMPTY_DBL(), mustBePositive,
                   "Maximum Q in S(Q) to calculate in Fourier transform. "
                   "(optional, defaults to 40 on backward transform.)");
@@ -121,7 +120,6 @@ void PDFFourierTransform2::init() {
                   ":math:`\\frac{\\pi}{Q_{max}}`.");
   setPropertySettings("DeltaR", std::make_unique<EnabledWhenProperty>("Direction", IS_EQUAL_TO, FORWARD));
   declareProperty("Rmin", EMPTY_DBL(), mustBePositive, "Minimum r for G(r) to calculate. (optional)");
-  setPropertySettings("Rmin", std::make_unique<EnabledWhenProperty>("Direction", IS_EQUAL_TO, BACKWARD));
   declareProperty("Rmax", EMPTY_DBL(), mustBePositive,
                   "Maximum r for G(r) to calculate. (optional, defaults to 20 "
                   "on forward transform.)");
@@ -380,6 +378,11 @@ void PDFFourierTransform2::exec() {
   auto inputY = inputWS->y(0).rawData();  //  y for input
   auto inputDY = inputWS->e(0).rawData(); // dy for input
 
+  // need bin edges
+  if (inputX.size() == inputY.size()) {
+    inputX = BinEdges(Points(inputWS->x(0))).rawData();
+  }
+
   // transform input data into Q/MomentumTransfer
   string direction = getProperty("Direction");
   const std::string inputXunit = inputWS->getAxis(0)->unit()->unitID();
@@ -438,10 +441,11 @@ void PDFFourierTransform2::exec() {
     convertToLittleGRMinus1(inputY, inputX, inputDY, inputDX, PDFType, rho0, cohScatLen);
   }
 
-  double inMin, inMax, outDelta, outMax;
+  double inMin, inMax, outDelta, outMin, outMax;
   inMin = getProperty("Qmin");
   inMax = getProperty("Qmax");
   outDelta = getProperty("DeltaR");
+  outMin = getProperty("Rmin");
   outMax = getProperty("Rmax");
   if (isEmpty(outMax)) {
     outMax = 20;
@@ -450,10 +454,14 @@ void PDFFourierTransform2::exec() {
     inMin = getProperty("Rmin");
     inMax = getProperty("Rmax");
     outDelta = getProperty("DeltaQ");
+    outMin = getProperty("Qmin");
     outMax = getProperty("Qmax");
     if (isEmpty(outMax)) {
       outMax = 40;
     }
+  }
+  if (isEmpty(outMin)) {
+    outMin = 0;
   }
 
   // determine input-range
@@ -464,7 +472,7 @@ void PDFFourierTransform2::exec() {
   // determine r axis for result
   if (isEmpty(outDelta))
     outDelta = M_PI / inputX[Xmax_index];
-  auto sizer = static_cast<size_t>(outMax / outDelta);
+  auto sizer = static_cast<size_t>((outMax - outMin) / outDelta);
 
   bool filter = getProperty("Filter");
 
@@ -484,10 +492,10 @@ void PDFFourierTransform2::exec() {
     outputWS->mutableRun().addProperty("Rmax", inputX[Xmax_index], "Angstroms", true);
   }
   outputWS->setDistribution(true);
-  BinEdges edges(sizer + 1, LinearGenerator(outDelta, outDelta));
+  BinEdges edges(sizer + 1, LinearGenerator(outMin + outDelta / 2, outDelta));
   outputWS->setBinEdges(0, edges);
   auto &outputX = outputWS->mutableX(0);
-  g_log.information() << "Using output min = " << outputX.front() << "and output max = " << outputX.back() << "\n";
+  g_log.information() << "Using output min = " << outputX.front() << " and output max = " << outputX.back() << "\n";
   // always calculate G(r) then convert
   auto &outputY = outputWS->mutableY(0);
   auto &outputE = outputWS->mutableE(0);
@@ -500,8 +508,9 @@ void PDFFourierTransform2::exec() {
   if (direction == BACKWARD) {
     corr = 4.0 * M_PI * rho0;
   }
+  const double inXMax = inputX[Xmax_index];
   for (size_t outXIndex = 0; outXIndex < sizer; outXIndex++) {
-    const double outX = outputX[outXIndex];
+    const double outX = 0.5 * (outputX[outXIndex] + outputX[outXIndex + 1]);
     const double outXFac = corr / (outX * outX * outX);
 
     double fs = 0;
@@ -509,7 +518,6 @@ void PDFFourierTransform2::exec() {
     auto pdfIntegral = [outX](const double x) -> double { return sin(x * outX) - x * outX * cos(x * outX); };
     double inX2 = inputX[Xmin_index];
     double integralX2 = pdfIntegral(inX2);
-    const double inXMax = inputX[Xmax_index];
 
     for (size_t inXIndex = Xmin_index; inXIndex < Xmax_index; inXIndex++) {
       const double inX1 = inX2;
@@ -519,8 +527,9 @@ void PDFFourierTransform2::exec() {
       double defIntegral = integralX2 - integralX1;
 
       // multiply by filter function sin(q*pi/qmax)/(q*pi/qmax)
-      if (filter && inX1 != 0) {
-        const double lorchKernel = inX1 * M_PI / inXMax;
+      auto inXCen = 0.5 * (inX1 + inX2);
+      if (filter && fabs(inXCen) > 1e-8) {
+        const double lorchKernel = inXCen * M_PI / inXMax;
         defIntegral *= sin(lorchKernel) / lorchKernel;
       }
       fs += defIntegral * inputY[inXIndex];

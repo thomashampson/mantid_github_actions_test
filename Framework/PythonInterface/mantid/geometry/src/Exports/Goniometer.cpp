@@ -28,6 +28,7 @@ GNU_DIAG_OFF("unused-local-typedef")
 // Seen with GCC 7.1.1 and Boost 1.63.0
 GNU_DIAG_OFF("conversion")
 // define overloaded functions
+// cppcheck-suppress unknownMacro
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(getEulerAngles_overloads, Goniometer::getEulerAngles, 0, 1)
 GNU_DIAG_ON("conversion")
 GNU_DIAG_ON("unused-local-typedef")
@@ -70,5 +71,6 @@ void export_Goniometer() {
       .def("getNumberAxes", &Goniometer::getNumberAxes, arg("self"))
       .def("getAxis", &getAxis, (arg("self"), arg("axisnumber")))
       .def("calcFromQSampleAndWavelength", &calcFromQSampleAndWavelength,
-           (arg("self"), arg("positions"), arg("wavelength"), arg("flip_x") = false, arg("inner") = false));
+           (arg("self"), arg("positions"), arg("wavelength"), arg("flip_x") = false, arg("inner") = false))
+      .def("getConventionFromMotorAxes", &Goniometer::getConventionFromMotorAxes, arg("self"));
 }

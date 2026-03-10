@@ -10,10 +10,10 @@
 #include "MantidAPI/MatrixWorkspace.h"
 #include "MantidGeometry/Instrument.h"
 #include "MantidKernel/DeltaEMode.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
 #include <cxxtest/TestSuite.h>
 
+#include "MantidDataHandling/Load.h"
 #include "MantidDataHandling/LoadNXSPE.h"
 
 using namespace Mantid;
@@ -52,6 +52,14 @@ public:
     TS_ASSERT_EQUALS(ws->getEMode(), Kernel::DeltaEMode::Indirect);
 
     AnalysisDataService::Instance().remove(outWSName);
+  }
+
+  /// Test that this algorithm will be selected from Load algorithm
+  void test_load_from_Load() {
+    Mantid::DataHandling::Load load;
+    TS_ASSERT_THROWS_NOTHING(load.initialize());
+    TS_ASSERT_THROWS_NOTHING(load.setPropertyValue("Filename", "NXSPEData.nxspe"));
+    TS_ASSERT_EQUALS(load.getPropertyValue("LoaderName"), "LoadNXSPE");
   }
 
   void test_identifier_confidence() {

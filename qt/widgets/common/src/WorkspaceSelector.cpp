@@ -10,7 +10,6 @@
 #include "MantidQtWidgets/Common/WorkspaceSelector.h"
 
 #include <Poco/AutoPtr.h>
-#include <Poco/NObserver.h>
 #include <Poco/Notification.h>
 #include <Poco/NotificationCenter.h>
 
@@ -85,7 +84,7 @@ void WorkspaceSelector::connectObservers() {
   m_connected = true;
 }
 
-QStringList WorkspaceSelector::getWorkspaceTypes() const { return m_workspaceTypes; }
+const QStringList &WorkspaceSelector::getWorkspaceTypes() const { return m_workspaceTypes; }
 
 void WorkspaceSelector::setWorkspaceTypes(const QStringList &types) {
   if (types != m_workspaceTypes) {
@@ -142,7 +141,7 @@ void WorkspaceSelector::setSorted(bool sorted) {
 
 bool WorkspaceSelector::isConnected() const { return m_connected; }
 
-QStringList WorkspaceSelector::getSuffixes() const { return m_suffix; }
+const QStringList &WorkspaceSelector::getSuffixes() const { return m_suffix; }
 
 void WorkspaceSelector::setSuffixes(const QStringList &suffix) {
   if (suffix != m_suffix) {
@@ -157,7 +156,7 @@ void WorkspaceSelector::setLowerBinLimit(int numberOfBins) { m_binLimits.first =
 
 void WorkspaceSelector::setUpperBinLimit(int numberOfBins) { m_binLimits.second = numberOfBins; }
 
-QString WorkspaceSelector::getValidatingAlgorithm() const { return m_algName; }
+const QString &WorkspaceSelector::getValidatingAlgorithm() const { return m_algName; }
 
 void WorkspaceSelector::setValidatingAlgorithm(const QString &algName) {
   if (algName == m_algName) {
@@ -171,7 +170,7 @@ void WorkspaceSelector::setValidatingAlgorithm(const QString &algName) {
     for (auto &prop : props) {
       if (prop->direction() == Mantid::Kernel::Direction::Input) {
         // try to cast property to WorkspaceProperty
-        Mantid::API::WorkspaceProperty<> *wsProp = dynamic_cast<Mantid::API::WorkspaceProperty<> *>(prop);
+        const Mantid::API::WorkspaceProperty<> *wsProp = dynamic_cast<Mantid::API::WorkspaceProperty<> *>(prop);
         if (wsProp != nullptr) {
           m_algPropName = QString::fromStdString(prop->name());
           break;

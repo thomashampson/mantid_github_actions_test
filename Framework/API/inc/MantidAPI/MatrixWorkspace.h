@@ -14,6 +14,7 @@
 #include "MantidKernel/EmptyValues.h"
 
 #include <atomic>
+#include <map>
 #include <mutex>
 
 namespace Mantid {
@@ -31,6 +32,46 @@ class DateAndTime;
 namespace Geometry {
 class ParameterMap;
 }
+
+const std::vector<std::string> validPlotTypes{"plot", "marker", "histogram", "errorbar_x", "errorbar_y", "errorbar_xy"};
+const std::vector<std::string> validMarkerStyles{"square",
+                                                 "plus (filled)",
+                                                 "point",
+                                                 "tickdown",
+                                                 "triangle_right",
+                                                 "tickup",
+                                                 "hline",
+                                                 "vline",
+                                                 "pentagon",
+                                                 "tri_left",
+                                                 "caretdown",
+                                                 "caretright (centered at base)",
+                                                 "tickright",
+                                                 "caretright",
+                                                 "caretleft",
+                                                 "tickleft",
+                                                 "tri_up",
+                                                 "circle",
+                                                 "pixel",
+                                                 "caretleft (centered at base)",
+                                                 "diamond",
+                                                 "star",
+                                                 "hexagon1",
+                                                 "octagon",
+                                                 "hexagon2",
+                                                 "tri_right",
+                                                 "x (filled)",
+                                                 "thin_diamond",
+                                                 "tri_down",
+                                                 "triangle_left",
+                                                 "plus",
+                                                 "triangle_down",
+                                                 "triangle_up",
+                                                 "x",
+                                                 "caretup",
+                                                 "caretup (centered at base)",
+                                                 "caretdown (centered at base)",
+                                                 "None"};
 
 namespace API {
 class Axis;
@@ -133,6 +174,21 @@ public:
   void setTitle(const std::string &) override;
   /// Gets MatrixWorkspace title (same as Run object run_title property)
   const std::string getTitle() const override;
+
+  /// Sets MatrixWorkspace plot_type
+  void setPlotType(const std::string &);
+  /// Gets MatrixWorkspace plot_type
+  std::string getPlotType() const;
+
+  /// Set the marker style for plotting
+  void setMarkerStyle(const std::string &markerType);
+  /// Get the marker style for plotting
+  std::string getMarkerStyle() const;
+
+  /// Set the size of the marker for plotting
+  void setMarkerSize(const float markerSize);
+  /// Get the size of the marker for plotting
+  float getMarkerSize() const;
 
   virtual Types::Core::DateAndTime getFirstPulseTime() const;
   Types::Core::DateAndTime getLastPulseTime() const;
@@ -308,6 +364,10 @@ public:
   virtual void getIntegratedSpectra(std::vector<double> &out, const double minX, const double maxX,
                                     const bool entireRange) const;
 
+  std::vector<double> getIntegratedCountsForWorkspaceIndices(const std::vector<size_t> &workspaceIndices,
+                                                             const double minX, const double maxX,
+                                                             const bool entireRange) const;
+
   /// Return an index in the X vector for an x-value close to a given value
   std::pair<size_t, double> getXIndex(size_t i, double x, bool isLeft = true, size_t start = 0) const;
 
@@ -334,7 +394,7 @@ public:
   /// Returns true if the workspace has common, integer X bins
   virtual bool isIntegerBins() const;
 
-  std::string YUnit() const;
+  const std::string &YUnit() const { return m_YUnit; }
   void setYUnit(const std::string &newUnit);
   std::string YUnitLabel(bool useLatex = false, bool plotAsDistribution = false) const;
   void setYUnitLabel(const std::string &newLabel);
@@ -360,7 +420,7 @@ public:
   virtual void setMonitorWorkspace(const std::shared_ptr<MatrixWorkspace> &monitorWS);
   std::shared_ptr<MatrixWorkspace> monitorWorkspace() const;
 
-  void loadInstrumentNexus(::NeXus::File *file);
+  void loadInstrumentNexus(Nexus::File *file);
 
   //=====================================================================================
   // MD Geometry methods
@@ -512,6 +572,10 @@ private:
 
   mutable std::atomic<bool> m_indexInfoNeedsUpdate{true};
   mutable std::mutex m_indexInfoMutex;
+
+  // Marker style and size, used for plotting
+  std::string m_marker;
+  float m_marker_size;
 
 protected:
   /// Getter for the dimension id based on the axis.

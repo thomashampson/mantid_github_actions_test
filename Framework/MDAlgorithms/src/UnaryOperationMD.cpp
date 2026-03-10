@@ -4,13 +4,13 @@
 //   NScD Oak Ridge National Laboratory, European Spallation Source,
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
+
 #include "MantidMDAlgorithms/UnaryOperationMD.h"
 #include "MantidAPI/IMDEventWorkspace.h"
 #include "MantidAPI/IMDWorkspace.h"
 #include "MantidAPI/MatrixWorkspace.h"
 #include "MantidAPI/WorkspaceProperty.h"
 #include "MantidDataObjects/MDHistoWorkspace.h"
-#include "MantidKernel/System.h"
 
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
@@ -56,7 +56,7 @@ void UnaryOperationMD::exec() {
   if (std::dynamic_pointer_cast<MatrixWorkspace>(m_in)) {
     // Pass-through to the same function without "MD"
     std::string matrixAlg = this->name();
-    matrixAlg = matrixAlg.substr(0, matrixAlg.size() - 2);
+    matrixAlg.erase(matrixAlg.size() - 2);
     auto alg = createChildAlgorithm(matrixAlg);
     // Copy all properties from THIS to the non-MD version
     std::vector<Property *> props = this->getProperties();

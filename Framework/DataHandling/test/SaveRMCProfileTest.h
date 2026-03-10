@@ -6,8 +6,8 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
-#include <Poco/File.h>
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 #include <fstream>
 
 #include "MantidAPI/AlgorithmManager.h"
@@ -48,10 +48,10 @@ public:
     return newlines;
   }
 
-  size_t countLines(const std::string &filename) {
+  size_t countLines(const std::filesystem::path &filepath) {
     const size_t BUFFER_SIZE = 1024 * 1024;
     std::vector<char> buffer(BUFFER_SIZE);
-    std::ifstream in(filename.c_str());
+    std::ifstream in(filepath);
     size_t n = 0;
     while (size_t cc = read(in, buffer)) {
       n += countEOL(buffer, cc);
@@ -89,15 +89,15 @@ public:
     TS_ASSERT(alg.isExecuted());
 
     // do the checks
-    Poco::File outFile(outFilename);
-    TS_ASSERT(outFile.isFile());
-    TS_ASSERT_EQUALS(countLines(outFilename), 1002);
+    std::filesystem::path outFile(outFilename);
+    TS_ASSERT(std::filesystem::is_regular_file(outFile));
+    TS_ASSERT_EQUALS(countLines(outFile), 1002);
 
     // Remove workspace from the data service.
     AnalysisDataService::Instance().remove(wsName);
 
     // remove the output file
-    outFile.remove(false);
+    std::filesystem::remove(outFile);
   }
 
   void test_exec_ws_group() {
@@ -119,16 +119,20 @@ public:
     SaveRMCProfile alg;
     TS_ASSERT_THROWS_NOTHING(alg.initialize());
     TS_ASSERT_THROWS_NOTHING(alg.setPropertyValue("InputWorkspace", groupName));
-    TS_ASSERT_THROWS_NOTHING(alg.setPropertyValue("Filename", "SaveRMCProfileGroup.gr"));
+    TS_ASSERT_THROWS_NOTHING(alg.setPropertyValue("Filename", outFilename));
     TS_ASSERT_THROWS_NOTHING(alg.execute());
     TS_ASSERT(alg.isExecuted());
 
     // do the checks
-    Poco::File outFile(outFilename);
-    TS_ASSERT(outFile.isFile());
-    TS_ASSERT_EQUALS(countLines(outFilename), 1002);
+    std::filesystem::path outFile = std::filesystem::current_path() / outFilename;
+    std::string const outFileString = outFile.string();
+    TSM_ASSERT(outFileString + " does not exist", std::filesystem::exists(outFile));
+    TSM_ASSERT(outFileString + " is not a regular file", std::filesystem::is_regular_file(outFile));
+    TS_ASSERT_EQUALS(countLines(outFile), 1002);
 
     // remove the workspace group
     AnalysisDataService::Instance().deepRemoveGroup(groupName);
+    // remove the output file
+    std::filesystem::remove(outFile);
   }
 };

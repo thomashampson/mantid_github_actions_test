@@ -6,14 +6,11 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidAPI/FileBackedExperimentInfo.h"
 #include "MantidKernel/Logger.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <sstream>
-
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
 #include <utility>
-// clang-format on
 
 namespace Mantid::API {
 
@@ -52,8 +49,8 @@ void FileBackedExperimentInfo::populateIfNotLoaded() const {
  */
 void FileBackedExperimentInfo::populateFromFile() const {
   try {
-    ::NeXus::File nxFile(m_filename);
-    nxFile.openPath(m_nxpath);
+    Nexus::File nxFile(m_filename);
+    nxFile.openAddress(m_nxpath);
     // The loadExperimentInfo calls things such as mutableSample()
     // and if m_loaded is not true then this function is
     // will be called recursively.
@@ -62,7 +59,7 @@ void FileBackedExperimentInfo::populateFromFile() const {
     std::string parameterStr;
     const_cast<FileBackedExperimentInfo *>(this)->loadExperimentInfoNexus(m_filename, &nxFile, parameterStr);
     const_cast<FileBackedExperimentInfo *>(this)->readParameterMap(parameterStr);
-  } catch (::NeXus::Exception &exc) {
+  } catch (Nexus::Exception const &exc) {
     std::ostringstream os;
     os << "Unable to load experiment information from NeXus file: " << exc.what() << "\n";
     throw std::runtime_error(os.str());

@@ -59,6 +59,9 @@ usagereports.enabled = @ENABLE_USAGE_REPORTS@
 errorreports.rooturl = https://errorreports.mantidproject.org
 usagereports.rooturl = https://reports.mantidproject.org
 
+# Location of core dump files (linux only feature)
+errorreports.core_dumps =
+
 # Where to load Grouping files (that are shipped with Mantid) from
 groupingFiles.directory = @MANTID_ROOT@/instrument/Grouping
 
@@ -81,9 +84,6 @@ datasearch.directories = @DATADIRS@
 
 # Directory where data cache is stored, default IDaaS path
 datacachesearch.directory = /data/instrument
-
-# Root of html documentation (kept as unix-style path)
-docs.html.root = @HTML_ROOT@
 
 # Setting this to On enables searching the facilitie's archive automatically
 datasearch.searcharchive = Off
@@ -123,6 +123,11 @@ proxy.httpsTargetUrl = http://www.mantidproject.org
 # This timeout is the maximum duration in seconds we will wait on a request to the ISIS DAE (live data)
 # it might need to be increased if you are trying to download histogram data from a very large instrument
 ISISDAE.Timeout = 120
+
+# Default values for SNS DAE (live data)
+SNSLiveEventDataListener.keepPausedEvents = false
+SNSLiveEventDataListener.testAddress = 127.0.0.1:12345
+
 
 # Defines the precision of h, k, and l when output in peak workspace table
 PeakColumn.hklPrec=2
@@ -258,7 +263,7 @@ plots.y_min =
 plots.y_max =
 
 # The default width of the lines for the axes
-plots.axesLineWidth = 1
+plots.axesLineWidth = 1.0
 
 # Whether to enable the grid by default
 plots.enableGrid = Off
@@ -300,7 +305,7 @@ plots.line.Width = 1.5
 plots.marker.Style = None
 
 # Default maker size on 1d plots
-plots.marker.Size = 6
+plots.marker.Size = 6.0
 
 # Default cap size on error bars in 1d plots
 plots.errorbar.Capsize = 0.0
@@ -314,17 +319,29 @@ plots.errorbar.errorEvery = 1
 # Default width of error bars in 1d plots
 plots.errorbar.Width = 1.0
 
+# Default marker style for the errorbar workspace
+plots.errorbar.MarkerStyle = circle
+
+# Default marker size for the errorbar workspace
+plots.errorbar.MarkerSize = 4
+
 # Default legend location
 plots.legend.Location = best
 
 # Default legend size
-plots.legend.FontSize = 8
+plots.legend.FontSize = 8.0
 
 # Default colormap for image plots
 plots.images.Colormap = viridis
 
 # Default colorbar scale for image plots
 plots.images.ColorBarScale = Linear
+
+# Default marker style for marker workspace plots
+plots.markerworkspace.MarkerStyle = vline
+
+# Default marker size for marker workspace plots
+plots.markerworkspace.MarkerSize = 6
 
 # Profiler Default Filename
 performancelog.filename = algotimeregister.out

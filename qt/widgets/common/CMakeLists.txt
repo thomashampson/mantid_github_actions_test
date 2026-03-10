@@ -64,7 +64,6 @@ set(SRC_FILES
     src/MantidDesktopServices.cpp
     src/MantidDialog.cpp
     src/MantidHelpInterface.cpp
-    src/MantidHelpWindow.cpp
     src/MantidTreeModel.cpp
     src/MantidTreeWidget.cpp
     src/MantidTreeWidgetItem.cpp
@@ -80,7 +79,6 @@ set(SRC_FILES
     src/ParseKeyValueString.cpp
     src/pixmaps.cpp
     src/PluginLibraries.cpp
-    src/pqHelpWindow.cxx
     src/ProcessingAlgoWidget.cpp
     src/ProgressableView.cpp
     src/PropertyHandler.cpp
@@ -157,6 +155,8 @@ set(SRC_FILES
     src/Python/CodeExecution.cpp
     src/Python/Sip.cpp
     src/Python/QHashToDict.cpp
+    src/PythonHelpBridge.cpp
+    src/PythonHelpWindow.cpp
 )
 
 set(QT5_MOC_FILES
@@ -200,7 +200,6 @@ set(QT5_MOC_FILES
     inc/MantidQtWidgets/Common/ManageUserDirectories.h
     inc/MantidQtWidgets/Common/MantidDialog.h
     inc/MantidQtWidgets/Common/MantidHelpInterface.h
-    inc/MantidQtWidgets/Common/MantidHelpWindow.h
     inc/MantidQtWidgets/Common/MantidTreeModel.h
     inc/MantidQtWidgets/Common/MantidTreeWidget.h
     inc/MantidQtWidgets/Common/MantidWidget.h
@@ -211,7 +210,6 @@ set(QT5_MOC_FILES
     inc/MantidQtWidgets/Common/FileFinderWidget.h
     inc/MantidQtWidgets/Common/NotificationService.h
     inc/MantidQtWidgets/Common/OptionsPropertyWidget.h
-    inc/MantidQtWidgets/Common/pqHelpWindow.h
     inc/MantidQtWidgets/Common/ProcessingAlgoWidget.h
     inc/MantidQtWidgets/Common/PropertyHandler.h
     inc/MantidQtWidgets/Common/PropertyWidget.h
@@ -260,6 +258,8 @@ set(QT5_MOC_FILES
     inc/MantidQtWidgets/Common/QtPropertyBrowser/StringDialogEditor.h
     inc/MantidQtWidgets/Common/QtPropertyBrowser/StringEditorFactory.h
     inc/MantidQtWidgets/Common/QtPropertyBrowser/WorkspaceEditorFactory.h
+    inc/MantidQtWidgets/Common/PythonHelpBridge.h
+    inc/MantidQtWidgets/Common/PythonHelpWindow.h
 )
 
 # Include files aren't required, but this makes them appear in Visual Studio
@@ -360,12 +360,12 @@ set(QT5_UI_FILES
     inc/MantidQtWidgets/Common/MuonPeriodInfo.ui
     inc/MantidQtWidgets/Common/FileFinderWidget.ui
     inc/MantidQtWidgets/Common/FitScriptGenerator.ui
-    inc/MantidQtWidgets/Common/pqHelpWindow.ui
     inc/MantidQtWidgets/Common/ProcessingAlgoWidget.ui
     inc/MantidQtWidgets/Common/RenameParDialog.ui
     inc/MantidQtWidgets/Common/ScriptRepositoryView.ui
-    inc/MantidQtWidgets/Common/SequentialFitDialog.ui
     inc/MantidQtWidgets/Common/SelectFunctionDialog.ui
+    inc/MantidQtWidgets/Common/SequentialFitDialog.ui
+    inc/MantidQtWidgets/Common/SlicingAlgorithmDialog.ui
     inc/MantidQtWidgets/Common/SlitCalculator.ui
     inc/MantidQtWidgets/Common/UserFunctionDialog.ui
 )
@@ -428,14 +428,12 @@ set(MOC_FILES
     inc/MantidQtWidgets/Common/MantidWSIndexDialog.h
     inc/MantidQtWidgets/Common/MantidTreeModel.h
     inc/MantidQtWidgets/Common/MantidTreeWidget.h
-    inc/MantidQtWidgets/Common/MantidHelpWindow.h
     inc/MantidQtWidgets/Common/MessageDisplay.h
     inc/MantidQtWidgets/Common/MultifitSetupDialog.h
     inc/MantidQtWidgets/Common/MuonFitDataSelector.h
     inc/MantidQtWidgets/Common/MuonFitPropertyBrowser.h
     inc/MantidQtWidgets/Common/MuonFunctionBrowser.h
     inc/MantidQtWidgets/Common/MuonPeriodInfo.h
-    inc/MantidQtWidgets/Common/pqHelpWindow.h
     inc/MantidQtWidgets/Common/PropertyHandler.h
     inc/MantidQtWidgets/Common/ProcessingAlgoWidget.h
     inc/MantidQtWidgets/Common/QtAlgorithmRunner.h
@@ -627,7 +625,18 @@ set(UI_FILES
     inc/MantidQtWidgets/Common/SlicingAlgorithmDialog.ui
     inc/MantidQtWidgets/Common/SlitCalculator.ui
     inc/MantidQtWidgets/Common/UserFunctionDialog.ui
-    inc/MantidQtWidgets/Common/pqHelpWindow.ui
+)
+
+set(PRECOMP_HEADERS
+    <MantidAPI/Algorithm.h>
+    <MantidAPI/AnalysisDataService.h>
+    <QApplication>
+    <QDialog>
+    <QObject>
+    <QPushButton>
+    <QString>
+    <QStringList>
+    <QWidget>
 )
 
 set(TARGET_LIBRARIES ${CORE_MANTIDLIBS} ${POCO_LIBRARIES} ${Boost_LIBRARIES})
@@ -686,8 +695,7 @@ mtd_add_qt_library(
   MOC ${QT5_MOC_FILES}
   NOMOC ${QT5_INC_FILES} ${_sip_include_dir}/sip.h
   UI ${QT5_UI_FILES}
-  DEFS IN_MANTIDQT_COMMON QSCINTILLA_DLL QT5_DEFS ${_webengine_def} PRECOMPILED
-       inc/MantidQtWidgets/Common/PrecompiledHeader.h
+  DEFS IN_MANTIDQT_COMMON QSCINTILLA_DLL QT5_DEFS ${_webengine_def} PRECOMPILED ${PRECOMP_HEADERS}
   INCLUDE_DIRS inc
   SYSTEM_INCLUDE_DIRS ${Boost_INCLUDE_DIRS} ${_sip_include_dir}
   LINK_LIBS ${TARGET_LIBRARIES} PUBLIC Mantid::PythonInterfaceCore
@@ -697,6 +705,9 @@ mtd_add_qt_library(
   OSX_INSTALL_RPATH @loader_path/../MacOS @loader_path/../Frameworks
   LINUX_INSTALL_RPATH "\$ORIGIN/../${WORKBENCH_LIB_DIR}"
 )
+
+# For the new help system target_link_libraries(MantidQtWidgetsCommon PRIVATE Mantid::Framework PythonInterface::mantid)
+# # This line is now removed/commented
 
 set(TEST_FILES
     test/AlgorithmHintStrategyTest.h
@@ -739,6 +750,7 @@ set(CXXTEST_EXTRA_HEADER_INCLUDE ${CMAKE_CURRENT_LIST_DIR}/test/WidgetsCommonTes
 
 set(QT5_TEST_FILES
     test/AlgorithmRunnerTest.h
+    test/AlgorithmPropertiesWidgetTest.h
     test/BatchAlgorithmRunnerTest.h
     test/FileDialogHandlerTest.h
     test/FindFilesThreadPoolManagerTest.h
@@ -758,7 +770,6 @@ set(QT5_TEST_FILES
     test/ImageInfoPresenterTest.h
     test/InterfaceManagerTest.h
     test/ManageUserDirectoriesTest.h
-    # test/MantidHelpWindowTest.h - disabled while the failure is investigated
     test/MuonPeriodInfoTest.h
     test/QtJSONUtilsTest.h
     test/RepoModelTest.h
@@ -782,17 +793,18 @@ if(MANTID_FRAMEWORK_LIB STREQUAL "BUILD")
     QT_VERSION 5
     SRC ${QT5_TEST_FILES}
     INCLUDE_DIRS ../../../Framework/DataObjects/inc ../../../Framework/Crystal/inc
-    LINK_LIBS ${TARGET_LIBRARIES}
-              ${Boost_LIBRARIES}
-              Mantid::PythonInterfaceCore
-              Mantid::DataObjects
-              gmock
-              Qt5::Test
+    LINK_LIBS ${TARGET_LIBRARIES} ${Boost_LIBRARIES} Mantid::PythonInterfaceCore Mantid::DataObjects Qt5::Test
               Python::Python
     MTD_QT_LINK_LIBS MantidQtWidgetsCommon
     PARENT_DEPENDENCIES GUITests
   )
 
   add_framework_test_helpers(MantidQtWidgetsCommonTestQt5)
+
+  if(TARGET GTest::gmock AND TARGET GTest::gtest)
+    target_link_libraries(MantidQtWidgetsCommonTestQt5 PRIVATE GTest::gmock GTest::gtest)
+  else()
+    target_link_libraries(MantidQtWidgetsCommonTestQt5 PRIVATE gmock gtest)
+  endif()
   pyunittest_add_test(${CMAKE_CURRENT_SOURCE_DIR} MantidQtWidgetsCommonPyTest ${TEST_PY_FILES})
 endif()

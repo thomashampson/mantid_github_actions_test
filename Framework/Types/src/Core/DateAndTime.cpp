@@ -69,7 +69,7 @@ std::tm *gmtime_r_portable(const std::time_t *clock, struct std::tm *result) {
 ///    Copyright (C) 2010, Chris Frey <cdfrey@foursquare.net>, To God be the
 ///    glory
 ///    Released to the public domain.
-time_t DateAndTime::utc_mktime(struct tm *utctime) {
+time_t DateAndTime::utc_mktime(const struct tm *utctime) {
   time_t result;
   struct tm tmp, check;
 
@@ -348,7 +348,7 @@ void DateAndTime::setFromISO8601(const std::string &str) {
     const size_t nCharZ = time.find('Z', nCharT);
     if (nCharZ != std::string::npos) {
       // Found a Z. Remove it, and no timezone fix
-      time = time.substr(0, nCharZ);
+      time.resize(nCharZ);
     } else {
       // Look for a + or - indicating time zone offset
       size_t n_plus, n_minus;
@@ -369,7 +369,7 @@ void DateAndTime::setFromISO8601(const std::string &str) {
         std::string offset_str = time.substr(nPlusMinus + 1, time.size() - nPlusMinus - 1);
 
         // Take out the offset from time string
-        time = time.substr(0, nPlusMinus);
+        time.resize(nPlusMinus);
 
         // Separate into minutes and hours
         std::string hours_str("0"), minutes_str("0");
@@ -437,6 +437,20 @@ std::string DateAndTime::toFormattedString(const std::string &format) const {
  *  @return The ISO8601 string
  */
 std::string DateAndTime::toISO8601String() const { return boost::posix_time::to_iso_extended_string(to_ptime()); }
+
+/**
+ * Convert to RFC2616.
+ *
+ * Examples (from Poco::DateTimeFormat)
+ * Sat, 01 Jan 2005 12:00:00 +0100
+ * Sat, 01 Jan 2005 11:00:00 GMT
+ */
+std::string DateAndTime::toHttpFormat() const {
+  // time zone information doesn't come through correctly
+  // seconds should be included, but that isn't playing nice either
+  const std::string FORMAT("%a, %e %b %Y %H:%M");
+  return this->toFormattedString(FORMAT) + ":00 GMT";
+}
 
 //------------------------------------------------------------------------------------------------
 /** Get the year of this date.
@@ -724,5 +738,41 @@ void DateAndTime::createVector(const DateAndTime start, const std::vector<double
 std::ostream &operator<<(std::ostream &stream, const DateAndTime &t) {
   stream << t.toSimpleString();
   return stream;
+}
+
+//-----------------------------------------------------------------------------------------------
+/** Static method to get the current local time as an ISO 8601 string
+ * in the format "YYYY-MM-DDTHH:MM:SS±HH:MM".
+ * If no time is passed, the current time is used.
+ *
+ * @param time :: std::time_t to convert, defaults to 0 for current time
+ * @return ISO 8601 formatted string representing the local time
+ */
+std::string DateAndTime::getLocalTimeISO8601String(std::time_t time) {
+  // If no time is passed (0), use the current time
+  if (time == 0) {
+    time = std::time(nullptr);
+  }
+
+  // Wrap time_t in DateAndTime for convenient localtime conversion
+  DateAndTime dt;
+  dt.set_from_time_t(time);
+  std::tm local_tm = dt.to_localtime_tm();
+
+  std::tm utc_tm;
+  gmtime_r_portable(&time, &utc_tm);
+
+  long offset_sec = static_cast<long>(std::difftime(std::mktime(&local_tm), std::mktime(&utc_tm)));
+  char sign = offset_sec >= 0 ? '+' : '-';
+  offset_sec = std::abs(offset_sec);
+  int offset_hours = static_cast<int>(offset_sec / 3600);
+  int offset_minutes = static_cast<int>((offset_sec % 3600) / 60);
+
+  char buffer[96];
+  std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d", local_tm.tm_year + 1900,
+                local_tm.tm_mon + 1, local_tm.tm_mday, local_tm.tm_hour, local_tm.tm_min, local_tm.tm_sec, sign,
+                offset_hours, offset_minutes);
+
+  return std::string(buffer);
 }
 } // namespace Mantid::Types::Core

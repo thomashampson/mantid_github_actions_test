@@ -30,6 +30,10 @@ public:
   static AsynchronousTest *createSuite() { return new AsynchronousTest(); }
   static void destroySuite(AsynchronousTest *suite) { delete suite; }
 
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  AsynchronousTest(const AsynchronousTest &) = delete;
+  AsynchronousTest &operator=(const AsynchronousTest &) = delete;
+
   class AsyncAlgorithm : public Algorithm {
   public:
     AsyncAlgorithm() : Algorithm(), result(0), throw_exception(false) {}
@@ -58,7 +62,7 @@ public:
       for (int i = 0; i < NO_OF_LOOPS; i++) {
         result = i;
         if (thr)
-          thr->sleep(1);
+          thr->sleep(10);
         progress(double(i) / NO_OF_LOOPS); // send progress notification
         interruption_point();              // check for a termination request
         if (throw_exception && i == NO_OF_LOOPS / 2)

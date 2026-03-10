@@ -79,8 +79,8 @@ public:
   /// Move a peak object into this peaks workspace
   void addPeak(Peak &&peak);
   void addPeak(const Kernel::V3D &position, const Kernel::SpecialCoordinateSystem &frame) override;
-  Peak &getPeak(int peakNum) override;
-  const Peak &getPeak(int peakNum) const override;
+  Peak &getPeak(size_t const peakNum) override;
+  const Peak &getPeak(size_t const peakNum) const override;
 
   IPeak_uptr createPeak(const Kernel::V3D &QLabFrame,
                         std::optional<double> detectorDistance = std::nullopt) const override;
@@ -151,7 +151,7 @@ public:
 
   // --- Nexus Methods ---
   // Save to Nexus
-  void saveNexus(::NeXus::File *file) const override;
+  void saveNexus(Nexus::File *file) const override;
 
 protected:
   /// Protected copy constructor. May be used by childs for cloning.
@@ -247,3 +247,12 @@ using PeaksWorkspace_sptr = std::shared_ptr<PeaksWorkspace>;
 using PeaksWorkspace_const_sptr = std::shared_ptr<const PeaksWorkspace>;
 } // namespace DataObjects
 } // namespace Mantid
+
+#ifndef DataObjects_EXPORTS
+#include "MantidAPI/WorkspaceProperty.h"
+namespace Mantid::API {
+/// @cond
+extern template class MANTID_DATAOBJECTS_DLL WorkspaceProperty<DataObjects::PeaksWorkspace>;
+/// @endcond
+} // namespace Mantid::API
+#endif

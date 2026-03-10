@@ -37,6 +37,7 @@
 #include "MantidKernel/Property.h"
 #include "MantidKernel/StringTokenizer.h"
 #include "MantidKernel/Strings.h"
+#include "MantidNexus/NexusException.h"
 
 #include "MantidTypes/SpectrumDefinition.h"
 
@@ -45,7 +46,6 @@
 #include <boost/regex.hpp>
 
 #include <Poco/Path.h>
-#include <nexus/NeXusException.hpp>
 
 #include <algorithm>
 #include <memory>
@@ -137,7 +137,7 @@ const std::string ExperimentInfo::toString() const {
 
   // parameter files loaded
   auto paramFileVector = this->constInstrumentParameters().getParameterFilenames();
-  for (auto &itFilename : paramFileVector) {
+  for (auto const &itFilename : paramFileVector) {
     out << "Parameters from: " << itFilename;
     out << "\n";
   }
@@ -576,7 +576,7 @@ int ExperimentInfo::getRunNumber() const {
     // No run_number property, default to 0
     return 0;
   } else {
-    Property *prop = m_run->getProperty("run_number");
+    Property const *prop = m_run->getProperty("run_number");
     if (prop) {
       // Use the string representation. That way both a string and a number
       // property will work.
@@ -902,7 +902,7 @@ void ExperimentInfo::invalidateAllSpectrumDefinitions() {
  * @param file :: open NeXus file
  * @param saveLegacyInstrument : defaults to true, otherwise not in file output
  */
-void ExperimentInfo::saveExperimentInfoNexus(::NeXus::File *file, bool saveLegacyInstrument) const {
+void ExperimentInfo::saveExperimentInfoNexus(Nexus::File *file, bool saveLegacyInstrument) const {
   Instrument_const_sptr instrument = getInstrument();
   if (saveLegacyInstrument) {
     instrument->saveNexus(file, "instrument");
@@ -917,7 +917,7 @@ void ExperimentInfo::saveExperimentInfoNexus(::NeXus::File *file, bool saveLegac
  * @param saveSample :: option to save Sample
  * @param saveLogs :: option to save Logs
  */
-void ExperimentInfo::saveExperimentInfoNexus(::NeXus::File *file, bool saveInstrument, bool saveSample,
+void ExperimentInfo::saveExperimentInfoNexus(Nexus::File *file, bool saveInstrument, bool saveSample,
                                              bool saveLogs) const {
   Instrument_const_sptr instrument = getInstrument();
 
@@ -931,29 +931,27 @@ void ExperimentInfo::saveExperimentInfoNexus(::NeXus::File *file, bool saveInstr
 
 /** Load the sample and log info from an open NeXus file.
  * @param file :: open NeXus file object
- * @param fileInfo :: The file info descriptor corresponding to the provided file
  * @param prefix :: The prefix of the file
  */
-void ExperimentInfo::loadSampleAndLogInfoNexus(::NeXus::File *file, const Mantid::Kernel::NexusHDF5Descriptor &fileInfo,
-                                               const std::string &prefix) {
+void ExperimentInfo::loadSampleAndLogInfoNexus(Nexus::File *file, std::string const &prefix) {
   // First, the sample and then the logs
   int sampleVersion = mutableSample().loadNexus(file, "sample");
   if (sampleVersion == 0) {
     // Old-style (before Sep-9-2011) NXS processed
     // sample field contains both the logs and the sample details
     file->openGroup("sample", "NXsample");
-    this->mutableRun().loadNexus(file, "", fileInfo, prefix);
+    this->mutableRun().loadNexus(file, "", prefix);
     file->closeGroup();
   } else {
     // Newer style: separate "logs" field for the Run object
-    this->mutableRun().loadNexus(file, "logs", fileInfo, prefix);
+    this->mutableRun().loadNexus(file, "logs", prefix);
   }
 }
 
 /** Load the sample and log info from an open NeXus file.
  * @param file :: open NeXus file
  */
-void ExperimentInfo::loadSampleAndLogInfoNexus(::NeXus::File *file) {
+void ExperimentInfo::loadSampleAndLogInfoNexus(Nexus::File *file) {
   // First, the sample and then the logs
   int sampleVersion = mutableSample().loadNexus(file, "sample");
   if (sampleVersion == 0) {
@@ -968,14 +966,10 @@ void ExperimentInfo::loadSampleAndLogInfoNexus(::NeXus::File *file) {
   }
 }
 
-void ExperimentInfo::loadExperimentInfoNexus(const std::string &nxFilename, ::NeXus::File *file,
-                                             std::string &parameterStr,
-                                             const Mantid::Kernel::NexusHDF5Descriptor &fileInfo,
-                                             const std::string &prefix) {
-  // TODO
-  // load sample and log info
-  loadSampleAndLogInfoNexus(file, fileInfo, prefix);
-
+void ExperimentInfo::loadExperimentInfoNexus(const std::string &nxFilename, Nexus::File *file,
+                                             std::string &parameterStr, const std::string &prefix) {
+  // TODO load sample and log info
+  loadSampleAndLogInfoNexus(file, prefix);
   loadInstrumentInfoNexus(nxFilename, file, parameterStr);
 }
 
@@ -989,7 +983,7 @@ void ExperimentInfo::loadExperimentInfoNexus(const std::string &nxFilename, ::Ne
  * file and cannot
  *                                  be loaded from the IDF.
  */
-void ExperimentInfo::loadExperimentInfoNexus(const std::string &nxFilename, ::NeXus::File *file,
+void ExperimentInfo::loadExperimentInfoNexus(const std::string &nxFilename, Nexus::File *file,
                                              std::string &parameterStr) {
   // load sample and log info
   loadSampleAndLogInfoNexus(file);
@@ -1007,7 +1001,7 @@ void ExperimentInfo::loadExperimentInfoNexus(const std::string &nxFilename, ::Ne
  * file and cannot
  *                                  be loaded from the IDF.
  */
-void ExperimentInfo::loadInstrumentInfoNexus(const std::string &nxFilename, ::NeXus::File *file,
+void ExperimentInfo::loadInstrumentInfoNexus(const std::string &nxFilename, Nexus::File *file,
                                              std::string &parameterStr) {
 
   // Open instrument group
@@ -1037,7 +1031,7 @@ void ExperimentInfo::loadInstrumentInfoNexus(const std::string &nxFilename, ::Ne
  * file and cannot
  *                                  be loaded from the IDF.
  */
-void ExperimentInfo::loadInstrumentInfoNexus(const std::string &nxFilename, ::NeXus::File *file) {
+void ExperimentInfo::loadInstrumentInfoNexus(const std::string &nxFilename, Nexus::File *file) {
 
   // Open instrument group
   file->openGroup("instrument", "NXinstrument");
@@ -1060,7 +1054,7 @@ void ExperimentInfo::loadInstrumentInfoNexus(const std::string &nxFilename, ::Ne
  * @param[out] instrumentXml  :: XML string of embedded instrument definition or
  * empty if not found
  */
-void ExperimentInfo::loadEmbeddedInstrumentInfoNexus(::NeXus::File *file, std::string &instrumentName,
+void ExperimentInfo::loadEmbeddedInstrumentInfoNexus(Nexus::File *file, std::string &instrumentName,
                                                      std::string &instrumentXml) {
 
   file->readData("name", instrumentName);
@@ -1069,7 +1063,7 @@ void ExperimentInfo::loadEmbeddedInstrumentInfoNexus(::NeXus::File *file, std::s
     file->openGroup("instrument_xml", "NXnote");
     file->readData("data", instrumentXml);
     file->closeGroup();
-  } catch (NeXus::Exception &ex) {
+  } catch (Nexus::Exception const &ex) {
     g_log.debug(std::string("Unable to load instrument_xml: ") + ex.what());
   }
 }
@@ -1154,12 +1148,12 @@ std::string ExperimentInfo::loadInstrumentXML(const std::string &filename) {
  *             Feed that to ExperimentInfo::readParameterMap() after the
  * instrument is done.
  */
-void ExperimentInfo::loadInstrumentParametersNexus(::NeXus::File *file, std::string &parameterStr) {
+void ExperimentInfo::loadInstrumentParametersNexus(Nexus::File *file, std::string &parameterStr) {
   try {
     file->openGroup("instrument_parameter_map", "NXnote");
     file->readData("data", parameterStr);
     file->closeGroup();
-  } catch (NeXus::Exception &ex) {
+  } catch (Nexus::Exception const &ex) {
     g_log.debug(std::string("Unable to load instrument_parameter_map: ") + ex.what());
     g_log.information("Parameter map entry missing from NeXus file. Continuing without it.");
   }
@@ -1225,7 +1219,7 @@ void ExperimentInfo::readParameterMap(const std::string &parameterStr) {
     else {                      // defined, the paramValue has one too many entries, -1 to remove also the semicolon
       paramVisibility =
           paramVisibility.substr(paramVisibility.find(visibilityKey) + visibilityKey.size(), paramVisibility.size());
-      paramValue = paramValue.substr(0, paramValue.find(visibilityKey) - 1);
+      paramValue.erase(paramValue.find(visibilityKey) - 1, paramValue.size());
     }
     const auto paramDescr = std::string("");
     if (paramName == "masked") {
@@ -1351,7 +1345,7 @@ IPropertyManager::getValue<Mantid::API::ExperimentInfo_sptr>(const std::string &
 template <>
 MANTID_API_DLL Mantid::API::ExperimentInfo_const_sptr
 IPropertyManager::getValue<Mantid::API::ExperimentInfo_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::API::ExperimentInfo_sptr> *>(getPointerToProperty(name));
+  auto const *prop = dynamic_cast<PropertyWithValue<Mantid::API::ExperimentInfo_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();
   } else {

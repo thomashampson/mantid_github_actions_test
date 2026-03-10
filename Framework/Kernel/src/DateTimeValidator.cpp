@@ -6,7 +6,6 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidKernel/DateTimeValidator.h"
 #include "MantidKernel/DateAndTimeHelpers.h"
-#include "MantidKernel/System.h"
 
 #include <memory>
 #include <stdexcept>
@@ -19,7 +18,7 @@ using namespace DateAndTimeHelpers;
  */
 IValidator_sptr DateTimeValidator::clone() const { return std::make_shared<DateTimeValidator>(*this); }
 
-DateTimeValidator::DateTimeValidator() { m_allowedEmpty = false; }
+DateTimeValidator::DateTimeValidator(bool allowEmpty) { m_allowedEmpty = allowEmpty; }
 
 /**
  * Sets the value of the m_allowEmpty variable

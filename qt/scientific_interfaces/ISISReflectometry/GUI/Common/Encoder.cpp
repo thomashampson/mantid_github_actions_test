@@ -53,6 +53,26 @@ QMap<QString, QVariant> Encoder::encode(const QWidget *gui, const std::string &d
 
 QList<QString> Encoder::tags() { return QList<QString>({QString("ISIS Reflectometry")}); }
 
+QVariant Encoder::extractFromEncoding(const QVariant &vMap, const std::vector<std::string> &jsonKey) const {
+  QVariantMap map;
+  QVariant extract = vMap;
+  for (auto &key : jsonKey) {
+    if (extract.type() == 8 && extract.canConvert(8)) { // 8 = map - is there an enum?
+      map = extract.toMap();
+      auto qKey = QString::fromStdString(key);
+      if (map.contains(qKey)) {
+        extract = map.value(qKey);
+      } else {
+        throw std::invalid_argument("Invalid json key provided. Json key not in map. Invalid element: " + key);
+      }
+    } else {
+      throw std::invalid_argument(
+          "Invalid json key provided. Json key must allow traversal of nested QMaps. Invalid element: " + key);
+    }
+  }
+  return extract;
+}
+
 QMap<QString, QVariant> Encoder::encodeBatch(const IMainWindowView *mwv, int batchIndex, bool projectSave) {
   auto gui = dynamic_cast<const QtBatchView *>(mwv->batches()[batchIndex]);
   auto batchPresenter = findBatchPresenter(gui, mwv);
@@ -122,7 +142,7 @@ QList<QVariant> Encoder::encodeRows(const MantidQt::CustomInterfaces::ISISReflec
   QList<QVariant> rows;
   for (const auto &row : group.m_rows) {
     if (row) {
-      rows.append(QVariant(encodeRow(row.get())));
+      rows.append(QVariant(encodeRow(row.value())));
     } else {
       rows.append(QVariant(QMap<QString, QVariant>()));
     }
@@ -137,13 +157,13 @@ QMap<QString, QVariant> Encoder::encodeRangeInQ(const RangeInQ &rangeInQ) {
   auto step = rangeInQ.step();
   qRangeMap.insert(QString("minPresent"), QVariant(static_cast<bool>(min)));
   if (min)
-    qRangeMap.insert(QString("min"), QVariant(min.get()));
+    qRangeMap.insert(QString("min"), QVariant(min.value()));
   qRangeMap.insert(QString("maxPresent"), QVariant(static_cast<bool>(max)));
   if (max)
-    qRangeMap.insert(QString("max"), QVariant(max.get()));
+    qRangeMap.insert(QString("max"), QVariant(max.value()));
   qRangeMap.insert(QString("stepPresent"), QVariant(static_cast<bool>(step)));
   if (step)
-    qRangeMap.insert(QString("step"), QVariant(step.get()));
+    qRangeMap.insert(QString("step"), QVariant(step.value()));
   return qRangeMap;
 }
 
@@ -197,7 +217,7 @@ QMap<QString, QVariant> Encoder::encodeRow(const MantidQt::CustomInterfaces::ISI
   rowMap.insert(QString("qRangeOutput"), QVariant(encodeRangeInQ(row.m_qRangeOutput)));
   rowMap.insert(QString("scaleFactorPresent"), QVariant(static_cast<bool>(row.m_scaleFactor)));
   if (row.m_scaleFactor) {
-    rowMap.insert(QString("scaleFactor"), QVariant(row.m_scaleFactor.get()));
+    rowMap.insert(QString("scaleFactor"), QVariant(row.m_scaleFactor.value()));
   }
   rowMap.insert(QString("transRunNums"), QVariant(encodeTransmissionRunPair(row.m_transmissionRuns)));
   rowMap.insert(QString("reductionWorkspaces"), QVariant(encodeReductionWorkspace(row.m_reducedWorkspaceNames)));
@@ -286,6 +306,8 @@ QMap<QString, QVariant> Encoder::encodeExperiment(const QtExperimentView *gui) {
   experimentMap.insert(QString("polCorrEfficienciesWsSelector"),
                        QVariant(gui->m_polCorrEfficienciesWsSelector->currentText()));
   experimentMap.insert(QString("polCorrEfficienciesLineEdit"), QVariant(gui->m_polCorrEfficienciesLineEdit->text()));
+  experimentMap.insert(QString("polCorrFredrikzeSpinStateEdit"),
+                       QVariant(gui->m_ui.polCorrFredrikzeSpinStateEdit->text()));
   experimentMap.insert(QString("floodCorComboBox"), QVariant(gui->m_ui.floodCorComboBox->currentIndex()));
   experimentMap.insert(QString("floodWorkspaceWsSelector"), QVariant(gui->m_floodCorrWsSelector->currentText()));
   experimentMap.insert(QString("floodWorkspaceLineEdit"), QVariant(gui->m_floodCorrLineEdit->text()));

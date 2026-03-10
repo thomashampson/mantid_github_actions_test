@@ -445,7 +445,7 @@ size_t EventWorkspace::getNumberEvents() const {
  */
 Mantid::API::EventType EventWorkspace::getEventType() const {
   Mantid::API::EventType out = Mantid::API::TOF;
-  for (auto &list : this->data) {
+  for (const auto &list : this->data) {
     Mantid::API::EventType thisType = list->getEventType();
     if (static_cast<int>(out) < static_cast<int>(thisType)) {
       out = thisType;
@@ -709,7 +709,7 @@ void EventWorkspace::getIntegratedSpectra(std::vector<double> &out, const double
   PARALLEL_FOR_NO_WSP_CHECK()
   for (int wksp_index = 0; wksp_index < int(this->getNumberHistograms()); wksp_index++) {
     // Get Handle to data
-    EventList *el = this->data[wksp_index].get();
+    EventList const *el = this->data[wksp_index].get();
 
     // Let the eventList do the integration
     out[wksp_index] = el->integrate(minX, maxX, entireRange);
@@ -735,7 +735,8 @@ IPropertyManager::getValue<Mantid::DataObjects::EventWorkspace_sptr>(const std::
 template <>
 DLLExport Mantid::DataObjects::EventWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::EventWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::DataObjects::EventWorkspace_sptr> *>(getPointerToProperty(name));
+  auto const *prop =
+      dynamic_cast<PropertyWithValue<Mantid::DataObjects::EventWorkspace_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();
   } else {

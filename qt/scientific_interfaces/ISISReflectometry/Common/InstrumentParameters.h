@@ -6,9 +6,8 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 #include "Common/First.h"
-#include "Common/ValueOr.h"
 #include "GetInstrumentParameter.h"
-#include <boost/optional.hpp>
+#include <optional>
 #include <vector>
 
 namespace MantidQt {
@@ -16,14 +15,14 @@ namespace CustomInterfaces {
 namespace ISISReflectometry {
 
 template <typename T>
-boost::optional<T> firstFromParameterFile(Mantid::Geometry::Instrument_const_sptr instrument,
-                                          std::string const &parameterName) {
+std::optional<T> firstFromParameterFile(Mantid::Geometry::Instrument_const_sptr instrument,
+                                        std::string const &parameterName) {
   return first(getInstrumentParameter<T>(instrument, parameterName));
 }
 
 template <typename... Ts>
-boost::optional<boost::variant<Ts...>> firstFromParameterFileVariant(Mantid::Geometry::Instrument_const_sptr instrument,
-                                                                     std::string const &parameterName) {
+std::optional<boost::variant<Ts...>> firstFromParameterFileVariant(Mantid::Geometry::Instrument_const_sptr instrument,
+                                                                   std::string const &parameterName) {
   auto values = getInstrumentParameter<boost::variant<Ts...>>(instrument, parameterName);
   return boost::apply_visitor(FirstVisitor<Ts...>(), values);
 }
@@ -42,28 +41,17 @@ class InstrumentParameters {
 public:
   explicit InstrumentParameters(Mantid::Geometry::Instrument_const_sptr instrument);
 
-  template <typename T> T valueOrEmpty(std::string const &parameterName) {
-    static_assert(!std::is_arithmetic<T>::value, "Use valueOrZero instead.");
-    return fromFileOrDefaultConstruct<T>(parameterName);
-  }
-
-  template <typename T> T valueOrZero(std::string const &parameterName) {
-    static_assert(std::is_arithmetic<T>::value, "Use valueOrEmpty instead.");
-    return fromFileOrDefaultConstruct<T>(parameterName);
-  }
-
-  template <typename T> boost::optional<T> optional(std::string const &parameterName) {
+  template <typename T> std::optional<T> optional(std::string const &parameterName) {
     return fromFile<T>(parameterName);
   }
 
   template <typename Default, typename T>
-  T handleMandatoryIfMissing(boost::optional<T> const &value, std::string const &parameterName) {
-    if (value)
-      return value.get();
-    else {
-      m_missingValueErrors.emplace_back(parameterName);
-      return Default();
+  T handleMandatoryIfMissing(std::optional<T> const &value, std::string const &parameterName) {
+    if (value) {
+      return value.value();
     }
+    m_missingValueErrors.emplace_back(parameterName);
+    return Default();
   }
 
   template <typename T> T mandatory(std::string const &parameterName) {
@@ -103,16 +91,12 @@ public:
   bool hasMissingValues() const;
 
 private:
-  template <typename T> T fromFileOrDefaultConstruct(std::string const &parameterName) {
-    return value_or(fromFile<T>(parameterName), T());
-  }
-
-  template <typename T> boost::optional<T> fromFile(std::string const &parameterName) {
+  template <typename T> std::optional<T> fromFile(std::string const &parameterName) {
     try {
       return firstFromParameterFile<T>(m_instrument, parameterName);
     } catch (InstrumentParameterTypeMissmatch const &ex) {
       m_typeErrors.emplace_back(ex);
-      return boost::none;
+      return std::nullopt;
     }
   }
 

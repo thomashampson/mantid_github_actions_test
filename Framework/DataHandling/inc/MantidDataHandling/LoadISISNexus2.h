@@ -9,15 +9,15 @@
 //----------------------------------------------------------------------
 // Includes
 //----------------------------------------------------------------------
-#include "MantidAPI/Algorithm.h"
 #include "MantidAPI/IFileLoader.h"
+#include "MantidAPI/ISISRunLogs.h"
 #include "MantidAPI/SpectrumDetectorMapping.h"
 #include "MantidDataHandling/DataBlockComposite.h"
-#include "MantidDataHandling/ISISRunLogs.h"
-#include "MantidDataObjects/Workspace2D.h"
-#include "MantidKernel/NexusDescriptor.h"
-#include "MantidNexus/NexusClasses.h"
-#include <nexus/NeXusFile.hpp>
+#include "MantidDataObjects/Workspace2D_fwd.h"
+#include "MantidHistogramData/HistogramX.h"
+#include "MantidNexus/NexusClasses_fwd.h"
+#include "MantidNexus/NexusDescriptorLazy.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <boost/scoped_ptr.hpp>
 
@@ -56,7 +56,7 @@ multi-period file)
 
 @author Roman Tolchenov, Tessella plc
 */
-class MANTID_DATAHANDLING_DLL LoadISISNexus2 : public API::IFileLoader<Kernel::NexusDescriptor> {
+class MANTID_DATAHANDLING_DLL LoadISISNexus2 : public API::IFileLoader<Nexus::NexusDescriptorLazy> {
 public:
   /// Default constructor
   LoadISISNexus2();
@@ -64,14 +64,14 @@ public:
   const std::string name() const override { return "LoadISISNexus"; }
   /// Algorithm's version for identification overriding a virtual method
   int version() const override { return 2; }
-  const std::vector<std::string> seeAlso() const override { return {"LoadEventNexus", "SaveISISNexus"}; }
+  const std::vector<std::string> seeAlso() const override { return {"LoadEventNexus"}; }
   /// Algorithm's category for identification overriding a virtual method
   const std::string category() const override { return "DataHandling\\Nexus"; }
   /// Summary of algorithms purpose
   const std::string summary() const override { return "Loads a file in ISIS NeXus format."; }
 
   /// Returns a confidence value that this algorithm can load a file
-  int confidence(Kernel::NexusDescriptor &descriptor) const override;
+  int confidence(Nexus::NexusDescriptorLazy &descriptor) const override;
 
   /// Spectra block descriptor
   struct SpectraBlock {
@@ -98,17 +98,17 @@ private:
   /// Run LoadInstrument as a ChildAlgorithm
   void runLoadInstrument(DataObjects::Workspace2D_sptr &);
   /// Load in details about the run
-  void loadRunDetails(DataObjects::Workspace2D_sptr &local_workspace, Mantid::NeXus::NXEntry &entry);
+  void loadRunDetails(DataObjects::Workspace2D_sptr &local_workspace, Mantid::Nexus::NXEntry &entry);
   /// Load in details about the sample
-  void loadSampleData(DataObjects::Workspace2D_sptr &, const Mantid::NeXus::NXEntry &entry);
+  void loadSampleData(DataObjects::Workspace2D_sptr &, const Mantid::Nexus::NXEntry &entry);
   /// Load log data from the nexus file
   void loadLogs(DataObjects::Workspace2D_sptr &ws);
   // Load a given period into the workspace
-  void loadPeriodData(int64_t period, Mantid::NeXus::NXEntry &entry, DataObjects::Workspace2D_sptr &local_workspace,
+  void loadPeriodData(int64_t period, Mantid::Nexus::NXEntry &entry, DataObjects::Workspace2D_sptr &local_workspace,
                       bool update_spectra2det_mapping = false);
   // Load a data block
-  void loadBlock(Mantid::NeXus::NXDataSetTyped<int> &data, int64_t blocksize, int64_t period, int64_t start,
-                 int64_t &hist, int64_t &spec_num, DataObjects::Workspace2D_sptr &local_workspace);
+  void loadBlock(Nexus::NXInt &data, int64_t blocksize, int64_t period, int64_t start, int64_t &hist, int64_t &spec_num,
+                 DataObjects::Workspace2D_sptr &local_workspace);
 
   // Create period logs
   void createPeriodLogs(int64_t period, DataObjects::Workspace2D_sptr &local_workspace);
@@ -162,22 +162,20 @@ private:
   /// Monitors, map spectrum index to monitor group name
   std::map<specnum_t, std::string> m_monitors;
   /// A pointer to the ISISRunLogs creator
-  boost::scoped_ptr<ISISRunLogs> m_logCreator;
+  boost::scoped_ptr<API::ISISRunLogs> m_logCreator;
   /// Progress reporting object
   std::shared_ptr<API::Progress> m_progress;
   /// Personal wrapper for sqrt to allow msvs to compile
   static double dblSqrt(double in);
   // Handle to the NeXus file
-  // clang-format off
-  boost::scoped_ptr< ::NeXus::File> m_nexusFile;
-  // clang-format on
+  boost::scoped_ptr<Nexus::File> m_nexusFile;
 
-  bool findSpectraDetRangeInFile(const NeXus::NXEntry &entry, std::vector<specnum_t> &spectrum_index, int64_t ndets,
+  bool findSpectraDetRangeInFile(const Nexus::NXEntry &entry, std::vector<specnum_t> &spectrum_index, int64_t ndets,
                                  int64_t n_vms_compat_spectra, const std::map<specnum_t, std::string> &monitors,
                                  bool excludeMonitors, bool separateMonitors);
 
   /// Check if is the file is a multiple time regime file
-  bool isMultipleTimeRegimeFile(const NeXus::NXEntry &entry) const;
+  bool isMultipleTimeRegimeFile(const Nexus::NXEntry &entry) const;
 };
 
 } // namespace DataHandling

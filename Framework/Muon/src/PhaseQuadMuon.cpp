@@ -15,6 +15,16 @@
 #include "MantidKernel/PhysicalConstants.h"
 #include "MantidKernel/Unit.h"
 
+#include "Eigen/Dense"
+
+// Use of a `long double` datatype is required on osx-arm64 to bring the precision of eigen vector-matrix multiplication
+// inline with the other operating systems.
+#if defined(__APPLE__) && defined(__arm64__)
+typedef long double eigenDataType;
+#else
+typedef double eigenDataType;
+#endif
+
 using namespace Mantid::DataObjects;
 using namespace Mantid::HistogramData;
 
@@ -237,44 +247,42 @@ API::MatrixWorkspace_sptr PhaseQuadMuon::squash(const API::MatrixWorkspace_sptr 
   }
   std::vector<bool> emptySpectrum;
   emptySpectrum.reserve(nspec);
-  std::vector<double> aj, bj;
-  {
-    // Calculate coefficients aj, bj
+  std::vector<Eigen::Vector<eigenDataType, 2>> n0Vectors(nspec);
 
-    double sxx = 0.;
-    double syy = 0.;
-    double sxy = 0.;
-    for (size_t h = 0; h < nspec; h++) {
-      emptySpectrum.emplace_back(
-          std::all_of(ws->y(h).begin(), ws->y(h).end(), [](double value) { return value == 0.; }) ||
-          phase->Double(h, asymmetryIndex) == ASYMM_ERROR);
-      if (!emptySpectrum[h]) {
-        const double asym = phase->Double(h, asymmetryIndex) / maxAsym;
-        const double phi = phase->Double(h, phaseIndex);
-        const double X = n0[h] * asym * cos(phi);
-        const double Y = n0[h] * asym * sin(phi);
-        sxx += X * X;
-        syy += Y * Y;
-        sxy += X * Y;
-      }
+  // Calculate coefficients aj, bj
+
+  double sxx = 0.;
+  double syy = 0.;
+  double sxy = 0.;
+  for (size_t h = 0; h < nspec; h++) {
+    emptySpectrum.emplace_back(
+        std::all_of(ws->y(h).begin(), ws->y(h).end(), [](double value) { return value == 0.; }) ||
+        phase->Double(h, asymmetryIndex) == ASYMM_ERROR);
+    if (!emptySpectrum[h]) {
+      const double asym = phase->Double(h, asymmetryIndex) / maxAsym;
+      const double phi = phase->Double(h, phaseIndex);
+      const double X = n0[h] * asym * cos(phi);
+      const double Y = n0[h] * asym * sin(phi);
+      n0Vectors[h] = {X, Y};
+      sxx += X * X;
+      syy += Y * Y;
+      sxy += X * Y;
+    } else {
+      n0Vectors[h] = Eigen::Vector<eigenDataType, 2>::Zero();
     }
+  }
 
-    const double lam1 = 2 * syy / (sxx * syy - sxy * sxy);
-    const double mu1 = 2 * sxy / (sxy * sxy - sxx * syy);
-    const double lam2 = 2 * sxy / (sxy * sxy - sxx * syy);
-    const double mu2 = 2 * sxx / (sxx * syy - sxy * sxy);
-    for (size_t h = 0; h < nspec; h++) {
-      if (emptySpectrum[h]) {
-        aj.emplace_back(0.0);
-        bj.emplace_back(0.0);
-      } else {
-        const double asym = phase->Double(h, asymmetryIndex) / maxAsym;
-        const double phi = phase->Double(h, phaseIndex);
-        const double X = n0[h] * asym * cos(phi);
-        const double Y = n0[h] * asym * sin(phi);
-        aj.emplace_back((lam1 * X + mu1 * Y) * 0.5);
-        bj.emplace_back((lam2 * X + mu2 * Y) * 0.5);
-      }
+  Eigen::Matrix<eigenDataType, 2, 2> muLamMatrix;
+  muLamMatrix << sxx, sxy, sxy, syy;
+  muLamMatrix = Eigen::PartialPivLU<Eigen::Matrix<eigenDataType, 2, 2>>(muLamMatrix).inverse();
+
+  std::vector<eigenDataType> aj(nspec), bj(nspec);
+  for (size_t h = 0; h < nspec; h++) {
+    aj[h] = bj[h] = 0;
+    if (!emptySpectrum[h]) {
+      const auto factors = muLamMatrix * n0Vectors[h];
+      aj[h] = factors[0];
+      bj[h] = factors[1];
     }
   }
 

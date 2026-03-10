@@ -34,7 +34,6 @@
 #include <Poco/DOM/Node.h>
 #include <Poco/DOM/NodeList.h>
 #include <Poco/DOM/Text.h>
-#include <Poco/Path.h>
 #include <Poco/SAX/InputSource.h>
 
 #include <algorithm>
@@ -59,6 +58,9 @@ using namespace DataObjects;
 
 // Register the algorithm into the AlgorithmFactory
 DECLARE_FILELOADER_ALGORITHM(LoadHFIRSANS)
+
+LoadHFIRSANS::LoadHFIRSANS()
+    : m_sansSpiceXmlFormatVersion(0.0), m_wavelength(0.0), m_dwavelength(0.0), m_sampleDetectorDistance(0.0) {}
 
 /**
  * Return the confidence with with this algorithm can load the file
@@ -158,7 +160,7 @@ void LoadHFIRSANS::setInputFileAsHandler() {
   try {
     m_xmlHandler = XmlHandler(fileName);
   } catch (...) {
-    throw Kernel::Exception::FileError("Unable to parse File:", fileName);
+    throw Kernel::Exception::FileError("Unable to parse File:", std::move(fileName));
   }
   m_metadata = m_xmlHandler.get_metadata(m_tags_to_ignore);
   setSansSpiceXmlFormatVersion();

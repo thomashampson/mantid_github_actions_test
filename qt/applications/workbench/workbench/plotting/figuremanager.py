@@ -252,7 +252,9 @@ class FigureManagerWorkbench(FigureManagerBase, QObject):
         self.window.addDockWidget(Qt.LeftDockWidgetArea, self.fit_browser)
 
         self.superplot = None
+
         self.fit_browser.hide()
+
         if matplotlib.is_interactive():
             self.window.show()
             canvas.draw_idle()
@@ -263,9 +265,11 @@ class FigureManagerWorkbench(FigureManagerBase, QObject):
                 self.toolbar.update()
 
         canvas.figure.add_axobserver(notify_axes_change)
+
         # Register canvas observers
         self._fig_interaction = FigureInteraction(self)
         self._ads_observer = FigureManagerADSObserver(self)
+
         self.window.raise_()
 
     def full_screen_toggle(self):
@@ -302,6 +306,7 @@ class FigureManagerWorkbench(FigureManagerBase, QObject):
 
         # Hack to ensure the canvas is up to date
         self.canvas.draw_idle()
+        self.canvas.flush_events()
 
         if self.toolbar:
             self.toolbar.set_buttons_visibility(self.canvas.figure)
@@ -413,7 +418,7 @@ class FigureManagerWorkbench(FigureManagerBase, QObject):
         """Show the superplot"""
         self.superplot = Superplot(self.canvas, self.window)
         if not self.superplot.is_valid():
-            logger.warning("Superplot cannot be opened on data not linked " "to a workspace.")
+            logger.warning("Superplot cannot be opened on data not linked to a workspace.")
             self.superplot = None
             self.toolbar._actions["toggle_superplot"].setChecked(False)
         else:
@@ -504,7 +509,7 @@ class FigureManagerWorkbench(FigureManagerBase, QObject):
                     with open(filepath, "w") as f:
                         f.write(script)
                 except IOError as io_error:
-                    logger.error("Could not write file: {}\n{}" "".format(filepath, io_error))
+                    logger.error("Could not write file: {}\n{}".format(filepath, io_error))
 
     # If a user creates a plot from a script using mpl features we don't support, asking for a recreated script from the
     # plot can lead to problems. This should only really be supported for plots created by workbench.
@@ -601,39 +606,82 @@ class FigureManagerWorkbench(FigureManagerBase, QObject):
             ax.add_line(line)
 
     def crosshair_toggle(self, on):
-        cid = self.canvas.mpl_connect("motion_notify_event", self.crosshair)
-        if not on:
-            self.canvas.mpl_disconnect(cid)
+        if on:
+            # Create crosshair lines for each axes (except colorbars)
+            self._crosshair_lines = {}
+            for ax in self._axes_that_are_not_colour_bars():
+                # disable autoscale
+                ax.set_autoscalex_on(False)
+                ax.set_autoscaley_on(False)
+                # add animation
+                hline = ax.axhline(color="r", lw=1.0, ls="-", visible=False, animated=True, label="_nolegend_")
+                vline = ax.axvline(color="r", lw=1.0, ls="-", visible=False, animated=True, label="_nolegend_")
+                self._crosshair_lines[ax] = (hline, vline)
 
-    def crosshair(self, event):
-        axes = self.canvas.figure.gca()
+            # add blitting
+            self._crosshair_background = None
+            self._crosshair_cid = self.canvas.mpl_connect("motion_notify_event", self.crosshair)
 
-        # create a crosshair made from horizontal and verticle lines.
-        self.horizontal_line = axes.axhline(color="r", lw=1.0, ls="-")
-        self.vertical_line = axes.axvline(color="r", lw=1.0, ls="-")
+            # Connect draw events for background refresh
+            self._crosshair_draw_cid = self.canvas.mpl_connect("draw_event", self._crosshair_refresh_background)
 
-        def set_cross_hair_visible(visible):
-            need_redraw = self.horizontal_line.get_visible() != visible
-            self.horizontal_line.set_visible(visible)
-            self.vertical_line.set_visible(visible)
-            return need_redraw
-
-        # if event is out-of-bound we update
-        if not event.inaxes:
-            need_redraw = set_cross_hair_visible(False)
-            if need_redraw:
-                axes.figure.canvas.draw()
+            self.canvas.draw()
+            self._crosshair_refresh_background()
 
         else:
-            set_cross_hair_visible(True)
-            x, y = event.xdata, event.ydata
-            self.horizontal_line.set_ydata([y])
-            self.vertical_line.set_xdata([x])
-            self.canvas.draw()
+            if hasattr(self, "_crosshair_cid"):
+                self.canvas.mpl_disconnect(self._crosshair_cid)
+                del self._crosshair_cid
 
-        # after update we remove
-        self.horizontal_line.remove()
-        self.vertical_line.remove()
+            if hasattr(self, "_crosshair_lines"):
+                # Remove the crosshair lines
+                for hline, vline in self._crosshair_lines.values():
+                    hline.remove()
+                    vline.remove()
+                del self._crosshair_lines
+
+        self.canvas.draw_idle()
+
+    def crosshair(self, event):
+        if not hasattr(self, "_crosshair_lines"):
+            return
+
+        # Restore background first
+        if self._crosshair_background is not None:
+            self.canvas.restore_region(self._crosshair_background)
+
+        if event.inaxes and event.xdata is not None and event.ydata is not None:
+            x = event.xdata
+            y = event.ydata
+
+            # Update all crosshairs to same (x, y)
+            for ax, (hline, vline) in self._crosshair_lines.items():
+                hline.set_ydata([y])
+                vline.set_xdata([x])
+                hline.set_visible(True)
+                vline.set_visible(True)
+                ax.draw_artist(hline)
+                ax.draw_artist(vline)
+        else:
+            # Hide all crosshairs when mouse is out of axes
+            for ax, (hline, vline) in self._crosshair_lines.items():
+                hline.set_visible(False)
+                vline.set_visible(False)
+                ax.draw_artist(hline)
+                ax.draw_artist(vline)
+
+        # Blit updated artists
+        self.canvas.blit(self.canvas.figure.bbox)
+
+    def _crosshair_refresh_background(self, event=None):
+        if not hasattr(self, "_crosshair_lines"):
+            return
+        self._crosshair_background = self.canvas.copy_from_bbox(self.canvas.figure.bbox)
+        for ax, (hline, vline) in self._crosshair_lines.items():
+            ax.draw_artist(hline)
+            ax.draw_artist(vline)
+
+        self.canvas.blit(self.canvas.figure.bbox)
 
 
 # -----------------------------------------------------------------------------

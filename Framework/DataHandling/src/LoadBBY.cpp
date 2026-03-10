@@ -4,6 +4,7 @@
 //   NScD Oak Ridge National Laboratory, European Spallation Source,
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -304,10 +305,7 @@ void LoadBBY::exec() {
   }
 
   // count total number of masked bins
-  size_t maskedBins = 0;
-  for (size_t i = 0; i != roi.size(); i++)
-    if (!roi[i])
-      maskedBins++;
+  size_t maskedBins = std::count_if(roi.cbegin(), roi.cend(), [](bool v) { return !v; });
 
   if (maskedBins > 0) {
     // create list of masked bins
@@ -425,7 +423,7 @@ std::vector<bool> LoadBBY::createRoiVector(const std::string &maskfile) {
 }
 
 // loading instrument parameters
-void LoadBBY::loadInstrumentParameters(const NeXus::NXEntry &entry, std::map<std::string, double> &logParams,
+void LoadBBY::loadInstrumentParameters(const Nexus::NXEntry &entry, std::map<std::string, double> &logParams,
                                        std::map<std::string, std::string> &logStrings,
                                        std::map<std::string, std::string> &allParams) {
   using namespace Poco::XML;
@@ -439,7 +437,7 @@ void LoadBBY::loadInstrumentParameters(const NeXus::NXEntry &entry, std::map<std
     try {
       pDoc = pParser.parse(parameterFilename);
     } catch (...) {
-      throw Kernel::Exception::FileError("Unable to parse File:", parameterFilename);
+      throw Kernel::Exception::FileError("Unable to parse File:", std::move(parameterFilename));
     }
     NodeIterator it(pDoc, Poco::XML::NodeFilter::SHOW_ELEMENT);
     Node *pNode = it.nextNode();
@@ -453,7 +451,7 @@ void LoadBBY::loadInstrumentParameters(const NeXus::NXEntry &entry, std::map<std
           if (cNode->nodeName() == "value") {
             auto cElem = dynamic_cast<Poco::XML::Element *>(cNode);
             std::string value = cElem->getAttribute("val");
-            allParams[paramName] = value;
+            allParams[paramName] = std::move(value);
           }
         }
       }
@@ -488,7 +486,7 @@ void LoadBBY::loadInstrumentParameters(const NeXus::NXEntry &entry, std::map<std
         auto hdfTag = boost::algorithm::trim_copy(details[0]);
         try {
           // extract the parameter and add it to the parameter dictionary,
-          // check the scale factor for numeric and string
+          // get the scale factor for numeric values
           auto updateOk = false;
           if (!hdfTag.empty()) {
             if (isNumeric(details[1])) {
@@ -510,7 +508,7 @@ void LoadBBY::loadInstrumentParameters(const NeXus::NXEntry &entry, std::map<std
               if (isNumeric(defValue))
                 logParams[logTag] = std::stod(defValue);
               else
-                logStrings[logTag] = defValue;
+                logStrings[logTag] = std::move(defValue);
               if (!hdfTag.empty())
                 g_log.warning() << "Cannot find hdf parameter " << hdfTag << ", using default.\n";
             }
@@ -567,8 +565,8 @@ void LoadBBY::createInstrument(ANSTO::Tar::File &tarFile, InstrumentInfo &instru
         fwrite(buffer, bytesRead, 1, handle.get());
       handle.reset();
 
-      NeXus::NXRoot root(hdfFile.path());
-      NeXus::NXEntry entry = root.openFirstEntry();
+      Nexus::NXRoot root(hdfFile.path());
+      Nexus::NXEntry entry = root.openFirstEntry();
 
       float tmp_float = 0.0f;
       int32_t tmp_int32 = 0;
@@ -688,9 +686,9 @@ void LoadBBY::createInstrument(ANSTO::Tar::File &tarFile, InstrumentInfo &instru
 }
 
 // load nx dataset
-template <class T> bool LoadBBY::loadNXDataSet(const NeXus::NXEntry &entry, const std::string &path, T &value) {
+template <class T> bool LoadBBY::loadNXDataSet(const Nexus::NXEntry &entry, const std::string &address, T &value) {
   try {
-    NeXus::NXDataSetTyped<T> dataSet = entry.openNXDataSet<T>(path);
+    Nexus::NXDataSetTyped<T> dataSet = entry.openNXDataSet<T>(address);
     dataSet.load();
 
     value = *dataSet();
@@ -699,14 +697,11 @@ template <class T> bool LoadBBY::loadNXDataSet(const NeXus::NXEntry &entry, cons
     return false;
   }
 }
-bool LoadBBY::loadNXString(const NeXus::NXEntry &entry, const std::string &path, std::string &value) {
+bool LoadBBY::loadNXString(const Nexus::NXEntry &entry, const std::string &address, std::string &value) {
   try {
-    NeXus::NXChar dataSet = entry.openNXChar(path);
-    dataSet.load();
-
-    value = std::string(dataSet(), dataSet.dim0());
+    value = entry.getString(address);
     return true;
-  } catch (std::runtime_error &) {
+  } catch (const std::runtime_error &) {
     return false;
   }
 }

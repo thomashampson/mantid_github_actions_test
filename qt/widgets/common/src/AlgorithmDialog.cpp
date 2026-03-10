@@ -160,10 +160,11 @@ void AlgorithmDialog::saveInput() {
   AlgorithmInputHistory::Instance().clearAlgorithmInput(m_algName);
   QStringList::const_iterator pend = m_algProperties.end();
   for (QStringList::const_iterator pitr = m_algProperties.begin(); pitr != pend; ++pitr) {
-    Mantid::Kernel::Property *p = getAlgorithmProperty(*pitr);
+    const Mantid::Kernel::Property *p = getAlgorithmProperty(*pitr);
     if (p->remember()) {
       QString pName = *pitr;
-      QString value = m_propertyValueMap.value(pName);
+      // normalize default (or default-derived) values to empty string.
+      QString value = p->isDefault() || p->isDynamicDefault() ? "" : m_propertyValueMap.value(pName);
       AlgorithmInputHistory::Instance().storeNewValue(m_algName, QPair<QString, QString>(pName, value));
     }
   }
@@ -222,7 +223,7 @@ bool AlgorithmDialog::requiresUserInput(const QString &propName) const { return 
 QString AlgorithmDialog::getInputValue(const QString &propName) const {
   QString value = m_propertyValueMap.value(propName);
   if (value.isEmpty()) {
-    Mantid::Kernel::Property *prop = getAlgorithmProperty(propName);
+    const Mantid::Kernel::Property *prop = getAlgorithmProperty(propName);
     if (prop)
       return QString::fromStdString(prop->getDefault());
     else
@@ -314,12 +315,10 @@ void AlgorithmDialog::showValidators() {
  * @return true if the property is valid.
  */
 bool AlgorithmDialog::setPropertyValue(const QString &pName, bool validateOthers) {
-  // Mantid::Kernel::Property *p = getAlgorithmProperty(pName);
   QString value = getInputValue(pName);
 
   std::string error("");
   try {
-    // error = p->setValue(value.toStdString());
     getAlgorithm()->setPropertyValue(pName.toStdString(), value.toStdString());
   } catch (std::exception &err_details) {
     error = err_details.what();
@@ -349,7 +348,7 @@ bool AlgorithmDialog::setPropertyValues(const QStringList &skipList) {
     const QString pName = *pitr;
     if (skipList.contains(pName)) {
       // For the load dialog, skips setting some properties
-      Mantid::Kernel::Property *p = getAlgorithmProperty(pName);
+      const Mantid::Kernel::Property *p = getAlgorithmProperty(pName);
       std::string error = p->isValid();
       m_errors[pName] = QString::fromStdString(error).trimmed();
       if (!error.empty())
@@ -437,32 +436,27 @@ bool AlgorithmDialog::isMessageAvailable() const { return !m_strMessage.isEmpty(
  * @param propName :: The name of the property
  */
 bool AlgorithmDialog::isWidgetEnabled(const QString &propName) const {
+  // TODO: these "to avoid errors" prechecks mask defects.
+  // They really should be removed!!
+
   // To avoid errors
   if (propName.isEmpty())
     return true;
 
-  // Otherwise it must be disabled but only if it is valid
-  Mantid::Kernel::Property *property = getAlgorithmProperty(propName);
-  if (!property)
-    return true;
-
   if (!isForScript()) {
-    // Regular C++ algo. Let the property tell us,
-    // possibly using validators, if it is to be shown enabled
-    if (property->getSettings())
-      return property->getSettings()->isEnabled(getAlgorithm().get());
-    else
-      return true;
+    // Not called from a script:
+    //   use the property's settings to determine if it should be enabled.
+    return m_algorithm->isPropertyEnabled(propName.toStdString());
   } else {
-    // Algorithm dialog was called from a script(i.e. Python)
-    // Keep things enabled if requested
+    // Called from a script:
+    //   use the enabled / disabled lists to determine if it should be enabled.
     if (m_enabled.contains(propName))
       return true;
 
     /**
      * The control is disabled if
      *   (1) It is contained in the disabled list or
-     *   (2) A user passed a value into the dialog
+     *   (2) A user passed a value into the dialog as an argument
      */
 
     return !(m_disabled.contains(propName) || m_python_arguments.contains(propName));
@@ -578,7 +572,7 @@ QString AlgorithmDialog::openFileDialog(const QString &propName) {
 void AlgorithmDialog::fillAndSetComboBox(const QString &propName, QComboBox *optionsBox) const {
   if (!optionsBox)
     return;
-  Mantid::Kernel::Property *property = getAlgorithmProperty(propName);
+  const Mantid::Kernel::Property *property = getAlgorithmProperty(propName);
   if (!property)
     return;
 
@@ -613,7 +607,7 @@ void AlgorithmDialog::fillLineEdit(const QString &propName, QLineEdit *textField
   if (!isForScript()) {
     textField->setText(AlgorithmInputHistory::Instance().previousInput(m_algName, propName));
   } else {
-    Mantid::Kernel::Property *property = getAlgorithmProperty(propName);
+    const Mantid::Kernel::Property *property = getAlgorithmProperty(propName);
     if (property && property->isValid().empty() && (m_python_arguments.contains(propName) || !property->isDefault())) {
       textField->setText(QString::fromStdString(property->value()));
     }
@@ -899,9 +893,9 @@ QString AlgorithmDialog::getValue(QWidget *widget) {
     // String in ISO8601 format /* add toUTC() to go from local time */
     QString value = dateEdit->dateTime().toString(Qt::ISODate);
     return value;
-  } else if (MantidWidget *mtd_widget = qobject_cast<MantidWidget *>(widget)) {
+  } else if (const MantidWidget *mtd_widget = qobject_cast<MantidWidget *>(widget)) {
     return mtd_widget->getUserInput().toString().trimmed();
-  } else if (PropertyWidget *propWidget = qobject_cast<PropertyWidget *>(widget)) {
+  } else if (const PropertyWidget *propWidget = qobject_cast<PropertyWidget *>(widget)) {
     return propWidget->getValue().trimmed();
   } else {
     QMessageBox::warning(this, windowTitle(),
@@ -940,8 +934,17 @@ void AlgorithmDialog::setPreviousValue(QWidget *widget, const QString &propName)
     return;
 
   QString value = getPreviousValue(propName);
-
   Mantid::Kernel::Property *property = getAlgorithmProperty(propName);
+
+  if (!isInitialized() && property->isDynamicDefault() && value == "")
+    // The property initialization order is non-deterministic: upstream properties may or may
+    //   not be initialized prior to dependent properties.
+    // For this reason, we do not allow resetting a value derived from an upstream property
+    //   back to default.  Setting it to a non-default value indicates it actually had a
+    //   previously-saved value that was not derived.
+    // (In present usage, `isInitialized()` will always be `false` here, but there's no harm
+    //  in generalizing this method's applicability!)
+    return;
 
   // Do the right thing for the widget type
   if (QComboBox *opts = qobject_cast<QComboBox *>(widget)) {
@@ -995,8 +998,10 @@ void AlgorithmDialog::setPreviousValue(QWidget *widget, const QString &propName)
 
   PropertyWidget *propWidget = qobject_cast<PropertyWidget *>(widget);
   if (propWidget) {
+    // Only non dynamic-default values reach this clause:
+    //   dynamic-default values are set in `AlgorithmPropertiesWidget::hideOrDisableProperties`.
+    propWidget->setPrevious_isDynamicDefault(false);
     propWidget->setPreviousValue(value);
-
     return;
   }
 

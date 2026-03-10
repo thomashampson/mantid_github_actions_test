@@ -10,11 +10,13 @@
 #include "MantidAPI/FileProperty.h"
 #include "MantidAPI/ITableWorkspace.h"
 #include "MantidAPI/MatrixWorkspace.h"
+#include "MantidAPI/PolSANSWorkspaceValidator.h"
 #include "MantidAPI/WorkspaceUnitValidator.h"
 #include "MantidAlgorithms/PolarizationCorrections/PolarizationCorrectionsHelpers.h"
-#include "MantidAlgorithms/PolarizationCorrections/SpinStateValidator.h"
 #include "MantidKernel/CompositeValidator.h"
 #include "MantidKernel/ListValidator.h"
+#include "MantidKernel/SpinStateHelpers.h"
+#include "MantidKernel/SpinStateValidator.h"
 
 #include <boost/algorithm/string/join.hpp>
 #include <filesystem>
@@ -70,7 +72,9 @@ bool validateInputWorkspace(MatrixWorkspace_sptr const &ws, std::string const &p
 
 void PolarizerEfficiency::init() {
   declareProperty(
-      std::make_unique<WorkspaceProperty<WorkspaceGroup>>(PropertyNames::INPUT_WORKSPACE, "", Direction::Input),
+      std::make_unique<WorkspaceProperty<WorkspaceGroup>>(
+          PropertyNames::INPUT_WORKSPACE, "", Direction::Input,
+          std::make_shared<Mantid::API::PolSANSWorkspaceValidator>(true, false, std::unordered_set<int>{2, 3, 4})),
       "Input group workspace to use for polarization calculation");
   const auto &wavelengthValidator = std::make_shared<WorkspaceUnitValidator>("Wavelength");
   declareProperty(std::make_unique<WorkspaceProperty<MatrixWorkspace>>(PropertyNames::ANALYSER_EFFICIENCY, "",
@@ -97,46 +101,28 @@ std::map<std::string, std::string> PolarizerEfficiency::validateInputs() {
   std::map<std::string, std::string> errorList;
   // Check input workspaces.
   const WorkspaceGroup_sptr inputWorkspace = getProperty(PropertyNames::INPUT_WORKSPACE);
-  if (inputWorkspace == nullptr) {
-    errorList[PropertyNames::INPUT_WORKSPACE] = "The input workspace is not a workspace group.";
-    return errorList;
-  }
-
-  auto const &inputWsCount = inputWorkspace->size();
-  if (inputWsCount < 2) {
-    errorList[PropertyNames::INPUT_WORKSPACE] =
-        "The input group workspace must have at least two periods corresponding to the spin configurations.";
-  } else {
-    for (size_t i = 0; i < inputWsCount; ++i) {
-      const MatrixWorkspace_sptr stateWs = std::dynamic_pointer_cast<MatrixWorkspace>(inputWorkspace->getItem(i));
-      if (!validateInputWorkspace(stateWs, PropertyNames::INPUT_WORKSPACE, errorList)) {
-        return errorList;
-      };
-    }
-  }
   const MatrixWorkspace_sptr analyserWs = getProperty(PropertyNames::ANALYSER_EFFICIENCY);
   if (!validateInputWorkspace(analyserWs, PropertyNames::ANALYSER_EFFICIENCY, errorList)) {
     return errorList;
   }
 
-  const auto &spinStates =
-      PolarizationCorrectionsHelpers::splitSpinStateString(getPropertyValue(PropertyNames::SPIN_STATES));
+  auto const &inputWsCount = inputWorkspace->size();
+  const auto &spinStates = SpinStateHelpers::splitSpinStateString(getPropertyValue(PropertyNames::SPIN_STATES));
   if (spinStates.size() != inputWsCount) {
     errorList[PropertyNames::SPIN_STATES] =
         "The number of workspaces in the input WorkspaceGroup (" + std::to_string(inputWsCount) +
         ") does not match the number of spin states provided (" + std::to_string(spinStates.size()) + ").";
+    return errorList;
   }
-  const auto &t01WsIndex =
-      PolarizationCorrectionsHelpers::indexOfWorkspaceForSpinState(spinStates, FlipperConfigurations::OFF_ON);
-  const auto &t00WsIndex =
-      PolarizationCorrectionsHelpers::indexOfWorkspaceForSpinState(spinStates, FlipperConfigurations::OFF_OFF);
+  const auto &t01WsIndex = SpinStateHelpers::indexOfWorkspaceForSpinState(spinStates, FlipperConfigurations::OFF_ON);
+  const auto &t00WsIndex = SpinStateHelpers::indexOfWorkspaceForSpinState(spinStates, FlipperConfigurations::OFF_OFF);
   if (!t01WsIndex.has_value() || !t00WsIndex.has_value()) {
     errorList[PropertyNames::SPIN_STATES] =
         "The required spin configurations (00, 01) could not be found in the given SpinStates.";
   } else {
     const MatrixWorkspace_sptr t00Ws =
         std::dynamic_pointer_cast<MatrixWorkspace>(inputWorkspace->getItem(t00WsIndex.value()));
-    if (!WorkspaceHelpers::matchingBins(*t00Ws, *analyserWs, true)) {
+    if (!WorkspaceHelpers::matchingBins(t00Ws, analyserWs, true)) {
       errorList[PropertyNames::ANALYSER_EFFICIENCY] = "The bins in the " + std::string(PropertyNames::INPUT_WORKSPACE) +
                                                       " and " + PropertyNames::ANALYSER_EFFICIENCY +
                                                       "workspace do not match.";

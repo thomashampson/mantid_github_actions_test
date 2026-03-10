@@ -7,8 +7,12 @@
 from copy import deepcopy
 import functools
 import json
+from operator import attrgetter
+from pathlib import Path
 import unittest
+from tempfile import TemporaryDirectory
 
+from euphonic.spectra import Spectrum1DCollection, Spectrum2DCollection
 import numpy as np
 from numpy.testing import assert_almost_equal
 from pydantic import ValidationError
@@ -32,17 +36,25 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
     _si2 = "Si2-sc_CalculateSPowder"
     _instruments_defaults = {}
 
-    default_calculator_kwargs = dict(
-        temperature=_temperature, instrument=_instrument, sample_form=_sample_form, quantum_order_num=_order_event, autoconvolution_max=0
-    )
-
     def setUp(self):
         self.default_threads = abins.parameters.performance["threads"]
         abins.parameters.performance["threads"] = 1
         self._instruments_defaults = deepcopy(abins.parameters.instruments)
+        self._temporary_directory = TemporaryDirectory()
+        self.cache_directory = Path(self._temporary_directory.name)
+
+        self.default_calculator_kwargs = dict(
+            temperature=self._temperature,
+            instrument=self._instrument,
+            sample_form=self._sample_form,
+            quantum_order_num=self._order_event,
+            autoconvolution_max=0,
+            cache_directory=self.cache_directory,
+        )
 
     def tearDown(self):
-        abins.test_helpers.remove_output_files(list_of_names=["_CalculateSPowder"])
+        self._temporary_directory.cleanup()
+
         abins.parameters.performance["threads"] = self.default_threads
         abins.parameters.instruments.update(self._instruments_defaults)
 
@@ -61,6 +73,7 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
                 abins_data=good_data,
                 instrument=self._instrument,
                 quantum_order_num=self._order_event,
+                cache_directory=self.cache_directory,
             )
 
         # invalid temperature
@@ -72,6 +85,7 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
                 abins_data=good_data,
                 instrument=self._instrument,
                 quantum_order_num=self._order_event,
+                cache_directory=self.cache_directory,
             )
 
         # invalid sample
@@ -83,6 +97,7 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
                 abins_data=good_data,
                 instrument=self._instrument,
                 quantum_order_num=self._order_event,
+                cache_directory=self.cache_directory,
             )
 
         # invalid abins data: content of abins data instead of object abins_data
@@ -94,6 +109,7 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
                 abins_data=good_data.extract(),
                 instrument=self._instrument,
                 quantum_order_num=self._order_event,
+                cache_directory=self.cache_directory,
             )
 
         # invalid instrument
@@ -105,6 +121,7 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
                 abins_data=good_data,
                 instrument="INSTRUMENT",
                 quantum_order_num=self._order_event,
+                cache_directory=self.cache_directory,
             )
 
     def test_1d_order1(self):
@@ -155,14 +172,14 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
         #                  filename=(data_path / f"{name}_S.txt"))
 
         good_data = self._get_good_data(test_name=test_name, abinsdata_filename=abinsdata_name)
-        self._check_data(good_data=good_data, data=calculated_data.extract())
+        self._check_data(good_data=good_data, data=calculated_data)
 
         # This time the data should be loaded from cache. Check this is consistent with calculation
         if calc_kwargs["instrument"].get_name() in ONE_DIMENSIONAL_INSTRUMENTS:
             new_tester = abins.SCalculatorFactory.init(filename=abinsdata_file, abins_data=abins_data, **calc_kwargs)
             loaded_data = new_tester.load_formatted_data()
 
-            self._check_data(good_data=good_data, data=loaded_data.extract())
+            self._check_data(good_data=good_data, data=loaded_data)
 
     @staticmethod
     @functools.lru_cache(maxsize=4)
@@ -208,16 +225,20 @@ class SCalculatorFactoryPowderTest(unittest.TestCase):
         return correct_data
 
     def _check_data(self, good_data=None, data=None):
-        for array_key in ("frequencies", "q_bins"):
-            if good_data.get(array_key) is not None:
-                assert_almost_equal(good_data[array_key], data[array_key])
+        if isinstance(data, Spectrum1DCollection):
+            assert_almost_equal(good_data["frequencies"], data.x_data.to("1/cm").magnitude)
+            get_s = attrgetter("y_data")
+        elif isinstance(data, Spectrum2DCollection):
+            assert_almost_equal(good_data["q_bins"], data.x_data.to("1/angstrom").magnitude)
+            assert_almost_equal(good_data["frequencies"], data.y_data.to("1/cm").magnitude)
+            get_s = attrgetter("z_data")
 
         n_atoms = len([True for key in good_data if "atom" in key])
         for i in range(n_atoms):
             for order_key in good_data[f"atom_{i}"]["s"]:
                 ref = good_data[f"atom_{i}"]["s"][order_key]
-                calculated = data[f"atom_{i}"]["s"].get(order_key)
-                assert_almost_equal(ref, calculated)
+                calculated = data.select(atom_index=i, quantum_order=int(order_key.split("_")[-1])).sum()
+                assert_almost_equal(ref, get_s(calculated).magnitude)
 
 
 if __name__ == "__main__":

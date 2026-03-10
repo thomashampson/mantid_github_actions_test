@@ -13,11 +13,7 @@
 #include "MantidKernel/IPropertyManager.h"
 #include "MantidKernel/Logger.h"
 #include "MantidKernel/UnitConversion.h"
-
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
+#include "MantidNexus/NexusFile.h"
 
 #include <cmath>
 
@@ -132,7 +128,7 @@ void LeanElasticPeaksWorkspace::removePeaks(std::vector<int> badPeaks) {
     return;
   // if index of peak is in badPeaks remove
   int ip = -1;
-  auto it = std::remove_if(m_peaks.begin(), m_peaks.end(), [&ip, badPeaks](LeanElasticPeak &pk) {
+  auto it = std::remove_if(m_peaks.begin(), m_peaks.end(), [&ip, badPeaks](const LeanElasticPeak &pk) {
     (void)pk;
     ip++;
     return std::any_of(badPeaks.cbegin(), badPeaks.cend(), [ip](int badPeak) { return badPeak == ip; });
@@ -146,7 +142,7 @@ void LeanElasticPeaksWorkspace::removePeaks(std::vector<int> badPeaks) {
  */
 void LeanElasticPeaksWorkspace::addPeak(const Geometry::IPeak &ipeak) {
   if (dynamic_cast<const LeanElasticPeak *>(&ipeak)) {
-    m_peaks.emplace_back((const LeanElasticPeak &)ipeak);
+    m_peaks.emplace_back(static_cast<const LeanElasticPeak &>(ipeak));
   } else {
     m_peaks.emplace_back(LeanElasticPeak(ipeak));
   }
@@ -173,8 +169,8 @@ void LeanElasticPeaksWorkspace::addPeak(LeanElasticPeak &&peak) { m_peaks.emplac
  * @param peakNum :: index of the peak to get.
  * @return a reference to a Peak object.
  */
-LeanElasticPeak &LeanElasticPeaksWorkspace::getPeak(const int peakNum) {
-  if (peakNum >= static_cast<int>(m_peaks.size()) || peakNum < 0) {
+LeanElasticPeak &LeanElasticPeaksWorkspace::getPeak(size_t const peakNum) {
+  if (peakNum >= m_peaks.size()) {
     throw std::invalid_argument("LeanElasticPeaksWorkspace::getPeak(): peakNum is out of range.");
   }
   return m_peaks[peakNum];
@@ -185,8 +181,8 @@ LeanElasticPeak &LeanElasticPeaksWorkspace::getPeak(const int peakNum) {
  * @param peakNum :: index of the peak to get.
  * @return a reference to a Peak object.
  */
-const LeanElasticPeak &LeanElasticPeaksWorkspace::getPeak(const int peakNum) const {
-  if (peakNum >= static_cast<int>(m_peaks.size()) || peakNum < 0) {
+const LeanElasticPeak &LeanElasticPeaksWorkspace::getPeak(size_t const peakNum) const {
+  if (peakNum >= m_peaks.size()) {
     throw std::invalid_argument("LeanElasticPeaksWorkspace::getPeak(): peakNum is out of range.");
   }
   return m_peaks[peakNum];
@@ -406,7 +402,7 @@ std::shared_ptr<const Mantid::API::Column> LeanElasticPeaksWorkspace::getColumn(
   return m_columns[index];
 }
 
-void LeanElasticPeaksWorkspace::saveNexus(::NeXus::File *file) const {
+void LeanElasticPeaksWorkspace::saveNexus(Nexus::File *file) const {
 
   // Number of Peaks
   const size_t np(m_peaks.size());
@@ -590,9 +586,7 @@ void LeanElasticPeaksWorkspace::saveNexus(::NeXus::File *file) const {
   file->closeData();
 
   // Goniometer Matrix Column
-  std::vector<int> array_dims;
-  array_dims.emplace_back(static_cast<int>(m_peaks.size()));
-  array_dims.emplace_back(9);
+  const Nexus::DimVector array_dims{m_peaks.size(), 9};
   file->writeData("column_13", goniometerMatrix, array_dims);
   file->openData("column_13");
   file->putAttr("name", "Goniometer Matrix");
@@ -601,11 +595,11 @@ void LeanElasticPeaksWorkspace::saveNexus(::NeXus::File *file) const {
   file->closeData();
 
   // Shape
-  std::vector<int64_t> dims;
+  Nexus::DimVector dims;
   dims.emplace_back(np);
   dims.emplace_back(static_cast<int>(maxShapeJSONLength));
   const std::string name = "column_14";
-  file->makeData(name, NeXus::CHAR, dims, false);
+  file->makeData(name, NXnumtype::CHAR, dims, false);
   file->openData(name);
 
   auto toNexus = new char[maxShapeJSONLength * np];
@@ -617,7 +611,7 @@ void LeanElasticPeaksWorkspace::saveNexus(::NeXus::File *file) const {
       toNexus[ii * maxShapeJSONLength + ic] = ' ';
   }
 
-  file->putData((void *)(toNexus));
+  file->putData(toNexus);
 
   delete[] toNexus;
   file->putAttr("units", "Not known"); // Units may need changing when known
@@ -626,9 +620,7 @@ void LeanElasticPeaksWorkspace::saveNexus(::NeXus::File *file) const {
   file->closeData();
 
   // Qlab
-  std::vector<int> qlab_dims;
-  qlab_dims.emplace_back(static_cast<int>(m_peaks.size()));
-  qlab_dims.emplace_back(3);
+  const Nexus::DimVector qlab_dims{m_peaks.size(), 3};
   file->writeData("column_15", qlabs, qlab_dims);
   file->openData("column_15");
   file->putAttr("name", "Q LabFrame");
@@ -710,9 +702,8 @@ IPropertyManager::getValue<Mantid::DataObjects::LeanElasticPeaksWorkspace_sptr>(
 template <>
 DLLExport Mantid::DataObjects::LeanElasticPeaksWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::LeanElasticPeaksWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::DataObjects::LeanElasticPeaksWorkspace_sptr> *>(
-      getPointerToProperty(name));
-  if (prop) {
+  if (const auto *prop = dynamic_cast<PropertyWithValue<Mantid::DataObjects::LeanElasticPeaksWorkspace_sptr> *>(
+          getPointerToProperty(name))) {
     return prop->operator()();
   } else {
     std::string message = "Attempt to assign property " + name +

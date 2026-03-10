@@ -18,9 +18,11 @@
 #
 # Possible parameters:
 #   --package-suffix: An optional suffix to pass to the standalone package step.
+#   --platform: Target platform, e.g. linux-64
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source $SCRIPT_DIR/mamba-utils
+source $SCRIPT_DIR/pixi-utils
+REPO_ROOT_DIR=$SCRIPT_DIR/../../..
 
 # Setup expected variables
 WORKSPACE=$1
@@ -44,11 +46,15 @@ fi
 
 # Parse options
 STANDALONE_PACKAGE_SUFFIX=
+PLATFORM=""
 while [ ! $# -eq 0 ]
 do
     case "$1" in
         --package-suffix)
             STANDALONE_PACKAGE_SUFFIX="$2"
+            shift ;;
+        --platform)
+            PLATFORM="$2"
             shift ;;
         *)
             echo "Argument not accepted: $1"
@@ -58,32 +64,36 @@ do
   shift
 done
 
-# Mamba
-setup_mamba $WORKSPACE/mambaforge "package-standalone"
-# Pin conda to known working version. In 24.9 the post-link.bat script doesn't work.
-mamba install --yes mamba=1.5 conda-build conda=24.7
+# pixi
+install_pixi
+
+echo "pixi package-standalone environment:"
+pixi list --manifest-path $REPO_ROOT_DIR/pixi.toml -e package-standalone --frozen
 
 # Build packages
 # Setup a local conda channel to find our locally built packages package. It is
 # assumed the raw .bz2 artefacts have been copied into the directory below
 LOCAL_CHANNEL_PATH=$WORKSPACE/conda-bld
-python -m conda_index $LOCAL_CHANNEL_PATH
+pixi run --manifest-path $REPO_ROOT_DIR/pixi.toml -e package-standalone --frozen rattler-index fs $LOCAL_CHANNEL_PATH
 
 # Jenkins Pipeline expects packages in the root workspace directory
-cd $WORKSPACE
 PACKAGING_SCRIPTS_DIR=$SCRIPT_DIR/../../../installers/conda
 LOCAL_CHANNEL=file://$LOCAL_CHANNEL_PATH
 PACKAGING_ARGS="-c ${LOCAL_CHANNEL}"
 if [ -n "${STANDALONE_PACKAGE_SUFFIX}" ]; then
     PACKAGING_ARGS="${PACKAGING_ARGS} -s ${STANDALONE_PACKAGE_SUFFIX}"
 fi
+
 if [[ $OSTYPE == 'msys'* ]]; then
     rm -fr *.exe
-    ${PACKAGING_SCRIPTS_DIR}/win/create_package.sh $PACKAGING_ARGS
+    pixi run --manifest-path $REPO_ROOT_DIR/pixi.toml -e package-standalone --frozen bash -e ${PACKAGING_SCRIPTS_DIR}/win/create_package.sh $PACKAGING_ARGS
 elif [[ $OSTYPE == 'darwin'* ]]; then
     rm -fr *.dmg
-    ${PACKAGING_SCRIPTS_DIR}/osx/create_bundle.sh $PACKAGING_ARGS
+    if [ -n "${PLATFORM}" ]; then
+        PACKAGING_ARGS="${PACKAGING_ARGS} -p ${PLATFORM}"
+    fi
+    pixi run --manifest-path $REPO_ROOT_DIR/pixi.toml -e package-standalone --frozen bash ${PACKAGING_SCRIPTS_DIR}/osx/create_bundle.sh $PACKAGING_ARGS
 else
     rm -fr *.tar.xz
-    ${PACKAGING_SCRIPTS_DIR}/linux/create_tarball.sh $PACKAGING_ARGS
+    pixi run --manifest-path $REPO_ROOT_DIR/pixi.toml -e package-standalone --frozen bash ${PACKAGING_SCRIPTS_DIR}/linux/create_tarball.sh $PACKAGING_ARGS
 fi

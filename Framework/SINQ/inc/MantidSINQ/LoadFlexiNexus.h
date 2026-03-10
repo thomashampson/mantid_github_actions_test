@@ -27,16 +27,10 @@
 #pragma once
 
 #include "MantidAPI/Algorithm.h"
-#include "MantidSINQ/DllConfig.h"
-
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
-
-#include "MantidDataObjects/Workspace2D.h"
+#include "MantidAPI/ExperimentInfo.h"
 #include "MantidGeometry/MDGeometry/MDHistoDimension.h"
-#include <memory>
+#include "MantidNexus/NexusFile.h"
+#include "MantidSINQ/DllConfig.h"
 
 class MANTID_SINQ_DLL LoadFlexiNexus : public Mantid::API::Algorithm {
 public:
@@ -62,23 +56,23 @@ private:
 
   void loadDictionary(const std::string &dictionaryFile);
 
-  void load2DWorkspace(NeXus::File *fin);
+  void load2DWorkspace(Mantid::Nexus::File *fin);
 
-  void loadMD(NeXus::File *fin);
+  void loadMD(Mantid::Nexus::File *fin);
 
-  void readData(NeXus::File *fin);
+  void readData(Mantid::Nexus::File *fin);
 
   /// Personal wrapper for sqrt to allow msvs to compile
   static double dblSqrt(double in);
 
-  Mantid::Geometry::MDHistoDimension_sptr makeDimension(NeXus::File *fin, int index, int length);
+  Mantid::Geometry::MDHistoDimension_sptr makeDimension(Mantid::Nexus::File *fin, int index, int length);
 
   std::unordered_set<std::string> populateSpecialMap();
 
-  void addMetaData(NeXus::File *fin, const Mantid::API::Workspace_sptr &ws,
+  void addMetaData(Mantid::Nexus::File *fin, const Mantid::API::Workspace_sptr &ws,
                    const Mantid::API::ExperimentInfo_sptr &info);
 
-  int safeOpenpath(NeXus::File *fin, const std::string &path);
+  int safeOpenAddress(Mantid::Nexus::File *fin, const std::string &path);
   int calculateCAddress(const int *pos, const int *dim, int rank);
   int calculateF77Address(int *pos, int rank);
 };

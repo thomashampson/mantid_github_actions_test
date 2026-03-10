@@ -18,20 +18,20 @@
 #include "MantidGeometry/Surfaces/Cylinder.h"
 #include "MantidKernel/ConfigService.h"
 #include "MantidKernel/EigenConversionHelpers.h"
+#include "MantidKernel/Glob.h"
 #include "MantidNexus/H5Util.h"
 #include "MantidNexusGeometry/NexusGeometryDefinitions.h"
 #include "MantidNexusGeometry/NexusGeometryParser.h"
 
 #include "mockobjects.h"
 #include <H5Cpp.h>
-#include <Poco/Glob.h>
 #include <chrono>
 #include <gmock/gmock.h>
 #include <string>
 
 using namespace Mantid;
 using namespace NexusGeometry;
-using namespace Mantid::NeXus;
+using namespace Mantid::Nexus;
 
 namespace {
 std::unique_ptr<Geometry::DetectorInfo> extractDetectorInfo(const Mantid::Geometry::Instrument &instrument) {
@@ -47,7 +47,7 @@ extractBeamline(const Mantid::Geometry::Instrument &instrument) {
 }
 
 std::string instrument_path(const std::string &local_name) {
-  return Kernel::ConfigService::Instance().getFullPath(local_name, true, Poco::Glob::GLOB_DEFAULT);
+  return Kernel::ConfigService::Instance().getFullPath(local_name, true, Kernel::Glob::GLOB_DEFAULT);
 }
 
 } // namespace
@@ -67,10 +67,11 @@ public:
     {
       // Load the multiple NXentry test input.
       // (See notes about `NexusGeometrySave` and `NexusGeometryParser` at `_verify_basic_instrument` below.)
-      H5::H5File input(instrument_path("unit_testing/SMALLFAKE_example_multiple_entries.hdf5"), H5F_ACC_RDONLY);
+      H5::H5File input(instrument_path("unit_testing/SMALLFAKE_example_multiple_entries.hdf5"), H5F_ACC_RDONLY,
+                       Mantid::Nexus::H5Util::defaultFileAcc());
 
       // Copy all of the NXentry groups to a new file.
-      H5::H5File testInput(multipleEntryInput.fullPath(), H5F_ACC_TRUNC);
+      H5::H5File testInput(multipleEntryInput.fullPath(), H5F_ACC_TRUNC, Mantid::Nexus::H5Util::defaultFileAcc());
       H5Util::copyGroup(testInput, "/mantid_workspace_1", input, "/mantid_workspace_1");
       H5Util::copyGroup(testInput, "/mantid_workspace_2", input, "/mantid_workspace_2");
       H5Util::copyGroup(testInput, "/mantid_workspace_3", input, "/mantid_workspace_3");

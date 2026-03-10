@@ -11,7 +11,8 @@ import pip
 import shutil
 import site
 import subprocess
-import urllib2
+import importlib
+import requests
 
 
 FAILED_DOWNLOAD_MESSAGE = (
@@ -38,8 +39,8 @@ def download_bootstrap(revision_number, target_location):
     if revision_number:
         url += "?r={}".format(revision_number)
 
-    response = urllib2.urlopen(url)
-    bootstrap_file = response.read()
+    response = requests.get(url, timeout=10)
+    bootstrap_file = response.text
     response.close()
 
     with open(target_location, "w") as out_file:
@@ -48,7 +49,7 @@ def download_bootstrap(revision_number, target_location):
 
 def package_is_installed(package_name):
     try:
-        exec("import " + package_name)
+        importlib.import_module(package_name)
     except ImportError:
         return False
     return True
@@ -90,7 +91,7 @@ if __name__ == "__main__":
         default=os.path.abspath(os.sep),
         type=str,
         dest="install_dir",
-        help="Directory to install GSAS-II in " "(leave blank to use current drive (Windows) or / (Linux)",
+        help="Directory to install GSAS-II in (leave blank to use current drive (Windows) or / (Linux)",
     )
 
     parser.add_argument(
@@ -108,7 +109,7 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         dest="build_server_mode",
-        help="Build server mode. Install GSAS-II in Python user site package directory " "and don't wait for prompt before exiting",
+        help="Build server mode. Install GSAS-II in Python user site package directory and don't wait for prompt before exiting",
     )
 
     parser.add_argument(
@@ -117,8 +118,7 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         dest="force_overwrite",
-        help="Force overwrite mode. If a GSAS-II installation is found at the requested "
-        "directory, remove it and perform a fresh install",
+        help="Force overwrite mode. If a GSAS-II installation is found at the requested directory, remove it and perform a fresh install",
     )
 
     args = parser.parse_args()

@@ -11,7 +11,6 @@
 #include "MantidAPI/MatrixWorkspace_fwd.h"
 #include "MantidCurveFitting/DllConfig.h"
 #include "MantidCurveFitting/Functions/BackgroundFunction.h"
-#include "MantidKernel/System.h"
 
 namespace Mantid {
 namespace HistogramData {
@@ -59,7 +58,7 @@ public:
   void setPeakCentreTolerance(double peakpostol, double tofmin, double tofmax);
 
   /// Generate peaks, and add them to this composite function
-  void addPeaks(std::vector<std::vector<int>> peakhkls);
+  void addPeaks(const std::vector<std::vector<int>> &peakhkls);
 
   /// Add background function
   void addBackgroundFunction(const std::string &backgroundtype, const unsigned int &order,

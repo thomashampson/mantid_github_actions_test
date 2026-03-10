@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 from unittest.mock import patch, call
 from numpy import isnan, nan
+import os
 
 from mantid import FunctionFactory
 from mantid.kernel import UnitParams, UnitParametersMap
@@ -120,35 +121,69 @@ class FittingPlotModelTest(unittest.TestCase):
         }
         return fitprop
 
-    @patch(plot_model_path + ".FittingPlotModel._get_diff_constants")
-    @patch(plot_model_path + ".FittingPlotModel.create_fit_tables")
-    @patch(plot_model_path + ".ADS")
-    def test_update_fit(self, mock_ads, mock_create_fit_tables, mock_get_diffs):
+    def _run_update_fit(
+        self, mock_ads, mock_create_fit_tables, mock_get_diffs, mock_ws_is_tof, is_tof, mock_table_return_values, func_str, target_results
+    ):
         mock_loaded_ws_list = mock.MagicMock()
         mock_active_ws_list = mock.MagicMock()
         mock_log_ws_name = mock.MagicMock()
+        mock_ws_is_tof.return_value = is_tof
+
+        fitprop = self._setup_update_fit_test(mock_table_return_values, mock_ads, mock_get_diffs, func_str, ["Gaussian_PeakCentre"])
+        self.model.update_fit([fitprop], mock_loaded_ws_list, mock_active_ws_list, mock_log_ws_name)
+
+        self.assertEqual(self.model._fit_results["name1"]["model"], func_str)
+        self.assertEqual(self.model._fit_results["name1"]["results"], target_results)
+        mock_create_fit_tables.assert_called_once_with(mock_loaded_ws_list, mock_active_ws_list, mock_log_ws_name)
+        if is_tof:
+            self.assertEqual(mock_get_diffs.call_count, 4)  # twice for each peak
+        else:
+            self.assertEqual(mock_get_diffs.call_count, 0)
+
+    @patch(plot_model_path + ".FittingPlotModel._ws_is_tof")
+    @patch(plot_model_path + ".FittingPlotModel._get_diff_constants")
+    @patch(plot_model_path + ".FittingPlotModel.create_fit_tables")
+    @patch(plot_model_path + ".ADS")
+    def test_update_fit_in_tof(self, mock_ads, mock_create_fit_tables, mock_get_diffs, mock_ws_is_tof):
+        is_tof = True
         mock_table_return_values = {
             "Name": ["f0.Height", "f0.PeakCentre", "f0.Sigma", "f1.Height", "f1.PeakCentre", "f1.Sigma", "Cost function value"],
             "Value": [11.0, 40000.0, 54.0, 10.0, 30000.0, 51.0, 1.0],
             "Error": [1.0, 10.0, 2.0, 1.0, 10.0, 2.0, 0.0],
         }
         func_str = "name=Gaussian,Height=11,PeakCentre=40000,Sigma=54;name=Gaussian,Height=10,PeakCentre=30000,Sigma=51"
-        fitprop = self._setup_update_fit_test(mock_table_return_values, mock_ads, mock_get_diffs, func_str, ["Gaussian_PeakCentre"])
-        self.model.update_fit([fitprop], mock_loaded_ws_list, mock_active_ws_list, mock_log_ws_name)
-
-        self.assertEqual(self.model._fit_results["name1"]["model"], func_str)
-        self.assertEqual(
-            self.model._fit_results["name1"]["results"],
-            {
-                "Gaussian_Height": [[11.0, 1.0], [10.0, 1.0]],
-                "Gaussian_PeakCentre": [[40000.0, 10.0], [30000.0, 10.0]],
-                "Gaussian_PeakCentre_dSpacing": [[4.0, 1.0e-3], [3.0, 1.0e-3]],
-                "Gaussian_Sigma": [[54.0, 2.0], [51.0, 2.0]],
-                "Gaussian_fwhm": [self._get_fwhm_values(func_str, 0), self._get_fwhm_values(func_str, 1)],
-            },
+        target_results = {
+            "Gaussian_Height": [[11.0, 1.0], [10.0, 1.0]],
+            "Gaussian_PeakCentre": [[40000.0, 10.0], [30000.0, 10.0]],
+            "Gaussian_PeakCentre_dSpacing": [[4.0, 1.0e-3], [3.0, 1.0e-3]],
+            "Gaussian_Sigma": [[54.0, 2.0], [51.0, 2.0]],
+            "Gaussian_fwhm": [self._get_fwhm_values(func_str, 0), self._get_fwhm_values(func_str, 1)],
+        }
+        self._run_update_fit(
+            mock_ads, mock_create_fit_tables, mock_get_diffs, mock_ws_is_tof, is_tof, mock_table_return_values, func_str, target_results
         )
-        mock_create_fit_tables.assert_called_once_with(mock_loaded_ws_list, mock_active_ws_list, mock_log_ws_name)
-        self.assertEqual(mock_get_diffs.call_count, 4)  # twice for each peak
+
+    @patch(plot_model_path + ".FittingPlotModel._ws_is_tof")
+    @patch(plot_model_path + ".FittingPlotModel._get_diff_constants")
+    @patch(plot_model_path + ".FittingPlotModel.create_fit_tables")
+    @patch(plot_model_path + ".ADS")
+    def test_update_fit_in_d_spacing(self, mock_ads, mock_create_fit_tables, mock_get_diffs, mock_ws_is_tof):
+        is_tof = False
+        mock_table_return_values = {
+            "Name": ["f0.Height", "f0.PeakCentre", "f0.Sigma", "f1.Height", "f1.PeakCentre", "f1.Sigma", "Cost function value"],
+            "Value": [11.0, 4.0, 54.0, 10.0, 3.0, 51.0, 1.0],
+            "Error": [1.0, 10.0, 2.0, 1.0, 10.0, 2.0, 0.0],
+        }
+        func_str = "name=Gaussian,Height=11,PeakCentre=4,Sigma=54;name=Gaussian,Height=10,PeakCentre=3,Sigma=51"
+        target_results = {
+            "Gaussian_Height": [[11.0, 1.0], [10.0, 1.0]],
+            "Gaussian_PeakCentre": [[4.0, 10.0], [3.0, 10.0]],
+            "Gaussian_Sigma": [[54.0, 2.0], [51.0, 2.0]],
+            "Gaussian_fwhm": [self._get_fwhm_values(func_str, 0), self._get_fwhm_values(func_str, 1)],
+        }
+        self._run_update_fit(
+            mock_ads, mock_create_fit_tables, mock_get_diffs, mock_ws_is_tof, is_tof, mock_table_return_values, func_str, target_results
+        )
 
     @patch(plot_model_path + ".FittingPlotModel._convert_TOFerror_to_derror")
     @patch(plot_model_path + ".FittingPlotModel._convert_TOF_to_d")
@@ -211,15 +246,17 @@ class FittingPlotModelTest(unittest.TestCase):
 
     @patch(plot_model_path + ".FittingPlotModel._convert_TOFerror_to_derror")
     @patch(plot_model_path + ".FittingPlotModel._convert_TOF_to_d")
+    @patch(plot_model_path + ".FittingPlotModel._ws_is_tof")
     @patch(plot_model_path + ".FittingPlotModel._get_diff_constants")
     @patch(plot_model_path + ".FittingPlotModel.create_fit_tables")
     @patch(plot_model_path + ".ADS")
     def test_update_fit_with_composite_peak_and_user_function(
-        self, mock_ads, mock_create_fit_tables, mock_get_diffs, mock_conv_tof_to_d, mock_conv_tof_e
+        self, mock_ads, mock_create_fit_tables, mock_get_diffs, mock_ws_is_tof, mock_conv_tof_to_d, mock_conv_tof_e
     ):
         mock_loaded_ws_list = mock.MagicMock()
         mock_active_ws_list = mock.MagicMock()
         mock_log_ws_name = mock.MagicMock()
+        mock_ws_is_tof.return_value = True
         mock_table_return_values = {
             "Name": [
                 "f0.Height",
@@ -278,18 +315,20 @@ class FittingPlotModelTest(unittest.TestCase):
 
     @patch(plot_model_path + ".FittingPlotModel._convert_TOFerror_to_derror")
     @patch(plot_model_path + ".FittingPlotModel._convert_TOF_to_d")
+    @patch(plot_model_path + ".FittingPlotModel._ws_is_tof")
     @patch(plot_model_path + ".FittingPlotModel._get_diff_constants")
     @patch(plot_model_path + ".GroupWorkspaces")
     @patch(plot_model_path + ".CreateWorkspace")
     @patch(plot_model_path + ".ADS")
     def test_update_fit_with_func_having_fwhm_params(
-        self, mock_ads, mock_create_ws, mock_group_ws, mock_get_diffs, mock_conv_tof_to_d, mock_conv_tof_e
+        self, mock_ads, mock_create_ws, mock_group_ws, mock_get_diffs, mock_ws_is_tof, mock_conv_tof_to_d, mock_conv_tof_e
     ):
         mock_loaded_ws_list = mock.MagicMock()
         mock_loaded_ws_list.__len__.return_value = 1
         mock_active_ws_list = mock.MagicMock()
         mock_log_ws_name = mock.MagicMock()
         mock_log_ws_name.split.return_value = "log_workspace"
+        mock_ws_is_tof.return_value = True
         mock_table_return_values = {
             "Name": [
                 "f0.Mixing",
@@ -415,11 +454,12 @@ class FittingPlotModelTest(unittest.TestCase):
         }
         return mock_ws_list, mock_create_table, mock_create_ws, loaded_ws_list, active_ws_list, log_workspaces_name
 
+    @patch(plot_model_path + ".FittingPlotModel.create_bank_fit_summary_tables_by_run")
     @patch(plot_model_path + ".write_table_row")
     @patch(plot_model_path + ".GroupWorkspaces")
     @patch(plot_model_path + ".CreateEmptyTableWorkspace")
     @patch(plot_model_path + ".CreateWorkspace")
-    def test_create_fit_tables(self, mock_create_ws, mock_create_table, mock_groupws, mock_writerow):
+    def test_create_fit_tables(self, mock_create_ws, mock_create_table, mock_groupws, mock_writerow, mock_create_summary_table):
         (
             mock_ws_list,
             mock_create_table,
@@ -459,11 +499,14 @@ class FittingPlotModelTest(unittest.TestCase):
                     self.assertTrue(all(isnan(argsY[1])))
                     self.assertTrue(all(isnan(argsE[1])))
 
+    @patch(plot_model_path + ".FittingPlotModel.create_bank_fit_summary_tables_by_run")
     @patch(plot_model_path + ".write_table_row")
     @patch(plot_model_path + ".GroupWorkspaces")
     @patch(plot_model_path + ".CreateEmptyTableWorkspace")
     @patch(plot_model_path + ".CreateWorkspace")
-    def test_create_fit_tables_different_funcs(self, mock_create_ws, mock_create_table, mock_groupws, mock_writerow):
+    def test_create_fit_tables_different_funcs(
+        self, mock_create_ws, mock_create_table, mock_groupws, mock_writerow, mock_create_summary_table
+    ):
         (
             mock_ws_list,
             mock_create_table,
@@ -515,18 +558,116 @@ class FittingPlotModelTest(unittest.TestCase):
         # test only table for unique parameter
         self.assertEqual(sorted(ws_names), sorted(param_names))
 
-    @patch(plot_model_path + ".FittingPlotModel._get_diff_constants")
-    def test_convert_centres_and_error_from_TOF_to_d(self, mock_get_diffs):
-        params = UnitParametersMap()
-        params[UnitParams.difc] = 18000
-        mock_get_diffs.return_value = params
-        tof = 40000
-        tof_error = 5
-        d = self.model._convert_TOF_to_d(tof, "ws_name")
-        d_error = self.model._convert_TOFerror_to_derror(tof_error, d, "ws_name")
+    @patch(f"{plot_model_path}.CreateEmptyTableWorkspace")
+    @patch.object(plot_model.FittingPlotModel, "_save_files")
+    @patch(f"{plot_model_path}.ADS")
+    def test_create_bank_fit_summary_tables_by_run_creates_expected_table(self, mock_ads, mock_save_files, mock_create_table):
+        # Setup fit results
+        self.model._fit_results = {
+            "run123456_bank_1": {"results": {"Gaussian_Height": [[10.0, 1.0]]}, "costFunction": 1.5},
+            "run123456_bank_2": {"results": {"Gaussian_Height": [[20.0, 2.0]]}, "costFunction": 1.2},
+        }
 
-        self.assertAlmostEqual(tof / d, 18000, delta=1e-10)
-        self.assertAlmostEqual(d_error / d, tof_error / tof, delta=1e-10)
+        # Configure mock behavior
+        # we want to mock it so the bank id returned is dependent on the ws retrieved, hence the nonlocal current_ws
+        def get_log_data(key):
+            if key == "run_number":
+                return mock.Mock(value="123456")
+            elif key == "bankid":
+                return mock.Mock(value="bank 1" if current_ws == "run123456_bank_1" else "bank 2")
+            elif key == "Grouping":
+                return mock.Mock(value="Both")
+            return mock.Mock(value="")
+
+        def retrieve_side_effect(name):
+            nonlocal current_ws
+            current_ws = name
+            # each mock ADS retrieve call will change the current_ws variable so the get_log_data can alter return vals
+            return self.mock_ws
+
+        current_ws = ""
+        mock_ads.retrieve.side_effect = retrieve_side_effect
+        self.mock_run.getLogData.side_effect = get_log_data
+
+        # Mock table
+        mock_table = mock.MagicMock()
+        mock_create_table.return_value = mock_table
+
+        # Run test
+        active_ws_list = ["run123456_bank_1", "run123456_bank_2"]
+        tables = self.model.create_bank_fit_summary_tables_by_run(self.model._fit_results, active_ws_list)
+
+        # Validate
+        self.assertIn("123456", tables)
+
+        mock_create_table.assert_called_once()
+        mock_table.addColumn.assert_any_call("str", "Bank")
+        mock_table.addColumn.assert_any_call("double", "Height")
+        mock_table.addColumn.assert_any_call("double", "Height_Error")
+        mock_table.addColumn.assert_any_call("double", "chi2")
+
+        # Two workspaces should generate two rows
+        mock_table.addRow.assert_has_calls(
+            [call(["run123456_bank_1", 10.0, 1.0, 1.5]), call(["run123456_bank_2", 20.0, 2.0, 1.2])], any_order=True
+        )
+        self.assertEqual(mock_table.addRow.call_count, 2)
+
+        # Ensure save was called with expected table name format
+        expected_prefix = "run123456_"
+        expected_name_fragment = "_Both_Fit_Parameters"
+        saved_table_name = mock_create_table.call_args[1]["OutputWorkspace"]
+        self.assertTrue(saved_table_name.startswith(expected_prefix))
+        self.assertTrue(saved_table_name.endswith(expected_name_fragment))
+
+        mock_save_files.assert_called_once_with(saved_table_name, "FitParameters", "Both")
+
+    def run_the_save_tests(self, expected_dirs, mock_makedirs, mock_save):
+        mock_makedirs.assert_has_calls([call(d) for d in expected_dirs])
+        mock_save.assert_has_calls([call(InputWorkspace="param_ws", Filename=os.path.join(d, "param_ws.nxs")) for d in expected_dirs])
+
+    @patch(f"{plot_model_path}.SaveNexus")
+    @patch(f"{plot_model_path}.makedirs")
+    @patch(f"{plot_model_path}.path.exists", return_value=False)
+    @patch(f"{plot_model_path}.output_settings.get_output_path", return_value=os.path.join("mock", "output"))
+    def test_save_files_with_group_creates_dirs_and_saves(self, mock_output_path, mock_exists, mock_makedirs, mock_save):
+        self.model._rb_num = "RB123"
+        self.model._save_files("param_ws", "FitParameters", "1.00", grouping="Texture20")
+
+        expected_dirs = [
+            os.path.join("mock", "output", "FitParameters", "1.00"),
+            os.path.join("mock", "output", "User", "RB123", "FitParameters", "Texture20", "1.00"),
+        ]
+
+        self.run_the_save_tests(expected_dirs, mock_makedirs, mock_save)
+
+    @patch(f"{plot_model_path}.SaveNexus")
+    @patch(f"{plot_model_path}.makedirs")
+    @patch(f"{plot_model_path}.path.exists", return_value=False)
+    @patch(f"{plot_model_path}.output_settings.get_output_path", return_value=os.path.join("mock", "output"))
+    def test_save_files_with_no_group_creates_dirs_and_saves(self, mock_output_path, mock_exists, mock_makedirs, mock_save):
+        self.model._rb_num = "RB123"
+        self.model._save_files("param_ws", "FitParameters", "1.00", grouping="")
+
+        expected_dirs = [
+            os.path.join("mock", "output", "FitParameters", "1.00"),
+            os.path.join("mock", "output", "User", "RB123", "FitParameters", "1.00"),
+        ]
+
+        self.run_the_save_tests(expected_dirs, mock_makedirs, mock_save)
+
+    @patch(f"{plot_model_path}.SaveNexus")
+    @patch(f"{plot_model_path}.makedirs")
+    @patch(f"{plot_model_path}.path.exists", return_value=False)
+    @patch(f"{plot_model_path}.output_settings.get_output_path", return_value=os.path.join("mock", "output"))
+    def test_save_files_with_no_RB_creates_dirs_and_saves(self, mock_output_path, mock_exists, mock_makedirs, mock_save):
+        self.model._rb_num = None
+        self.model._save_files("param_ws", "FitParameters", "1.00", grouping="")
+
+        expected_dirs = [
+            os.path.join("mock", "output", "FitParameters", "1.00"),
+        ]
+
+        self.run_the_save_tests(expected_dirs, mock_makedirs, mock_save)
 
     def _get_sample_findpeaksconvolve_group_ws(self):
         peak_centers = CreateEmptyTableWorkspace(OutputWorkspace="PeakCentre")

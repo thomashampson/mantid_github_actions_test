@@ -6,7 +6,6 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidAlgorithms/PolarizationEfficiencyCor.h"
 #include "MantidAlgorithms/PolarizationCorrections/PolarizationCorrectionsHelpers.h"
-#include "MantidAlgorithms/PolarizationCorrections/SpinStateValidator.h"
 
 #include "MantidAPI/ADSValidator.h"
 #include "MantidAPI/Axis.h"
@@ -17,6 +16,7 @@
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/EnabledWhenProperty.h"
 #include "MantidKernel/ListValidator.h"
+#include "MantidKernel/SpinStateValidator.h"
 #include "MantidKernel/StringTokenizer.h"
 
 #include <Eigen/Dense>
@@ -96,21 +96,13 @@ void PolarizationEfficiencyCor::init() {
       "histograms: P1, P2, F1 and F2 in the Wildes method and Pp, "
       "Ap, Rho and Alpha for Fredrikze.");
 
-  const std::string full = std::string(FlipperConfigurations::OFF_OFF) + ", " + FlipperConfigurations::OFF_ON + ", " +
-                           FlipperConfigurations::ON_OFF + ", " + FlipperConfigurations::ON_ON;
-  const std::string missing01 = std::string(FlipperConfigurations::OFF_OFF) + ", " + FlipperConfigurations::ON_OFF +
-                                ", " + FlipperConfigurations::ON_ON;
-  const std::string missing10 = std::string(FlipperConfigurations::OFF_OFF) + ", " + FlipperConfigurations::OFF_ON +
-                                ", " + FlipperConfigurations::ON_ON;
-  const std::string missing0110 = std::string(FlipperConfigurations::OFF_OFF) + ", " + FlipperConfigurations::ON_ON;
-  const std::string noAnalyzer = std::string(FlipperConfigurations::OFF) + ", " + FlipperConfigurations::ON;
-  const std::string directBeam = std::string(FlipperConfigurations::OFF);
-  const std::vector<std::string> setups{{"", full, missing01, missing10, missing0110, noAnalyzer, directBeam}};
-  declareProperty(Prop::FLIPPERS, "", std::make_shared<Kernel::ListValidator<std::string>>(setups),
+  const auto wildesFlipperValidator =
+      std::make_shared<SpinStateValidator>(std::unordered_set<int>{1, 2, 3, 4}, true, "0", "1", true);
+  declareProperty(Prop::FLIPPERS, "", wildesFlipperValidator,
                   "Flipper configurations of the input workspaces  (Wildes method only)");
 
   const auto spinStateValidator =
-      std::make_shared<SpinStateValidator>(std::unordered_set<int>{0, 2, 4}, true, '+', '-', true);
+      std::make_shared<SpinStateValidator>(std::unordered_set<int>{0, 2, 4}, true, "+", "-", true);
   declareProperty(Prop::OUTPUT_WILDES_SPIN_STATES, "", spinStateValidator,
                   "The order of the spin states in the output workspace. (Wildes method only).");
 
@@ -122,7 +114,7 @@ void PolarizationEfficiencyCor::init() {
                   "(Fredrikze method only)");
 
   const auto fredrikzeSpinStateValidator =
-      std::make_shared<SpinStateValidator>(std::unordered_set<int>{2, 4}, true, 'p', 'a', true);
+      std::make_shared<SpinStateValidator>(std::unordered_set<int>{2, 4}, true, "p", "a", true);
 
   declareProperty(Prop::INPUT_FRED_SPIN_STATES, "", fredrikzeSpinStateValidator,
                   "The order of spin states in the input workspace group. The possible values are 'pp,pa,ap,aa' or "
@@ -138,7 +130,7 @@ void PolarizationEfficiencyCor::init() {
 
   declareProperty(Prop::ADD_SPIN_STATE_LOG, false,
                   "Whether to add the final spin state into the sample log of each child workspace in the output "
-                  "group. (Wildes method only).");
+                  "group.");
 
   setPropertySettings(
       Prop::OUTPUT_WILDES_SPIN_STATES,
@@ -277,6 +269,13 @@ std::vector<std::string> PolarizationEfficiencyCor::getWorkspaceNameList() const
   std::vector<std::string> wsNames;
   if (!isDefault(Prop::INPUT_WORKSPACES)) {
     wsNames = getProperty(Prop::INPUT_WORKSPACES);
+    if (std::any_of(wsNames.cbegin(), wsNames.cend(), [](const auto &wsName) {
+          return AnalysisDataService::Instance().retrieveWS<MatrixWorkspace>(wsName) == nullptr;
+        })) {
+      throw std::invalid_argument(
+          "Only Matrix Workspaces can be added in InputWorkspace property list. If the input is a group, "
+          "use the InputWorkspaceGroup property");
+    }
   } else {
     WorkspaceGroup_sptr group = getProperty(Prop::INPUT_WORKSPACE_GROUP);
     auto const n = group->size();

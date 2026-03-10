@@ -37,7 +37,7 @@ def wrap_attributes(obj, inval, allowed_var_names):
 
 
 def argparser(args, kwargs, argnames, defaults=None):
-    argdict = {key: val for key, val in zip(argnames, defaults if defaults else [None] * len(argnames))}
+    argdict = {key: val for key, val in zip(argnames, defaults or [None] * len(argnames))}
     for key in kwargs:
         argdict[key] = kwargs[key]
     for idx in range(len(args)):
@@ -87,7 +87,7 @@ class FermiChopper(object):
         wrap_attributes(self, inval, self.__allowed_var_names)
 
     def __repr__(self):
-        return self.name if self.name else "Undefined Fermi chopper package"
+        return self.name or "Undefined Fermi chopper package"
 
     def getWidthSquared(self, Ei, freq):
         return Chop.tchop(freq, Ei, self.pslit / 1000.0, self.radius / 1000.0, self.rho / 1000.0)
@@ -153,7 +153,7 @@ class ChopperSystem(object):
         self.frequency = self.default_frequencies
 
     def __repr__(self):
-        return self.name if self.name else "Undefined disk chopper system"
+        return self.name or "Undefined disk chopper system"
 
     def _parse_choppers(self):
         """Parses the choppers list to determine how to handle resolution and flux calculations"""
@@ -233,7 +233,7 @@ class ChopperSystem(object):
             self._variant_defaults[key] = copy.deepcopy(getattr(self, key))
         if "_variant" not in self.__dict__:
             self._default_variant = list(self.variants.keys())[0]
-            warnings.warn("No default variants defined. Using " "%s" " as default" % (self._default_variant), SyntaxWarning)
+            warnings.warn("No default variants defined. Using %s as default" % (self._default_variant), SyntaxWarning)
             self.variant = self._default_variant
 
     def setChopper(self, *args, **kwargs):
@@ -400,7 +400,7 @@ class ChopperSystem(object):
         self._instpar[9] = [self.source_rep, value]
 
     def _get_state(self, Ei_in=None):
-        return hash((self.variant, self.package, tuple(self.frequency), tuple(self.phase), Ei_in if Ei_in else self.ei, self.n_frame))
+        return hash((self.variant, self.package, tuple(self.frequency), tuple(self.phase), Ei_in or self.ei, self.n_frame))
 
     def _removeLowIntensityReps(self, Eis, lines, Ei=None):
         # Removes reps with Ei where there are no neutrons
@@ -493,7 +493,7 @@ class ChopperSystem(object):
         if value not in self.packages.keys():
             ky = [k for k in self.packages.keys() if str(value).upper() == k.upper()]
             if not ky:
-                raise ValueError("Fermi package " "%s" " not recognised. Allowed values are: %s" % (value, ", ".join(self.packages.keys())))
+                raise ValueError("Fermi package %s not recognised. Allowed values are: %s" % (value, ", ".join(self.packages.keys())))
             else:
                 value = ky[0]
         self._package = value
@@ -518,7 +518,7 @@ class ChopperSystem(object):
         if value not in self.variants.keys():
             ky = [k for k in self.variants.keys() if str(value).upper() == k.upper()]
             if not ky:
-                raise ValueError("Variant " "%s" " not recognised. Allowed values are: %s" % (value, ", ".join(self.variants.keys())))
+                raise ValueError("Variant %s not recognised. Allowed values are: %s" % (value, ", ".join(self.variants.keys())))
             else:
                 value = ky[0]
         for prop in self.variants[value]:
@@ -570,9 +570,12 @@ class Moderator(object):
 
     def __init__(self, inval=None):
         wrap_attributes(self, inval, self.__allowed_var_names)
+        self.flux_units = "n/cm^2/s"
         if hasattr(self, "measured_flux") and self.measured_flux:
             if "scale_factor" in self.measured_flux:
                 self.measured_flux["flux"] = np.array(self.measured_flux["flux"]) * float(self.measured_flux["scale_factor"])
+            if "units" in self.measured_flux:
+                self.flux_units = self.measured_flux["units"]
             idx = np.argsort(self.measured_flux["wavelength"])
             wavelength = np.array(self.measured_flux["wavelength"])[idx]
             flux = np.array(self.measured_flux["flux"])[idx]
@@ -588,7 +591,7 @@ class Moderator(object):
                 self.measured_width["isSigma"] = False
 
     def __repr__(self):
-        return self.name if self.name else "Undefined neutron moderator"
+        return self.name or "Undefined neutron moderator"
 
     def getAnalyticWidthsSquared(self, Ei):
         if self.imod == 0:
@@ -671,7 +674,7 @@ class Sample(object):
         wrap_attributes(self, inval, self.__allowed_var_names)
 
     def __repr__(self):
-        return self.name if self.name else "Undefined sample"
+        return self.name or "Undefined sample"
 
     def getWidthSquared(self):
         """Returns the squared time FWHM due to the sample in s^2"""
@@ -697,7 +700,7 @@ class Detector(object):
         wrap_attributes(self, inval, self.__allowed_var_names)
 
     def __repr__(self):
-        return self.name if self.name else "Undefined detector"
+        return self.name or "Undefined detector"
 
     def getWidthSquared(self, Ei, en=0):
         """Returns the squared time FWHM due to the detector in s^2"""
@@ -783,7 +786,7 @@ class Instrument(object):
             )
         # Now reset default chopper/variant and frequency
         if chopper or freq:
-            self.setChopper(chopper if chopper else self.getChopper(), freq if freq else self.frequency)
+            self.setChopper(chopper or self.getChopper(), freq or self.frequency)
 
     def setInstrument(self, instrument):
         self.__dict__.clear()
@@ -872,8 +875,8 @@ class Instrument(object):
         Ei, _ = _check_input(self.chopper_system, Ei_in, frequency)
         Etrans = np.array(Etrans if np.shape(Etrans) else [Etrans])
         if frequency:
-            oldfreq = self.frequency
-            self.frequency = frequency
+            oldfreq = self.chopper_system.frequency
+            self.chopper_system.frequency = frequency
         tsqmod = self.moderator.getWidthSquared(Ei)
         tsqchp = self.chopper_system.getWidthSquared(Ei)
         tsqjit = self.tjit**2
@@ -884,11 +887,11 @@ class Instrument(object):
             frac_dist = 1 - (xm / x0)
             tsmeff = tsqmod * frac_dist**2  # Effective moderator time at first chopper
             x0 -= xm  # Propagate from first chopper, not from moderator (after rescaling tmod)
-            tsqmod = tsmeff if (tsqchp[1] > tsmeff) else tsqchp[1]
+            tsqmod = min(tsqchp[1], tsmeff)
         tsqchp = tsqchp[0]
         tsqmodchop = np.array([tsqmod, tsqchp, x0])
         # Propagate the time widths to the sample position
-        omega = self.frequency[0] * 2 * np.pi
+        omega = self.chopper_system.frequency[0] * 2 * np.pi
         vi = E2V * np.sqrt(Ei)
         vf = E2V * np.sqrt(Ei - Etrans)
         vratio = (vi / vf) ** 3
@@ -920,7 +923,7 @@ class Instrument(object):
             vsqvan += tsqsam
             outdic["sample"] = tsqsam
         if frequency:
-            self.frequency = oldfreq
+            self.chopper_system.frequency = oldfreq
         return vsqvan, outdic, tsqmodchop
 
     @property
@@ -1014,4 +1017,4 @@ class Instrument(object):
         return res, flux
 
     def __repr__(self):
-        return self.name if self.name else "Undefined instrument"
+        return self.name or "Undefined instrument"

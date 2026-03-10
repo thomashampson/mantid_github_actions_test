@@ -41,13 +41,13 @@ class UnitCellTest(unittest.TestCase):
 
     def test_to_string(self):
         unit = UnitCell(3, 3, 3)
-        expected_str = "UnitCell with lattice parameters: a = 3 b = 3 c = 3 " "alpha = 90 beta = 90 gamma = 90"
+        expected_str = "UnitCell with lattice parameters: a = 3 b = 3 c = 3 alpha = 90 beta = 90 gamma = 90"
         expected_repr = "UnitCell(3, 3, 3, 90, 90, 90)"
 
         self.assertEqual(expected_str, str(unit))
         self.assertEqual(expected_repr, unit.__repr__())
 
-        newUnit = eval(unit.__repr__())
+        newUnit = eval(unit.__repr__())  # noqa: S307
         self.assertEqual(unit.a(), newUnit.a())
         self.assertEqual(unit.b(), newUnit.b())
         self.assertEqual(unit.c(), newUnit.c())

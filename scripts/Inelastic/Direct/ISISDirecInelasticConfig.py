@@ -317,7 +317,7 @@ class UserProperties(object):
 
     def validate_instrument(self, instrument):
         if instrument not in INELASTIC_INSTRUMENTS:
-            raise RuntimeError("Instrument {0} has to be one of " "ISIS inelastic instruments".format(instrument))
+            raise RuntimeError("Instrument {0} has to be one of ISIS inelastic instruments".format(instrument))
 
     def validate_date(self, start_date):
         if isinstance(start_date, str):
@@ -337,7 +337,7 @@ class UserProperties(object):
             error = True
         if error:
             raise RuntimeError(
-                "Experiment start date should be defined as" " a string in the form YYYYMMDD or YYMMDD but it is: {0}".format(start_date)
+                "Experiment start date should be defined as a string in the form YYYYMMDD or YYMMDD but it is: {0}".format(start_date)
             )
         return start_date
 
@@ -610,7 +610,7 @@ class MantidConfigDirectInelastic(object):
             shutil.copyfile(input_file, output_file)
         else:
             self._copy_and_parse_user_file(input_file, output_file, replacement_list)
-        os.chmod(output_file, 0o777)
+        os.chmod(output_file, 0o660)
 
         ownership_str = "chown {0}:{1} {2}".format(self._user.userID, rb_group, output_file)
         if platform.system() != "Windows":

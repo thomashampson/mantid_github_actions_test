@@ -159,6 +159,11 @@ Mantid::API::WorkspaceGroup_sptr createWorkspaceGroup(int nEntries, int nHist, i
 Mantid::DataObjects::Workspace2D_sptr create2DWorkspaceBinned(size_t nhist, size_t numVals, double x0 = 0.0,
                                                               double deltax = 1.0);
 
+/**
+ * Create a 2D ragged workspace.
+ */
+Mantid::API::MatrixWorkspace_sptr create2DWorkspaceRagged(int version = 0);
+
 /** Create a 2D workspace with this many point-histograms and bins.
  * Filled with Y = 2.0 and E = M_SQRT2
  */
@@ -253,6 +258,7 @@ Mantid::DataObjects::Workspace2D_sptr create2DWorkspaceThetaVsTOF(int nHist, int
 Mantid::DataObjects::Workspace2D_sptr
 create2DWorkspaceWithRectangularInstrument(int numBanks, int numPixels, int numBins,
                                            const std::string &instrumentName = "basic_rect");
+
 Mantid::DataObjects::Workspace2D_sptr create2DWorkspace123WithMaskedBin(int numHist, int numBins,
                                                                         int maskedWorkspaceIndex, int maskedBinIndex);
 
@@ -414,7 +420,7 @@ void createInstrumentForWorkspaceWithDistances(const Mantid::API::MatrixWorkspac
                                                const std::vector<Mantid::Kernel::V3D> &detectorPositions);
 
 /// Create a table workspace corresponding to what the FindEPP algorithm gives.
-Mantid::API::ITableWorkspace_sptr createEPPTableWorkspace(const std::vector<EPPTableRow> &rows);
+Mantid::API::ITableWorkspace_sptr createEPPTableWorkspace(const std::vector<EPPTableRow> &rows = {});
 
 /**
  * Create a copy of the SNAP "lite" instrument. This is the normal instrument with the 8x8 pixels added together. The

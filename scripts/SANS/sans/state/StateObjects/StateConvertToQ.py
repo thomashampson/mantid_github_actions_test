@@ -30,6 +30,7 @@ class StateConvertToQ(metaclass=JsonSerializable):
         self.gravity_extra_length = 0.0  # : Float (Positive)
         self.radius_cutoff = 0.0  # : Float (Positive)
         self.wavelength_cutoff = 0.0  # : Float (Positive)
+        self.solid_angle_cylinder_slices = 11  # : Integer (Positive)
 
         # 1D settings
         self.q_min = None  # : Float (Positive)
@@ -149,7 +150,7 @@ class StateConvertToQ(metaclass=JsonSerializable):
             ):
                 entry = validation_message(
                     "Aperture is undefined.",
-                    "Make sure that you set the geometry for a circular or a " "rectangular aperture.",
+                    "Make sure that you set the geometry for a circular or a rectangular aperture.",
                     {
                         "q_resolution_a1": self.q_resolution_a1,
                         "q_resolution_a2": self.q_resolution_a2,
@@ -170,7 +171,7 @@ class StateConvertToQ(metaclass=JsonSerializable):
                 is_invalid.update({"moderator_file": "A moderator file is required for the q resolution calculation."})
 
         if is_invalid:
-            raise ValueError("StateMoveDetectorISIS: The provided inputs are illegal. " "Please see: {0}".format(json.dumps(is_invalid)))
+            raise ValueError("StateMoveDetectorISIS: The provided inputs are illegal. Please see: {0}".format(json.dumps(is_invalid)))
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -201,7 +202,7 @@ def get_convert_to_q_builder(data_info):
         return StateConvertToQBuilder()
     else:
         raise NotImplementedError(
-            "StateConvertToQBuilder: Could not find any valid save builder for the " "specified StateData object {0}".format(str(data_info))
+            "StateConvertToQBuilder: Could not find any valid save builder for the specified StateData object {0}".format(str(data_info))
         )
 
 

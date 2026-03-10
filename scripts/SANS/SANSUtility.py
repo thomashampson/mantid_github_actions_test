@@ -93,7 +93,7 @@ def deprecated(obj):
         return obj
 
     assert False, (
-        "Programming error.  You have incorrectly applied the " "@deprecated decorator.  This is only for use with functions " "or classes."
+        "Programming error.  You have incorrectly applied the @deprecated decorator.  This is only for use with functions or classes."
     )
 
 
@@ -373,7 +373,7 @@ def fromEvent2Histogram(ws_event, ws_monitor, binning=""):
         aux_hist = RebinToWorkspace(WorkspaceToRebin=ws_event, WorkspaceToMatch=ws_monitor, PreserveEvents=False)
         ws_monitor.clone(OutputWorkspace=name)
 
-    ConjoinWorkspaces(name, aux_hist, CheckOverlapping=True)
+    ConjoinWorkspaces(name, aux_hist, CheckOverlapping=True, CheckMatchingBins=False)
     CopyInstrumentParameters(ws_event, OutputWorkspace=name)
 
     ws_hist = RenameWorkspace(name, OutputWorkspace=str(ws_event))
@@ -813,14 +813,17 @@ def is_nexus_file(file_name):
     full_file_path = FileFinder.findRuns(file_name)
     if hasattr(full_file_path, "__iter__"):
         file_name = full_file_path[0]
-    is_nexus = True
-    try:
-        with h5.File(file_name, "r") as h5_file:
-            keys = list(h5_file.keys())
-            nexus_test = "raw_data_1" in keys or "mantid_workspace_1" in keys
-            is_nexus = True if nexus_test else False
-    except:
-        is_nexus = False
+    # quick check that is hdf5
+    is_nexus = h5.is_hdf5(file_name)
+    # fuller test looks at top level entries
+    if is_nexus:
+        try:
+            keys = []
+            with h5.File(file_name, "r") as h5_file:
+                keys = list(h5_file.keys())
+            is_nexus = bool("raw_data_1" in keys or "mantid_workspace_1" in keys)
+        except:
+            is_nexus = False
     return is_nexus
 
 
@@ -1023,7 +1026,7 @@ def is_valid_ws_for_removing_zero_errors(input_workspace_name):
             break
 
     if not isValid:
-        message = "Workspace does not seem valid for zero error removal." "It must have been reduced with Q1D or Qxy."
+        message = "Workspace does not seem valid for zero error removal. It must have been reduced with Q1D or Qxy."
 
     return message, isValid
 
@@ -1737,7 +1740,7 @@ def get_start_q_and_end_q_values(rear_data_name, front_data_name, rescale_shift)
         raise RuntimeError("The REAR detector does not seem to contain q values")
 
     if rear_q_max < front_q_min:
-        raise RuntimeError("The min value of the FRONT detector data set is larger" "than the max value of the REAR detector data set")
+        raise RuntimeError("The min value of the FRONT detector data set is larger than the max value of the REAR detector data set")
 
     # Get the min and max range
     min_q = max(rear_q_min, front_q_min)
@@ -2167,7 +2170,7 @@ def get_correct_combinDet_setting(instrument_name, detector_selection):
         elif detector_selection == "BOTH":
             new_combine_detector_selection = "both"
         else:
-            raise RuntimeError("SANSBatchReduce: Unknown detector {0} for conversion " "to combineDet.".format(detector_selection))
+            raise RuntimeError("SANSBatchReduce: Unknown detector {0} for conversion to combineDet.".format(detector_selection))
         return new_combine_detector_selection
 
     # If we are dealing with SANS2D, then the correct combineDet selection is
@@ -2181,7 +2184,7 @@ def get_correct_combinDet_setting(instrument_name, detector_selection):
         elif detector_selection == "BOTH":
             new_combine_detector_selection = "both"
         else:
-            raise RuntimeError("SANSBatchReduce: Unknown detector {0} for conversion " "to combineDet.".format(detector_selection))
+            raise RuntimeError("SANSBatchReduce: Unknown detector {0} for conversion to combineDet.".format(detector_selection))
         return new_combine_detector_selection
     raise RuntimeError("SANSBatchReduce: Unknown instrument {0}.".format(instrument_name))
 
@@ -2254,7 +2257,7 @@ def parseLogFile(logfile):
     logkeywords = {"Rear_Det_X": 0.0, "Rear_Det_Z": 0.0, "Front_Det_X": 0.0, "Front_Det_Z": 0.0, "Front_Det_Rot": 0.0}
     if logfile is None:
         return tuple(logkeywords.values())
-    file_log = open(logfile, "rU")
+    file_log = open(logfile, "r")
     for line in file_log:
         entry = line.split()[1]
         if entry in list(logkeywords.keys()):

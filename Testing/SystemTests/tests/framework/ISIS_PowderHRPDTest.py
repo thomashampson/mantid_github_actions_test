@@ -52,6 +52,10 @@ class CreateVanadiumNoSolidAngleTest(systemtesting.MantidSystemTest):
     calibration_results = None
     existing_config = config["datasearch.directories"]
 
+    def skipTests(self):
+        # Numbers are different on ARM architecture so skip test
+        return "arm" in platform.machine()
+
     def requiredFiles(self):
         return _gen_required_files()
 
@@ -77,6 +81,10 @@ class CreateVanadiumNoSolidAngleNoEmptySubtractionTest(systemtesting.MantidSyste
     calibration_results = None
     existing_config = config["datasearch.directories"]
 
+    def skipTests(self):
+        # Numbers are different on ARM architecture so skip test
+        return "arm" in platform.machine()
+
     def requiredFiles(self):
         return _gen_required_files()
 
@@ -101,6 +109,10 @@ class CreateVanadiumNoSolidAngleNoEmptySubtractionTest(systemtesting.MantidSyste
 class FocusNoSolidAngleTest(systemtesting.MantidSystemTest):
     focus_results = None
     existing_config = config["datasearch.directories"]
+
+    def skipTests(self):
+        # Numbers are different on ARM architecture so skip test
+        return "arm" in platform.machine()
 
     def requiredFiles(self):
         return _gen_required_files()
@@ -192,6 +204,15 @@ class FocusNoSolidAnglePromptSubtractedTest(systemtesting.MantidSystemTest):
 
 
 class VanadiumAndFocusWithSolidAngleTest(systemtesting.MantidSystemTest):
+    """
+    NOTE changes to the copy or delete methods of Nexus::File can lead to a very strange error occuring here,
+    which will give the message
+        [Error] H5 Exception in execution of algorithm LoadNexusProcessed:
+        [Error] Group::getObjTypeByIdx: H5Gget_objtype_by_idx failed
+    This error is being raised inside the splined vanadium file, VanSplined_66031_hrpd_new_072_01_corr.cal.nxs
+    when trying to access the object type at the address "/mantid_workspace_1/instrument/author".
+    """
+
     focus_results = None
     existing_config = config["datasearch.directories"]
 

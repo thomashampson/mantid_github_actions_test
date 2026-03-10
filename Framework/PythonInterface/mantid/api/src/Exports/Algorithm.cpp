@@ -73,6 +73,7 @@ GNU_DIAG_OFF("unused-local-typedef")
 // Seen with GCC 7.1.1 and Boost 1.63.0
 GNU_DIAG_OFF("conversion")
 // Overload types
+// cppcheck-suppress unknownMacro
 BOOST_PYTHON_FUNCTION_OVERLOADS(declarePropertyType1_Overload, PythonAlgorithm::declarePyAlgProperty, 2, 3)
 BOOST_PYTHON_FUNCTION_OVERLOADS(declarePropertyType2_Overload, PythonAlgorithm::declarePyAlgProperty, 3, 6)
 BOOST_PYTHON_FUNCTION_OVERLOADS(declarePropertyType3_Overload, PythonAlgorithm::declarePyAlgProperty, 4, 5)
@@ -164,7 +165,8 @@ object createChildWithProps(tuple args, dict kwargs) {
   auto enableLogging = extractArg<bool>(4, args);
   auto version = extractArg<int>(5, args);
 
-  const std::array<std::string, 5> reservedNames = {"name", "startProgress", "endProgress", "enableLogging", "version"};
+  const std::array<std::string, 6> reservedNames = {"name",          "startProgress", "endProgress",
+                                                    "enableLogging", "version",       "StoreInADS"};
 
   extractKwargs<std::string>(kwargs, reservedNames[0], name);
   extractKwargs<double>(kwargs, reservedNames[1], startProgress);
@@ -178,6 +180,13 @@ object createChildWithProps(tuple args, dict kwargs) {
   auto childAlg = parentAlg->createChildAlgorithm(name.value(), startProgress.value_or(-1), endProgress.value_or(-1),
                                                   enableLogging.value_or(true), version.value_or(-1));
 
+  if (kwargs.has_key(reservedNames[5])) {
+    // We set StoreInADS here if it hasn't been set before and it is present in kwargs
+    std::optional<bool> storeADS = std::nullopt;
+    extractKwargs<bool>(kwargs, reservedNames[5], storeADS);
+    childAlg->setAlwaysStoreInADS(storeADS.value_or(false));
+  }
+
   const list keys = kwargs.keys();
   for (int i = 0; i < len(keys); ++i) {
     const std::string propName = extract<std::string>(keys[i]);
@@ -186,7 +195,7 @@ object createChildWithProps(tuple args, dict kwargs) {
       continue;
 
     object curArg = kwargs[keys[i]];
-    if (!curArg)
+    if (curArg.is_none())
       continue;
 
     using Mantid::PythonInterface::PyNativeTypeExtractor;
@@ -236,6 +245,12 @@ void export_leaf_classes() {
            (arg("self"), arg("name"), arg("defaultValue"), arg("direction") = Direction::Input),
            "Declares a named property where the type is taken from the type "
            "of the defaultValue and mapped to an appropriate C++ type")
+      .def("declareOrReplaceProperty", &PythonAlgorithm::declareOrReplacePyAlgProperty,
+           (arg("self"), arg("name"), arg("defaultValue"), arg("validator") = object(), arg("doc") = "",
+            arg("direction") = Direction::Input),
+           "Declares or replaces a named property where the type is taken from "
+           "the type of the defaultValue and mapped to an appropriate C++ "
+           "type")
       .def("getLogger", &PythonAlgorithm::getLogger, arg("self"), return_value_policy<reference_existing_object>(),
            "Returns a reference to this algorithm's logger")
       .def("log", &PythonAlgorithm::getLogger, arg("self"), return_value_policy<reference_existing_object>(),

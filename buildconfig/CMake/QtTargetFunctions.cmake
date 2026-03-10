@@ -64,7 +64,7 @@ endfunction()
 # * keyword: LINUX_INSTALL_RPATH Install path for CMAKE_SYSTEM_NAME == Linux
 function(mtd_add_qt_target)
   set(options LIBRARY EXECUTABLE NO_SUFFIX EXCLUDE_FROM_ALL)
-  set(oneValueArgs TARGET_NAME OUTPUT_NAME QT_VERSION OUTPUT_DIR_BASE OUTPUT_SUBDIR PRECOMPILED)
+  set(oneValueArgs TARGET_NAME OUTPUT_NAME QT_VERSION OUTPUT_DIR_BASE OUTPUT_SUBDIR)
   set(multiValueArgs
       SRC
       UI
@@ -79,6 +79,7 @@ function(mtd_add_qt_target)
       QT5_LINK_LIBS
       MTD_QT_LINK_LIBS
       OSX_INSTALL_RPATH
+      PRECOMPILED
       LINUX_INSTALL_RPATH
       INSTALL_DIR
       INSTALL_DIR_BASE
@@ -135,11 +136,6 @@ function(mtd_add_qt_target)
     set(_target_exclude_from_all)
   endif()
 
-  # Use a precompiled header where they are supported
-  if(PARSED_PRECOMPILED)
-    enable_precompiled_headers(${PARSED_PRECOMPILED} ALL_SRC)
-  endif()
-
   if(PARSED_LIBRARY)
     add_library(
       ${_target} ${_target_exclude_from_all} ${ALL_SRC} ${UI_HEADERS} ${PARSED_MOC} ${PARSED_NOMOC} ${RES_FILES}
@@ -150,6 +146,11 @@ function(mtd_add_qt_target)
     )
   else()
     message(FATAL_ERROR "Unknown target type. Options=LIBRARY,EXECUTABLE")
+  endif()
+
+  # Use a precompiled header where they are supported
+  if(PARSED_PRECOMPILED)
+    target_precompile_headers(${_target} PRIVATE ${PARSED_PRECOMPILED})
   endif()
 
   # Target properties

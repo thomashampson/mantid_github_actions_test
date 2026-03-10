@@ -42,6 +42,13 @@ if [[ -z "$UNIT_TEST_THREADS" ]]; then
     UNIT_TEST_THREADS=$BUILD_THREADS
 fi
 
+# Jenkins nodes may specify the maximum number of unit tests to run in parallel.
+# This is useful to prevent test timeouts for machines with limited RAM.
+if [[ -z "$UNIT_TEST_THREADS" ]]; then
+    # Default is number of build threads.
+    UNIT_TEST_THREADS=$BUILD_THREADS
+fi
+
 function run_with_xvfb {
     if [ $(command -v xvfb-run) ]; then
         # Use -e because a bug on RHEL7 means --error-file produces an error: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=337703;msg=2

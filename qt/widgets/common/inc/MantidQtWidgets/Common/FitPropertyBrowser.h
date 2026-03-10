@@ -73,6 +73,11 @@ public:
   FitPropertyBrowser(QWidget *parent = nullptr, QObject *mantidui = nullptr);
   /// Destructor
   ~FitPropertyBrowser() override;
+
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  FitPropertyBrowser(const FitPropertyBrowser &) = delete;
+  FitPropertyBrowser &operator=(const FitPropertyBrowser &) = delete;
+
   /// Get handler to the root composite function
   PropertyHandler *getHandler() const;
   /// Initialise layout
@@ -109,9 +114,9 @@ public:
   /// Get function parameter names
   QStringList getParameterNames() const;
   // Get parameters used to run the Fit algorithm
-  std::string getFitAlgorithmParameters() const;
+  const std::string &getFitAlgorithmParameters() const;
   // Get the status string returned from Fit
-  std::string getFitAlgorithmOutputStatus() const;
+  const std::string &getFitAlgorithmOutputStatus() const;
 
   /// Load function
   void loadFunction(const QString &funcString);
@@ -132,7 +137,7 @@ public:
   Mantid::API::IFunction_sptr getFunctionAtIndex(std::size_t const &index) const;
 
   /// Get the default function type
-  std::string defaultFunctionType() const;
+  const std::string &defaultFunctionType() const;
   /// Set the default function type
   void setDefaultFunctionType(const std::string &fnType);
   /// Get the default peak type
@@ -140,7 +145,7 @@ public:
   /// Set the default peak type
   void setDefaultPeakType(const std::string &fnType);
   /// Get the default background type
-  std::string defaultBackgroundType() const;
+  const std::string &defaultBackgroundType() const;
   /// Set the default background type
   void setDefaultBackgroundType(const std::string &fnType);
 
@@ -269,7 +274,7 @@ public:
 
   /// Returns the list of workspaces that are currently been worked on by the
   /// fit property browser.
-  QStringList getWorkspaceNames();
+  const QStringList &getWorkspaceNames();
 
   /// Allow or disallow sequential fits (depending on whether other conditions
   /// are met)

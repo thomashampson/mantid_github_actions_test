@@ -42,8 +42,8 @@ public:
   void makeDetectorIDToGroupMap(std::map<detid_t, int> &detIDToGroup, int64_t &ngroups) const;
   void makeDetectorIDToGroupVector(std::vector<int> &detIDToGroup, int64_t &ngroups) const;
   int getTotalGroups() const;
-  std::vector<int> getGroupIDs() const;
-  std::vector<int> getDetectorIDsOfGroup(const int groupID) const;
+  std::vector<int> getGroupIDs(const bool includeUnsetGroup = true) const;
+  std::vector<detid_t> getDetectorIDsOfGroup(const int groupID) const;
 
 protected:
   /// Protected copy constructor. May be used by childs for cloning.
@@ -63,3 +63,12 @@ using GroupingWorkspace_const_sptr = std::shared_ptr<const GroupingWorkspace>;
 
 } // namespace DataObjects
 } // namespace Mantid
+
+#ifndef DataObjects_EXPORTS
+#include "MantidAPI/WorkspaceProperty.h"
+namespace Mantid::API {
+/// @cond
+extern template class MANTID_DATAOBJECTS_DLL WorkspaceProperty<DataObjects::GroupingWorkspace>;
+/// @endcond
+} // namespace Mantid::API
+#endif

@@ -89,17 +89,17 @@ XML_CONTENT_HEADER = "Content-Type:application/xml;charset=UTF-8"
 def build_xml_form(doi, relationships, creator_name_list, version_str):
     """Builds the xml form containing the metadata for the DOI.  Where helpful,
     comments showing the definition / allowed values of the data fields have
-    been taken from section 2.3 of:
-    http://schema.datacite.org/meta/kernel-3/doc/DataCite-MetadataKernel_v3.0.pdf
+    been taken from section 1.2 of:
+    https://datacite-metadata-schema.readthedocs.io/_/downloads/en/4.6/pdf/
 
     The decision has been made to not use the optional "contributors" field,
     since creators works just as well and is mandatory anyway.
     """
     # The root resource node must contain the various schema information.
     root = ET.Element("resource")
-    root.set("xmlns", "http://datacite.org/schema/kernel-3")
+    root.set("xmlns", "http://datacite.org/schema/kernel-4")
     root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
-    root.set("xsi:schemaLocation", "http://datacite.org/schema/kernel-3 ht" + "tp://schema.datacite.org/meta/kernel-3" + "/metadata.xsd")
+    root.set("xsi:schemaLocation", "http://datacite.org/schema/kernel-4 http://schema.datacite.org/meta/kernel-4/metadata.xsd")
 
     # "The identifier is a unique string that identifies a resource." In our
     # case, the actual DOI. "Format should be '10.1234/foo'."
@@ -421,8 +421,8 @@ def run(args):
     # is create a single, unlinked DOI to the main project page.
     if args.main:
         creator_name_list = authors.authors_up_to_git_tag(tag)
-        # In the case of the main DOI we need to add the whitelisted names too.
-        creator_name_list = sorted(set(creator_name_list + authors.whitelist))
+        # In the case of the main DOI we need to add the names from the allowlist too.
+        creator_name_list = sorted(set(creator_name_list + authors.allowlist))
 
         xml_form = build_xml_form(doi, {}, creator_name_list, None)
 

@@ -39,8 +39,13 @@ public:
   InstrumentSelector(QWidget *parent = nullptr, bool init = true);
   /// Destructor
   ~InstrumentSelector() override;
+
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  InstrumentSelector(const InstrumentSelector &) = delete;
+  InstrumentSelector &operator=(const InstrumentSelector &) = delete;
+
   /// Return the list of techniques
-  QStringList getTechniques() const;
+  const QStringList &getTechniques() const;
   /// Set the list of techniques
   void setTechniques(const QStringList &techniques);
   /// Returns true of auto reloading on facility change is enabled

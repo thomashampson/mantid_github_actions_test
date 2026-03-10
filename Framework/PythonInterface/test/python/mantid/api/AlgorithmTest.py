@@ -170,6 +170,15 @@ class AlgorithmTest(unittest.TestCase):
 
         self.assertEqual("Wavelength", ws.getAxis(0).getUnit().unitID())
 
+    def test_createChildAlgorithm_allows_to_set_numeric_properties_to_zero(self):
+        parent_alg = AlgorithmManager.createUnmanaged("Load")
+        child_alg = parent_alg.createChildAlgorithm("CreateSampleWorkspace", **{"XMax": 0.0})
+
+        self.assertTrue(child_alg.isChild())
+        xmax = child_alg.getProperty("XMax").value
+
+        self.assertEqual(xmax, 0.0)
+
     def test_createChildAlgorithm_with_named_args(self):
         parent_alg = AlgorithmManager.createUnmanaged("Load")
         child_alg = parent_alg.createChildAlgorithm("CreateSampleWorkspace", XUnit="Wavelength")
@@ -205,7 +214,7 @@ class AlgorithmTest(unittest.TestCase):
     def test_with_workspace_types(self):
         ws = CreateSampleWorkspace(
             Function="User Defined",
-            UserDefinedFunction="name=LinearBackground, A0=0.3;name=Gaussian, " "PeakCentre=5, Height=10, Sigma=0.7",
+            UserDefinedFunction="name=LinearBackground, A0=0.3;name=Gaussian, PeakCentre=5, Height=10, Sigma=0.7",
             NumBanks=1,
             BankPixelWidth=1,
             XMin=0,

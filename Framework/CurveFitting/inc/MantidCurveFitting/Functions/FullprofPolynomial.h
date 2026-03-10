@@ -6,8 +6,8 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
+#include "MantidCurveFitting/DllConfig.h"
 #include "MantidCurveFitting/Functions/BackgroundFunction.h"
-#include "MantidKernel/System.h"
 
 namespace Mantid {
 namespace CurveFitting {
@@ -21,8 +21,6 @@ public:
 
   /// Overwrite IFunction base class
   std::string name() const override { return "FullprofPolynomial"; }
-
-  const std::string category() const override { return "Background"; }
 
   void function1D(double *out, const double *xValues, const size_t nData) const override;
 

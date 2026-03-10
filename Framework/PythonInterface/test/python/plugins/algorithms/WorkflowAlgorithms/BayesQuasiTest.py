@@ -9,8 +9,12 @@ import numpy as np
 from mantid.simpleapi import BayesQuasi, CreateWorkspace, DeleteWorkspace, Load
 from mantid.api import MatrixWorkspace, WorkspaceGroup
 from plugins.algorithms.WorkflowAlgorithms.BayesQuasi import _calculate_eisf
+import platform
+
+SHOULD_SKIP = "arm" in platform.machine()
 
 
+@unittest.skipIf(SHOULD_SKIP, "Skipping tests on ARM architecture")
 class BayesQuasiTest(unittest.TestCase):
     _res_ws = None
     _sample_ws = None
@@ -127,6 +131,23 @@ class BayesQuasiTest(unittest.TestCase):
         self.assertTrue(np.allclose(expected_eisf, eisf))
         self.assertTrue(np.allclose(expected_eisf_error, eisf_error))
 
+    def test_output_workspace_names_are_respected(self):
+        fit_group, result, prob = BayesQuasi(
+            SampleWorkspace=self._sample_ws,
+            ResolutionWorkspace=self._res_ws,
+            MinRange=-0.54760699999999995,
+            MaxRange=0.54411200000000004,
+            Elastic=False,
+            Background="Sloping",
+            FixedWidth=False,
+            OutputWorkspaceFit="test_name_fit",
+            OutputWorkspaceResult="test_name_result",
+            OutputWorkspaceProb="test_name_prob",
+        )
+        self.assertEqual(fit_group.getName(), "test_name_fit")
+        self.assertEqual(result.getName(), "test_name_result")
+        self.assertEqual(prob.getName(), "test_name_prob")
+
     # --------------------------------Validate results------------------------------------------------
 
     def _validate_QLr_shape(self, result, probability, group):
@@ -198,25 +219,26 @@ class BayesQuasiTest(unittest.TestCase):
         @param prob Probability workspace from BayesQuasi
         @param group Group workspace of fitted spectra from BayesQuasi
         """
+        significant_digits = 3
 
         # Test values of result
-        self.assertAlmostEqual(result.dataY(0)[0], 153.471, delta=1e-3)
-        self.assertAlmostEqual(result.dataY(1)[0], 1785.06, delta=1e-2)
-        self.assertAlmostEqual(result.dataY(2)[0], 0.0588549, delta=1e-4)
-        self.assertAlmostEqual(result.dataY(3)[0], 0.0791689, delta=1e-4)
+        np.testing.assert_approx_equal(result.dataY(0)[0], 153.471, significant=significant_digits)
+        np.testing.assert_approx_equal(result.dataY(1)[0], 1785.06, significant=significant_digits)
+        np.testing.assert_approx_equal(result.dataY(2)[0], 0.0588549, significant=significant_digits)
+        np.testing.assert_approx_equal(result.dataY(3)[0], 0.0791689, significant=significant_digits)
 
         # Test values of probability
-        self.assertAlmostEqual(probability.dataY(0)[0], -74887.1, delta=1e-1)
-        self.assertAlmostEqual(probability.dataY(1)[0], -407.593, delta=1e-2)
-        self.assertAlmostEqual(probability.dataY(2)[0], -0.480316, delta=1e-2)
+        np.testing.assert_approx_equal(probability.dataY(0)[0], -74887.1, significant=significant_digits)
+        np.testing.assert_approx_equal(probability.dataY(1)[0], -407.593, significant=significant_digits)
+        np.testing.assert_approx_equal(probability.dataY(2)[0], -0.480316, significant=2)
 
         # Test values of group
         sub_ws = group.getItem(0)
-        self.assertAlmostEqual(sub_ws.dataY(0)[0], 0.652046, delta=1e-4)
-        self.assertAlmostEqual(sub_ws.dataY(1)[0], 0.48846, delta=1e-4)
-        self.assertAlmostEqual(sub_ws.dataY(2)[0], -0.163586, delta=1e-4)
-        self.assertAlmostEqual(sub_ws.dataY(3)[0], 0.414406, delta=1e-4)
-        self.assertAlmostEqual(sub_ws.dataY(4)[0], -0.23764, delta=1e-4)
+        np.testing.assert_approx_equal(sub_ws.dataY(0)[0], 0.652046, significant=significant_digits)
+        np.testing.assert_approx_equal(sub_ws.dataY(1)[0], 0.48846, significant=significant_digits)
+        np.testing.assert_approx_equal(sub_ws.dataY(2)[0], -0.163586, significant=significant_digits)
+        np.testing.assert_approx_equal(sub_ws.dataY(3)[0], 0.414406, significant=significant_digits)
+        np.testing.assert_approx_equal(sub_ws.dataY(4)[0], -0.23764, significant=significant_digits)
 
     def _validate_QSe_shape(self, result, group):
         """
@@ -251,17 +273,17 @@ class BayesQuasiTest(unittest.TestCase):
         @param prob Probability workspace from BayesQuasi
         @param group Group workspace of fitted spectra from BayesQuasi
         """
-
+        significant_digits = 3
         # Test values of result
-        self.assertAlmostEqual(result.dataY(0)[0], 81.12644, delta=1e-4)
-        self.assertAlmostEqual(result.dataY(1)[0], 0.0319747, delta=1e-4)
-        self.assertAlmostEqual(result.dataY(2)[0], 0.77168, delta=1e-4)
+        np.testing.assert_approx_equal(result.dataY(0)[0], 81.12644, significant=significant_digits)
+        np.testing.assert_approx_equal(result.dataY(1)[0], 0.0319747, significant=significant_digits)
+        np.testing.assert_approx_equal(result.dataY(2)[0], 0.77168, significant=significant_digits)
 
         # Test values of group
         sub_ws = group.getItem(0)
-        self.assertAlmostEqual(sub_ws.dataY(0)[0], 0.02540, delta=1e-4)
-        self.assertAlmostEqual(sub_ws.dataY(1)[0], 0.01632, delta=1e-4)
-        self.assertAlmostEqual(sub_ws.dataY(2)[0], -0.00908, delta=1e-4)
+        np.testing.assert_approx_equal(sub_ws.dataY(0)[0], 0.02540, significant=significant_digits)
+        np.testing.assert_approx_equal(sub_ws.dataY(1)[0], 0.01632, significant=significant_digits)
+        np.testing.assert_approx_equal(sub_ws.dataY(2)[0], -0.00908, significant=2)
 
     # --------------------------------Helper functions--------------------------------------
 

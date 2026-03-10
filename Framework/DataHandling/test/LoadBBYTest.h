@@ -8,7 +8,6 @@
 
 #include <cxxtest/TestSuite.h>
 #include <fstream>
-#include <iostream>
 
 #include "MantidAPI/AnalysisDataService.h"
 #include "MantidAPI/FrameworkManager.h"
@@ -16,7 +15,6 @@
 #include "MantidDataHandling/LoadBBY.h"
 #include "MantidDataHandling/LoadInstrument.h"
 #include "MantidDataObjects/WorkspaceSingleValue.h"
-#include <Poco/Path.h>
 #include <Poco/TemporaryFile.h>
 
 using namespace Mantid::API;
@@ -49,6 +47,7 @@ void replaceValue(std::string &tarPath, int offset, char invalid) {
 class LoadBBYTest : public CxxTest::TestSuite {
 public:
   void test_load_bby_algorithm_init() {
+    std::cout << "\nTesting LoadBBY algorithm initialization" << std::endl;
     LoadBBY algToBeTested;
 
     TS_ASSERT_THROWS_NOTHING(algToBeTested.initialize());
@@ -56,6 +55,7 @@ public:
   }
 
   void test_load_bby_algorithm() {
+    std::cout << "\nTesting LoadBBY algorithm execution" << std::endl;
     LoadBBY algToBeTested;
 
     if (!algToBeTested.isInitialized())
@@ -87,7 +87,6 @@ public:
     // check that all required log values are there
     auto run = output->run();
 
-    // test start and end time
     TS_ASSERT(run.getProperty("start_time")->value().compare("2014-06-17T09:59:31") == 0)
     TS_ASSERT(run.getProperty("end_time")->value().find("2014-06-17T09:59:31.08") == 0)
 
@@ -130,6 +129,7 @@ public:
   }
 
   void test_filter_bby_algorithm() {
+    std::cout << "\nTesting LoadBBY algorithm with time filtering" << std::endl;
     LoadBBY algToBeTested;
 
     if (!algToBeTested.isInitialized())
@@ -168,6 +168,7 @@ public:
   }
 
   void test_default_parameters_logged() {
+    std::cout << "\nTesting LoadBBY algorithm default parameter logging" << std::endl;
     LoadBBY algToBeTested;
 
     if (!algToBeTested.isInitialized())
@@ -196,6 +197,7 @@ public:
   }
 
   void test_invalid_event_logged() {
+    std::cout << "\nTesting LoadBBY algorithm with invalid event handling" << std::endl;
     LoadBBY algToBeTested;
 
     if (!algToBeTested.isInitialized())

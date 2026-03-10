@@ -86,6 +86,9 @@ def generate_ts_pdf(
     per_detector=False,
     debug=False,
     pdf_output_name=None,
+    wavelength_lims=None,
+    r_lims=None,
+    enforce_high_q_to_1=False,
 ):
     if sample_details is None:
         raise RuntimeError(
@@ -110,40 +113,55 @@ def generate_ts_pdf(
     sample_coh_scatter_cross_section = sample.cohScatterXSection()
     focused_ws = focused_ws - sample_total_scatter_cross_section / (4 * math.pi)
     focused_ws = focused_ws * 4 * math.pi / sample_coh_scatter_cross_section
-    if debug:
-        s_of_q_minus_one = mantid.CloneWorkspace(InputWorkspace=focused_ws)
 
     if delta_q:
         focused_ws = mantid.Rebin(InputWorkspace=focused_ws, Params=delta_q)
+
+    if wavelength_lims is not None:
+        focused_ws = mantid.ConvertUnits(InputWorkspace=focused_ws, Target="Wavelength", EMode="Elastic")
+        focused_ws = mantid.CropWorkspaceRagged(InputWorkspace=focused_ws, XMin=wavelength_lims[0], XMax=wavelength_lims[1])
+        focused_ws = mantid.ConvertUnits(InputWorkspace=focused_ws, Target="MomentumTransfer", EMode="Elastic")
+
+    if enforce_high_q_to_1:
+        constant_background = mantid.CreateSingleValuedWorkspace(
+            DataValue=focused_ws[-1].readY(0)[-1], OutputWorkspace=f"{run_number}_correction_offset_s_q_1"
+        )
+        print(
+            f"Forcing values of S(Q)-1 to zero by subtraction of a constant: {constant_background.dataY(0)}. "
+            "This is a workaround for normalisation issue #40566, check that it is appropriate for your data."
+        )
+        focused_ws = mantid.Minus(LHSWorkspace=focused_ws, RHSWorkspace=constant_background)
+
+    if debug:
+        s_of_q_minus_one = mantid.CloneWorkspace(InputWorkspace=focused_ws)
+
+    pdf_kwargs = {
+        "InputSofQType": "S(Q)-1",
+        "PDFType": pdf_type,
+        "Filter": lorch_filter,
+        "DeltaR": delta_r,
+        "rho0": sample_details.material_object.number_density,
+    }
+    if r_lims is not None:
+        pdf_kwargs.update({"RMin": r_lims[0], "RMax": r_lims[-1]})
     if merge_banks:
         q_min, q_max = _load_qlims(q_lims)
         merged_ws = mantid.MatchAndMergeWorkspaces(InputWorkspaces=focused_ws, XMin=q_min, XMax=q_max, CalculateScale=False)
-        fast_fourier_filter(merged_ws, rho0=sample_details.material_object.number_density, freq_params=freq_params)
-        pdf_output = mantid.PDFFourierTransform(
-            Inputworkspace="merged_ws",
-            InputSofQType="S(Q)-1",
-            PDFType=pdf_type,
-            Filter=lorch_filter,
-            DeltaR=delta_r,
-            rho0=sample_details.material_object.number_density,
-        )
+        mantid.CloneWorkspace(
+            InputWorkspace=merged_ws, OutputWorkspace="merged_S_of_Q_minus_one"
+        )  # merged S(Q)-1 before applying Fourier filter
+        fast_fourier_filter(merged_ws, rho0=pdf_kwargs["rho0"], freq_params=freq_params)
+        pdf_output = mantid.PDFFourierTransform(Inputworkspace="merged_ws", **pdf_kwargs)
     else:
         for ws in focused_ws:
             fast_fourier_filter(ws, rho0=sample_details.material_object.number_density, freq_params=freq_params)
-        pdf_output = mantid.PDFFourierTransform(
-            Inputworkspace="focused_ws",
-            InputSofQType="S(Q)-1",
-            PDFType=pdf_type,
-            Filter=lorch_filter,
-            DeltaR=delta_r,
-            rho0=sample_details.material_object.number_density,
-        )
+        pdf_output = mantid.PDFFourierTransform(Inputworkspace="focused_ws", **pdf_kwargs)
         pdf_output = mantid.RebinToWorkspace(WorkspaceToRebin=pdf_output, WorkspaceToMatch=pdf_output[4], PreserveEvents=True)
     if not per_detector and not debug:
         common.remove_intermediate_workspace("self_scattering_correction")
     # Rename output ws
     if "merged_ws" in locals():
-        mantid.RenameWorkspace(InputWorkspace="merged_ws", OutputWorkspace=run_number + "_merged_Q")
+        mantid.RenameWorkspace(InputWorkspace="merged_ws", OutputWorkspace=run_number + "_merged_Q_r_FT")
 
     mantid.RenameWorkspace(InputWorkspace="focused_ws", OutputWorkspace=run_number + "_focused_Q")
     if isinstance(focused_ws, WorkspaceGroup):
@@ -197,6 +215,9 @@ def apply_placzek_correction_per_bank(
     sample_temp,
 ):
     raw_ws = mantid.Load(Filename="POLARIS" + str(run_number))
+    if raw_ws.isGroup():
+        raise ValueError("Placzek correction does not support group workspaces")
+
     sample_geometry_json = sample_details.generate_sample_geometry()
     sample_material_json = sample_details.generate_sample_material()
 
@@ -219,7 +240,7 @@ def apply_placzek_correction_per_bank(
     self_scattering_correction = mantid.GroupWorkspaces(InputWorkspaces=ws_group_list)
     self_scattering_correction = mantid.RebinToWorkspace(WorkspaceToRebin=self_scattering_correction, WorkspaceToMatch=focused_ws)
     if not compare_ws_compatibility(focused_ws, self_scattering_correction):
-        raise RuntimeError("To use create_total_scattering_pdf you need to run focus with " "do_van_normalisation=true first.")
+        raise RuntimeError("To use create_total_scattering_pdf you need to run focus with do_van_normalisation=true first.")
     focused_ws = mantid.Subtract(LHSWorkspace=focused_ws, RHSWorkspace=self_scattering_correction)
     return focused_ws
 

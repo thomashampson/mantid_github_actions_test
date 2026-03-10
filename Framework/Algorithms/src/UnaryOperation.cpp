@@ -8,6 +8,7 @@
 #include "MantidAPI/WorkspaceFactory.h"
 #include "MantidAPI/WorkspaceProperty.h"
 #include "MantidDataObjects/EventWorkspace.h"
+
 #include "MantidDataObjects/RebinnedOutput.h"
 
 using namespace Mantid::API;
@@ -58,7 +59,6 @@ void UnaryOperation::exec() {
   retrieveProperties();
 
   const size_t numSpec = in_work->getNumberHistograms();
-  const size_t specSize = in_work->blocksize();
 
   // Initialise the progress reporting object
   Progress progress(this, 0.0, 1.0, numSpec);
@@ -79,7 +79,7 @@ void UnaryOperation::exec() {
     const auto &Y = in_work->y(i);
     const auto &E = in_work->e(i);
 
-    for (size_t j = 0; j < specSize; ++j) {
+    for (size_t j = 0; j < Y.size(); ++j) {
       // Call the abstract function, passing in the current values
       performUnaryOperation(X[j], Y[j], E[j], YOut[j], EOut[j]);
     }

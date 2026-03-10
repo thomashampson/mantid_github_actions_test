@@ -1,6 +1,6 @@
 # Mantid Repository : https://github.com/mantidproject/mantid
 #
-# Copyright &copy; 2022 ISIS Rutherford Appleton Laboratory UKRI,
+# Copyright &copy; 2025 ISIS Rutherford Appleton Laboratory UKRI,
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
@@ -8,6 +8,8 @@
 import os
 import sys
 import json
+from pathlib import Path
+from types import ModuleType
 
 
 def print_histogram_R_factors(project):
@@ -15,7 +17,7 @@ def print_histogram_R_factors(project):
     print("*** Weighted profile R-factor: Rwp " + os.path.split(project.filename)[1])
     for loop_histogram in project.histograms():
         print("\t{:20s}: {:.2f}".format(loop_histogram.name, loop_histogram.get_wR()))
-    print("")
+    print()
 
 
 def add_phases(project, phase_files):
@@ -24,37 +26,22 @@ def add_phases(project, phase_files):
 
 
 def add_histograms(data_filenames, project, instruments, number_regions):
-    if number_regions > len(data_filenames):  # many regions in one data and one instrument file
-        if len(data_filenames) != 1:
-            raise ValueError("There must be one region/bank per focused data file" "or many regions/banks in one focused data file")
-        for loop_region_index in range(1, number_regions + 1):
-            project.add_powder_histogram(
-                datafile=os.path.join(data_filenames[0]),
-                iparams=os.path.join(instruments[0]),
-                phases=project.phases(),
-                databank=loop_region_index,  # indexing starts at 1
-                instbank=loop_region_index,  # indexing starts at 1
-            )
-    else:  # one region in each data file
-        if len(data_filenames) != number_regions:
-            raise ValueError("There must be one region/bank per focused data file" "or many regions/banks in one focused data file")
-        if len(instruments) == len(data_filenames):
-            for loop_index, loop_data_filename in enumerate(data_filenames):
-                project.add_powder_histogram(
-                    datafile=os.path.join(loop_data_filename), iparams=os.path.join(instruments[loop_index]), phases=project.phases()
-                )
-        elif 1 == len(instruments) < len(data_filenames):
-            for loop_index, loop_data_filename in enumerate(data_filenames):
-                project.add_powder_histogram(
-                    datafile=os.path.join(loop_data_filename),
-                    iparams=os.path.join(instruments[0]),
-                    phases=project.phases(),
-                    instbank=loop_index + 1,  # indexing starts at 1
-                )
-        else:
-            raise ValueError(
-                "Calling GSASII from Mantid with multiple instrument files and one focused data file" "is currently not supported"
-            )
+    # Validation checks
+    if len(data_filenames) != 1:
+        raise ValueError("You must provide only one data file.")
+
+    if len(instruments) != 1:
+        raise ValueError("You must provide only one instrument file.")
+
+    # Add histograms for each bank within that file
+    for bank_index in range(1, number_regions + 1):  # GSAS-II uses 1-based indexing
+        project.add_powder_histogram(
+            datafile=os.path.join(data_filenames[0]),
+            iparams=os.path.join(instruments[0]),  # Use the single instrument file
+            phases=project.phases(),
+            databank=bank_index,  # Bank within this data file
+            instbank=bank_index,  # Corresponding bank in instrument file
+        )
 
 
 def add_pawley_reflections(pawley_reflections, project, d_min):
@@ -121,7 +108,7 @@ def run_parameter_refinement(refine, instrument_parameter_string, project, path_
 def export_refinement_to_csv(temp_save_directory, name_of_project, project):
     for histogram_index, loop_histogram in enumerate(project.histograms()):
         loop_histogram.Export(
-            os.path.join(temp_save_directory, name_of_project + f"_{histogram_index+1}.csv"), ".csv", "histogram CSV file"
+            os.path.join(temp_save_directory, name_of_project + f"_{histogram_index + 1}.csv"), ".csv", "histogram CSV file"
         )
 
 
@@ -130,12 +117,13 @@ def export_reflections(temp_save_directory, name_of_project, project):
         loop_histogram_name = loop_histogram.name.replace(".gss", "").replace(" ", "_")
         for phase_name in loop_histogram.reflections().keys():
             reflection_positions = loop_histogram.reflections()[phase_name]["RefList"][:, 5]
-            reflection_file_path = os.path.join(temp_save_directory, name_of_project + f"_reflections_{histogram_index+1}_{phase_name}.txt")
+            reflection_file_path = os.path.join(
+                temp_save_directory, name_of_project + f"_reflections_{histogram_index + 1}_{phase_name}.txt"
+            )
             with open(reflection_file_path, "wt", encoding="utf-8") as file:
                 file.write(f"{loop_histogram_name}\n")
                 file.write(f"{phase_name}\n")
-                for reflection in reflection_positions:
-                    file.write(f"{str(reflection)}\n")
+                file.writelines(f"{str(reflection)}\n" for reflection in reflection_positions)
 
 
 def export_refined_instrument_parameters(temp_save_directory, name_of_project, project):
@@ -162,37 +150,76 @@ def export_lattice_parameters(temp_save_directory, name_of_project, project):
             file.write(parameters_json)
 
 
+def import_gsasii(gsasii_scriptable: Path) -> ModuleType:
+    """
+    Try to import the GSASIIscriptable module using the provided file path.
+
+    Args:
+        gsasii_scriptable: The full path to the GSASIIscriptable.py file.
+
+    Returns:
+        The imported GSASIIscriptable module.
+
+    Raises:
+        ImportError: If the module cannot be imported.
+        FileNotFoundError: If the specified file does not exist.
+    """
+    if not gsasii_scriptable.is_file():
+        raise FileNotFoundError(
+            f"The specified GSASIIscriptable.py file does not exist: {gsasii_scriptable}\n"
+            f"Please ensure you have installed GSAS-II from https://advancedphotonsource.github.io/GSAS-II-tutorials/install.html"
+        )
+
+    gsasii_dir = gsasii_scriptable.parent
+    gsasii_package_parent = gsasii_dir.parent
+
+    try:
+        if str(gsasii_package_parent) not in sys.path:
+            sys.path.insert(0, str(gsasii_package_parent))
+        import GSASII.GSASIIscriptable as G2sc
+
+        return G2sc
+    except ImportError as exc1:
+        try:
+            if str(gsasii_dir) not in sys.path:
+                sys.path.insert(0, str(gsasii_dir))
+            import GSASIIscriptable as G2sc
+
+            return G2sc
+        except ImportError as exc2:
+            raise ImportError(
+                f"GSASIIscriptable module found at {gsasii_scriptable}, but it could not be imported.\n"
+                f"Package import failed: {exc1}\n"
+                f"Top-level import failed: {exc2}\n"
+                f"Check that your PYTHONPATH and sys.path are set correctly for your GSAS-II installation.\n"
+            )
+
+
 def main():
     # Parse Inputs from Mantid
     inputs_dict = json.loads(sys.argv[1])
 
-    path_to_gsas2 = inputs_dict["path_to_gsas2"]
     temporary_save_directory = inputs_dict["temporary_save_directory"]
     project_name = inputs_dict["project_name"]
-    refinement_method = inputs_dict["refinement_method"]
-    refine_background = inputs_dict["refine_background"]
-    refine_microstrain = inputs_dict["refine_microstrain"]
-    refine_sigma_one = inputs_dict["refine_sigma_one"]
-    refine_gamma = inputs_dict["refine_gamma"]
-    refine_histogram_scale_factor = inputs_dict["refine_histogram_scale_factor"]
-    refine_unit_cell = inputs_dict["refine_unit_cell"]
+    refinement_method = inputs_dict["refinement_settings"]["method"]
+    refine_background = inputs_dict["refinement_settings"]["background"]
+    refine_microstrain = inputs_dict["refinement_settings"]["microstrain"]
+    refine_sigma_one = inputs_dict["refinement_settings"]["sigma_one"]
+    refine_gamma = inputs_dict["refinement_settings"]["gamma"]
+    refine_histogram_scale_factor = inputs_dict["refinement_settings"]["histogram_scale_factor"]
+    refine_unit_cell = inputs_dict["refinement_settings"]["unit_cell"]
     override_cell_lengths = inputs_dict["override_cell_lengths"]
-    data_files = inputs_dict["data_files"]
-    phase_files = inputs_dict["phase_files"]
-    instrument_files = inputs_dict["instrument_files"]
+    data_files = inputs_dict["file_paths"]["data_files"]
+    phase_files = inputs_dict["file_paths"]["phase_filepaths"]
+    instrument_files = inputs_dict["file_paths"]["instrument_files"]
     limits = inputs_dict["limits"]
     mantid_pawley_reflections = inputs_dict["mantid_pawley_reflections"]
     d_spacing_min = inputs_dict["d_spacing_min"]
     number_of_regions = inputs_dict["number_of_regions"]
+    gsasii_scriptable_path = inputs_dict["gsasii_scriptable_path"]
 
     # Call GSASIIscriptable
-    import_path = None
-    try:
-        import_path = os.path.join(path_to_gsas2, "GSASII")
-        sys.path.insert(0, import_path)
-        import GSASIIscriptable as G2sc
-    except ModuleNotFoundError:
-        raise ImportError(f"GSAS-II was not found at {import_path}")
+    G2sc = import_gsasii(Path(gsasii_scriptable_path))
 
     project_path = os.path.join(temporary_save_directory, project_name + ".gpx")
     gsas_project = G2sc.G2Project(filename=project_path)

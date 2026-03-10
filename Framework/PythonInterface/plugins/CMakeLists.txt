@@ -6,11 +6,13 @@ set(PYTHON_PLUGINS
     algorithms/Abins.py
     algorithms/Abins2D.py
     algorithms/AlignAndFocusPowderFromFiles.py
+    algorithms/WorkflowAlgorithms/HFIRPowderReduction.py
     algorithms/AlignComponents.py
     algorithms/AngularAutoCorrelationsSingleAxis.py
     algorithms/AngularAutoCorrelationsTwoAxes.py
     algorithms/ApplyDetectorScanEffCorr.py
     algorithms/ApplyNegMuCorrection.py
+    algorithms/AssertSpinStateOrder.py
     algorithms/BASISCrystalDiffraction.py
     algorithms/BASISDiffraction.py
     algorithms/BASISPowderDiffraction.py
@@ -36,7 +38,9 @@ set(PYTHON_PLUGINS
     algorithms/CorrectTOF.py
     algorithms/CreateCacheFilename.py
     algorithms/CreateEmptyTableWorkspace.py
+    algorithms/CreateGroupingByComponent.py
     algorithms/CreateLeBailFitInput.py
+    algorithms/CreatePoleFigureTableWorkspace.py
     algorithms/CropWorkspaceForMDNorm.py
     algorithms/CylinderPaalmanPingsCorrection2.py
     algorithms/DNSComputeDetEffCorrCoefs.py
@@ -70,6 +74,7 @@ set(PYTHON_PLUGINS
     algorithms/FindGlobalBMatrix.py
     algorithms/FindSatellitePeaks.py
     algorithms/FindSXPeaksConvolve.py
+    algorithms/FindUBFromScatteringPlane.py
     algorithms/FindMultipleUMatrices.py
     algorithms/FitGaussian.py
     algorithms/FitIncidentSpectrum.py
@@ -155,12 +160,16 @@ set(PYTHON_PLUGINS
     algorithms/PEARLTransfit.py
     algorithms/PelicanReduction.py
     algorithms/PelicanCrystalProcessing.py
+    algorithms/PoldiAutoCorrelation6.py
     algorithms/PoldiCreatePeaksFromFile.py
     algorithms/PoldiLoadRuns.py
     algorithms/PoldiMerge.py
+    algorithms/poldi_utils.py
     algorithms/PowderReduceP2D.py
     algorithms/RebinRagged.py
     algorithms/RefinePowderDiffProfileSeq.py
+    algorithms/RefineSingleCrystalGoniometer.py
+    algorithms/ReorientUnitCell.py
     algorithms/ReflectometryReductionOneLiveData.py
     algorithms/ReflectometrySliceEventWorkspace.py
     algorithms/RetrieveRunInfo.py
@@ -190,6 +199,7 @@ set(PYTHON_PLUGINS
     algorithms/HYSPECSuggestTIB.py
     algorithms/Symmetrise.py
     algorithms/SymmetriseMDHisto.py
+    algorithms/TimeDifference.py
     algorithms/TOFTOFCropWorkspace.py
     algorithms/TOFTOFMergeRuns.py
     algorithms/TestWorkspaceGroupProperty.py
@@ -276,6 +286,7 @@ set(PYTHON_PLUGINS
     algorithms/WorkflowAlgorithms/NormaliseByThickness.py
     algorithms/WorkflowAlgorithms/OSIRISDiffractionReduction.py
     algorithms/WorkflowAlgorithms/PaalmanPingsMonteCarloAbsorption.py
+    algorithms/peakdata_utils.py
     algorithms/WorkflowAlgorithms/PoldiDataAnalysis.py
     algorithms/WorkflowAlgorithms/PolDiffILLReduction.py
     algorithms/WorkflowAlgorithms/PowderILLDetectorScan.py
@@ -288,10 +299,12 @@ set(PYTHON_PLUGINS
     algorithms/WorkflowAlgorithms/ReflectometryILLPreprocess.py
     algorithms/WorkflowAlgorithms/ReflectometryILLSumForeground.py
     algorithms/WorkflowAlgorithms/ReflectometryILL_common.py
-    algorithms/WorkflowAlgorithms/ReflectometryISISPreprocess.py
-    algorithms/WorkflowAlgorithms/ReflectometryISISLoadAndProcess.py
-    algorithms/WorkflowAlgorithms/ReflectometryISISSumBanks.py
+    algorithms/WorkflowAlgorithms/ReflectometryISISCalculatePolEff.py
     algorithms/WorkflowAlgorithms/ReflectometryISISCalibration.py
+    algorithms/WorkflowAlgorithms/ReflectometryISISCreateTransmission.py
+    algorithms/WorkflowAlgorithms/ReflectometryISISLoadAndProcess.py
+    algorithms/WorkflowAlgorithms/ReflectometryISISPreprocess.py
+    algorithms/WorkflowAlgorithms/ReflectometryISISSumBanks.py
     algorithms/WorkflowAlgorithms/ResNorm2.py
     algorithms/WorkflowAlgorithms/SANS/SANSBeamCentreFinder.py
     algorithms/WorkflowAlgorithms/SANS/SANSBeamCentreFinderCore.py
@@ -321,6 +334,7 @@ set(PYTHON_PLUGINS
     algorithms/WorkflowAlgorithms/SANSILLParameterScan.py
     algorithms/WorkflowAlgorithms/SANSILLReduction.py
     algorithms/WorkflowAlgorithms/SANSILLReduction2.py
+    algorithms/WorkflowAlgorithms/SANSISISPolarizationCorrections.py
     algorithms/WorkflowAlgorithms/SANSMask.py
     algorithms/WorkflowAlgorithms/SANSPatchSensitivity.py
     algorithms/WorkflowAlgorithms/SANSReduction.py
@@ -333,6 +347,7 @@ set(PYTHON_PLUGINS
     algorithms/WorkflowAlgorithms/SingleCrystalDiffuseReduction.py
     algorithms/WorkflowAlgorithms/SofQWMoments.py
     algorithms/WorkflowAlgorithms/SofQWMomentsScan.py
+    algorithms/WorkflowAlgorithms/StitchByBackground.py
     algorithms/WorkflowAlgorithms/SwapWidths.py
     algorithms/WorkflowAlgorithms/TOSCABankCorrection.py
     algorithms/WorkflowAlgorithms/TimeSlice.py
@@ -392,6 +407,8 @@ set(PYTHON_PLUGINS
     functions/TFMuonium.py
     functions/TeixeiraWater.py
     functions/TeixeiraWaterIqt.py
+    functions/TeixeiraWaterIqtFT.py
+    functions/TeixeiraWaterIqtHelper.py
     functions/ZFMuonium.py
     functions/ZFdipole.py
     functions/ZFelectronDipole.py

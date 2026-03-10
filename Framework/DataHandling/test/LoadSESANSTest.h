@@ -14,7 +14,6 @@
 #include "MantidDataHandling/LoadSESANS.h"
 #include "MantidKernel/FileDescriptor.h"
 
-#include <Poco/File.h>
 #include <Poco/TemporaryFile.h>
 
 using Mantid::DataHandling::LoadSESANS;
@@ -88,7 +87,7 @@ public:
 
 private:
   std::string getTestFilePath(const std::string &filename) {
-    const std::string filepath = Mantid::API::FileFinder::Instance().getFullPath(filename);
+    const std::string filepath = Mantid::API::FileFinder::Instance().getFullPath(filename).string();
     TS_ASSERT_DIFFERS(filepath, "");
     return filepath;
   }

@@ -36,9 +36,8 @@
 #include "MantidFrameworkTestHelpers/MDEventsTestHelper.h"
 #include "MantidFrameworkTestHelpers/WorkspaceCreationHelper.h"
 
+#include <filesystem>
 #include <memory>
-
-#include <Poco/File.h>
 
 namespace Mantid::DataObjects {
 
@@ -72,7 +71,7 @@ EventWorkspace_sptr createDiffractionEventWorkspace(int numEvents, int numPixels
   retVal->initialize(numPixels + 2, 1, 1);
 
   // --------- Load the instrument -----------
-  const std::string filename = FileFinder::Instance().getFullPath("unit_testing/MINITOPAZ_Definition.xml");
+  const std::string filename = FileFinder::Instance().getFullPath("unit_testing/MINITOPAZ_Definition.xml").string();
   InstrumentDefinitionParser parser(filename, "MINITOPAZ", Strings::loadFile(filename));
   auto instrument = parser.parseXML(nullptr);
   retVal->populateInstrumentParameters();
@@ -341,8 +340,8 @@ makeFakeMDHistoWorkspaceWithMDFrame(double signal, size_t numDims, const Mantid:
  */
 void checkAndDeleteFile(const std::string &filename) {
   if (!filename.empty()) {
-    if (Poco::File(filename).exists()) {
-      Poco::File(filename).remove();
+    if (std::filesystem::exists(filename)) {
+      std::filesystem::remove(filename);
     }
   }
 }

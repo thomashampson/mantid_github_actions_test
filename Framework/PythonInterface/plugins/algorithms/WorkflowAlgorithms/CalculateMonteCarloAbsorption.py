@@ -92,19 +92,19 @@ class CalculateMonteCarloAbsorption(DataProcessorAlgorithm):
             name="SampleCoherentXSection",
             defaultValue=0.0,
             validator=FloatBoundedValidator(0.0),
-            doc="The coherent cross-section for the sample material in barns. To be used instead of " "Chemical Formula.",
+            doc="The coherent cross-section for the sample material in barns. To be used instead of Chemical Formula.",
         )
         self.declareProperty(
             name="SampleIncoherentXSection",
             defaultValue=0.0,
             validator=FloatBoundedValidator(0.0),
-            doc="The incoherent cross-section for the sample material in barns. To be used instead of " "Chemical Formula.",
+            doc="The incoherent cross-section for the sample material in barns. To be used instead of Chemical Formula.",
         )
         self.declareProperty(
             name="SampleAttenuationXSection",
             defaultValue=0.0,
             validator=FloatBoundedValidator(0.0),
-            doc="The absorption cross-section for the sample material in barns. To be used instead of " "Chemical Formula.",
+            doc="The absorption cross-section for the sample material in barns. To be used instead of Chemical Formula.",
         )
         self.declareProperty(
             name="SampleDensityType",
@@ -173,19 +173,19 @@ class CalculateMonteCarloAbsorption(DataProcessorAlgorithm):
             name="ContainerCoherentXSection",
             defaultValue=0.0,
             validator=FloatBoundedValidator(0.0),
-            doc="The coherent cross-section for the can material in barns. To be used instead of " "Chemical Formula.",
+            doc="The coherent cross-section for the can material in barns. To be used instead of Chemical Formula.",
         )
         self.declareProperty(
             name="ContainerIncoherentXSection",
             defaultValue=0.0,
             validator=FloatBoundedValidator(0.0),
-            doc="The incoherent cross-section for the can material in barns. To be used instead of " "Chemical Formula.",
+            doc="The incoherent cross-section for the can material in barns. To be used instead of Chemical Formula.",
         )
         self.declareProperty(
             name="ContainerAttenuationXSection",
             defaultValue=0.0,
             validator=FloatBoundedValidator(0.0),
-            doc="The absorption cross-section for the can material in barns. To be used instead of " "Chemical Formula.",
+            doc="The absorption cross-section for the can material in barns. To be used instead of Chemical Formula.",
         )
         self.declareProperty(
             name="ContainerDensityType",
@@ -790,8 +790,7 @@ class CalculateMonteCarloAbsorption(DataProcessorAlgorithm):
         handle = open(path, "w")
         head = "spectrum,theta"
         handle.write(head + " \n")
-        for n in range(0, len(theta)):
-            handle.write(str(n + 1) + "   " + str(theta[n]) + "\n")
+        handle.writelines(str(n + 1) + "   " + str(theta[n]) + "\n" for n in range(0, len(theta)))
         handle.close()
 
         update_alg = self.createChildAlgorithm("UpdateInstrumentFromFile", enableLogging=False)

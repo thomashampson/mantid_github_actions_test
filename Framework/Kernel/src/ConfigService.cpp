@@ -19,7 +19,6 @@
 #include "MantidKernel/StdoutChannel.h"
 #include "MantidKernel/StringTokenizer.h"
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
 
 #include <Poco/AutoPtr.h>
 #include <Poco/Channel.h>
@@ -30,7 +29,6 @@
 #include <Poco/DOM/NodeList.h>
 #include <Poco/Environment.h>
 #include <Poco/Exception.h>
-#include <Poco/File.h>
 #include <Poco/Instantiator.h>
 #include <Poco/Logger.h>
 #include <Poco/LoggingFactory.h>
@@ -55,7 +53,10 @@
 #include <algorithm>
 #include <cctype>
 #include <codecvt>
+#include <cstdlib>
+#include <cstring>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -86,8 +87,10 @@ namespace { // anonymous namespace for some utility functions
 /// static Logger object
 Logger g_log("ConfigService");
 
+const std::string PATH_DELIMITERS = ";,";
+
 /**
- * Split the supplied string on semicolons.
+ * Split the supplied string on semicolons and commas.
  *
  * @param path The path to split.
  * @returns vector containing the split path.
@@ -95,11 +98,11 @@ Logger g_log("ConfigService");
 std::vector<std::string> splitPath(const std::string &path) {
   std::vector<std::string> splitted;
 
-  if (path.find(';') == std::string::npos) { // don't bother tokenizing
+  if (path.find_first_of(PATH_DELIMITERS) == std::string::npos) { // don't bother tokenizing
     splitted.emplace_back(path);
   } else {
     int options = Mantid::Kernel::StringTokenizer::TOK_TRIM + Mantid::Kernel::StringTokenizer::TOK_IGNORE_EMPTY;
-    Mantid::Kernel::StringTokenizer tokenizer(path, ";,", options);
+    Mantid::Kernel::StringTokenizer tokenizer(path, PATH_DELIMITERS, options);
     auto iend = tokenizer.end();
     for (auto itr = tokenizer.begin(); itr != iend; ++itr) {
       if (!itr->empty()) {
@@ -122,8 +125,7 @@ const std::string LOG_LEVEL_KEY("logging.loggers.root.level");
 ConfigServiceImpl::ConfigServiceImpl()
     : m_pConf(nullptr), m_pSysConfig(new Poco::Util::SystemConfiguration()), m_changed_keys(), m_strBaseDir(""),
       m_propertyString(""), m_properties_file_name("Mantid.properties"),
-      m_user_properties_file_name("Mantid.user.properties"), m_dataSearchDirs(), m_instrumentDirs(), m_proxyInfo(),
-      m_isProxySet(false) {
+      m_user_properties_file_name("Mantid.user.properties"), m_dataSearchDirs(), m_instrumentDirs(), m_proxyInfo() {
   // Register StdChannel with Poco
   Poco::LoggingFactory::defaultFactory().registerChannelClass(
       "StdoutChannel", new Poco::Instantiator<Poco::StdoutChannel, Poco::Channel>);
@@ -154,8 +156,7 @@ ConfigServiceImpl::ConfigServiceImpl()
   propertiesFilesList = getPropertiesDir() + m_properties_file_name;
 
   // Load the local (machine) properties file, if it exists
-  Poco::File localFile(getLocalFilename());
-  if (localFile.exists()) {
+  if (std::filesystem::exists(getLocalFilename())) {
     updateConfig(getLocalFilename(), true, false);
     propertiesFilesList += ", " + getLocalFilename();
   }
@@ -183,23 +184,21 @@ ConfigServiceImpl::ConfigServiceImpl()
 
   // Assert that the appdata and the instrument subdirectory exists
   std::string appDataDir = getAppDataDir();
-  Poco::Path path(appDataDir);
-  path.pushDirectory("instrument");
-  Poco::File file(path);
-  // createDirectories will fail gracefully if it is already present - but will
+  std::filesystem::path path = std::filesystem::path(appDataDir) / "instrument";
+  // create_directories will fail gracefully if it is already present - but will
   // throw an error if it cannot create the directory
   try {
-    file.createDirectories();
-  } catch (Poco::FileException &fe) {
-    g_log.error() << "Cannot create the local instrument cache directory [" << path.toString()
+    std::filesystem::create_directories(path);
+  } catch (const std::filesystem::filesystem_error &fe) {
+    g_log.error() << "Cannot create the local instrument cache directory [" << path.string()
                   << "]. Mantid will not be able to update instrument definitions.\n"
                   << fe.what() << '\n';
   }
-  Poco::File vtpDir(getVTPFileDirectory());
+  std::filesystem::path vtpDir(getVTPFileDirectory());
   try {
-    vtpDir.createDirectories();
-  } catch (Poco::FileException &fe) {
-    g_log.error() << "Cannot create the local instrument geometry cache directory [" << path.toString()
+    std::filesystem::create_directories(vtpDir);
+  } catch (const std::filesystem::filesystem_error &fe) {
+    g_log.error() << "Cannot create the local instrument geometry cache directory [" << vtpDir.string()
                   << "]. Mantid will be slower at viewing complex instruments.\n"
                   << fe.what() << '\n';
   }
@@ -237,19 +236,19 @@ ConfigServiceImpl::~ConfigServiceImpl() {
  */
 void ConfigServiceImpl::setBaseDirectory() {
   // Define the directory to search for the Mantid.properties file.
-  Poco::File f;
+  std::filesystem::path filepath;
 
   // First directory: the current working
-  m_strBaseDir = Poco::Path::current();
-  f = Poco::File(m_strBaseDir + m_properties_file_name);
-  if (f.exists())
+  m_strBaseDir = std::filesystem::current_path().string() + "/";
+  filepath = std::filesystem::path(m_strBaseDir) / m_properties_file_name;
+  if (std::filesystem::exists(filepath))
     return;
 
   // Check the executable directory to see if it includes a mantid.properties
   // file
   m_strBaseDir = getDirectoryOfExecutable();
-  f = Poco::File(m_strBaseDir + m_properties_file_name);
-  if (f.exists())
+  filepath = std::filesystem::path(m_strBaseDir) / m_properties_file_name;
+  if (std::filesystem::exists(filepath))
     return;
 
   // Check the MANTIDPATH environment var
@@ -259,22 +258,22 @@ void ConfigServiceImpl::setBaseDirectory() {
     // Note: adding it to the MANTIDPATH itself will make other parts of the
     // code crash.
 #ifdef _WIN32
-    // In case Poco returns a Windows long path (prefixed with "\\?\"), we cannot
+    // In case the path contains backslashes, we cannot
     // mix forward and back slashes in the path.
     m_strBaseDir = Poco::Environment::get("MANTIDPATH") + "\\";
 #else
     m_strBaseDir = Poco::Environment::get("MANTIDPATH") + "/";
 #endif
-    f = Poco::File(m_strBaseDir + m_properties_file_name);
-    if (f.exists())
+    filepath = std::filesystem::path(m_strBaseDir) / m_properties_file_name;
+    if (std::filesystem::exists(filepath))
       return;
   }
 
 #ifdef __APPLE__
   // Finally, on OSX check if we're in the package directory and the .properties
   // file just happens to be two directories up
-  auto path = Poco::Path(getDirectoryOfExecutable());
-  m_strBaseDir = path.parent().parent().parent().toString();
+  std::filesystem::path execPath(getDirectoryOfExecutable());
+  m_strBaseDir = execPath.parent_path().parent_path().parent_path().string() + "/";
 #endif
 }
 
@@ -426,7 +425,7 @@ std::string ConfigServiceImpl::makeAbsolute(const std::string &dir, const std::s
   }
   std::string converted;
   // If we have a list, chop it up and convert each one
-  if (dir.find_first_of(";,") != std::string::npos) {
+  if (dir.find_first_of(PATH_DELIMITERS) != std::string::npos) {
     auto splitted = splitPath(dir);
     auto iend = splitted.cend();
     for (auto itr = splitted.begin(); itr != iend;) {
@@ -451,24 +450,41 @@ std::string ConfigServiceImpl::makeAbsolute(const std::string &dir, const std::s
   // has the effect
   // of giving malformed paths when using Windows-style directories. E.g
   // C:\Mantid ->C:Mantid
-  // and Poco::Path::isRelative throws an exception on this
+  // std::filesystem::path can handle this better
   bool is_relative(false);
   try {
-    is_relative = Poco::Path(dir).isRelative();
-  } catch (Poco::PathSyntaxException &) {
+    std::filesystem::path testPath(dir);
+    is_relative = testPath.is_relative();
+
+#ifdef _WIN32
+    // On Windows, std::filesystem treats paths starting with / or \ as relative
+    // (because they lack a drive letter), but we want to treat them as absolute
+    // to match the original Poco::Path behavior and Unix conventions
+    if (is_relative && !dir.empty() && (dir[0] == '/' || dir[0] == '\\')) {
+      is_relative = false;
+    }
+#endif
+  } catch (const std::exception &) {
     g_log.warning() << "Malformed path detected in the \"" << key << "\" variable, skipping \"" << dir << "\"\n";
     return "";
   }
   if (is_relative) {
     const std::string propFileDir(getPropertiesDir());
-    converted = Poco::Path(propFileDir).resolve(dir).toString();
+    std::filesystem::path basePath(propFileDir);
+    std::filesystem::path fullPath = basePath / dir;
+    converted = fullPath.string();
   } else {
     converted = dir;
   }
-  if (Poco::Path(converted).getExtension() != "") {
-    converted = Poco::Path(converted).toString();
+  std::filesystem::path convertedPath(converted);
+  if (!convertedPath.extension().empty()) {
+    converted = convertedPath.string();
   } else {
-    converted = Poco::Path(converted).makeDirectory().toString();
+    // Ensure directory has trailing slash
+    converted = convertedPath.string();
+    if (converted.back() != '/' && converted.back() != '\\') {
+      converted += "/";
+    }
   }
   // Backward slashes cannot be allowed to go into our properties file
   // Note this is a temporary fix for ticket #2445.
@@ -600,9 +616,8 @@ void ConfigServiceImpl::createUserPropertiesFile() const {
 void ConfigServiceImpl::reset() {
   // Remove the current user properties file and write a fresh one
   try {
-    Poco::File userFile(getUserFilename());
-    userFile.remove();
-  } catch (Poco::Exception &) {
+    std::filesystem::remove(getUserFilename());
+  } catch (const std::exception &) {
   }
   createUserPropertiesFile();
 
@@ -623,16 +638,6 @@ void ConfigServiceImpl::reset() {
  */
 void ConfigServiceImpl::updateConfig(const std::string &filename, const bool append, const bool update_caches) {
   loadConfig(filename, append);
-
-  // Ensure that the default save directory makes sense
-  /*
-  if (!append)
-  {
-    std::string save_dir = getString("defaultsave.directory");
-    if (Poco::trimInPlace(save_dir).size() == 0)
-      setString("defaultsave.directory", Poco::Path::home());
-  }
-  */
 
   if (update_caches) {
     // Only configure logging once
@@ -853,6 +858,74 @@ void ConfigServiceImpl::remove(const std::string &rootName) {
  */
 bool ConfigServiceImpl::hasProperty(const std::string &rootName) const { return m_pConf->hasProperty(rootName); }
 
+namespace {
+/// Expands environment variables in a path string
+/// Supports $VAR, ${VAR} on Unix and %VAR% on Windows
+std::string expandEnvironmentInFilepath(const std::string &target) {
+  std::string result = target;
+  size_t pos = 0;
+
+#ifdef _WIN32
+  // Windows style: %VAR%
+  while ((pos = result.find('%', pos)) != std::string::npos) {
+    size_t end = result.find('%', pos + 1);
+    if (end == std::string::npos)
+      break;
+
+    std::string varName = result.substr(pos + 1, end - pos - 1);
+    const char *envValue = std::getenv(varName.c_str());
+
+    if (envValue) {
+      result.replace(pos, end - pos + 1, envValue);
+      pos += std::strlen(envValue);
+    } else {
+      pos = end + 1;
+    }
+  }
+#else
+  // Unix style: $VAR or ${VAR}
+  pos = 0;
+  while ((pos = result.find('$', pos)) != std::string::npos) {
+    size_t start = pos;
+    size_t end;
+    std::string varName;
+
+    if (pos + 1 < result.length() && result[pos + 1] == '{') {
+      // ${VAR} format
+      end = result.find('}', pos + 2);
+      if (end == std::string::npos) {
+        pos++;
+        continue;
+      }
+      varName = result.substr(pos + 2, end - pos - 2);
+      end++; // include the closing brace
+    } else {
+      // $VAR format - find end of variable name
+      end = pos + 1;
+      while (end < result.length() && (std::isalnum(result[end]) || result[end] == '_')) {
+        end++;
+      }
+      varName = result.substr(pos + 1, end - pos - 1);
+    }
+
+    if (!varName.empty()) {
+      const char *envValue = std::getenv(varName.c_str());
+      if (envValue) {
+        result.replace(start, end - start, envValue);
+        pos = start + std::strlen(envValue);
+      } else {
+        pos = end;
+      }
+    } else {
+      pos++;
+    }
+  }
+#endif
+
+  return result;
+}
+} // namespace
+
 /** Checks to see whether the given file target is an executable one and it
  *exists.
  * This method will expand environment variables found in the given file path.
@@ -863,14 +936,27 @@ bool ConfigServiceImpl::hasProperty(const std::string &rootName) const { return 
  */
 bool ConfigServiceImpl::isExecutable(const std::string &target) const {
   try {
-    std::string expTarget = Poco::Path::expand(target);
-    Poco::File tempFile = Poco::File(expTarget);
+    std::filesystem::path filepath(expandEnvironmentInFilepath(target));
 
-    if (tempFile.exists()) {
-      return tempFile.canExecute();
+    if (std::filesystem::exists(filepath) && std::filesystem::is_regular_file(filepath)) {
+      // On Unix-like systems, check execute permission
+      // std::filesystem doesn't have a direct equivalent to canExecute
+      // so we use std::filesystem::status
+#ifdef _WIN32
+      // On Windows, check if it's a regular file with .exe, .bat, .cmd extension
+      std::string ext = filepath.extension().string();
+      std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+      return (ext == ".exe" || ext == ".bat" || ext == ".cmd" || ext == ".com");
+#else
+      // On Unix-like systems, check execute permissions
+      auto perms = std::filesystem::status(filepath).permissions();
+      return (perms & std::filesystem::perms::owner_exec) != std::filesystem::perms::none ||
+             (perms & std::filesystem::perms::group_exec) != std::filesystem::perms::none ||
+             (perms & std::filesystem::perms::others_exec) != std::filesystem::perms::none;
+#endif
     } else
       return false;
-  } catch (Poco::Exception &) {
+  } catch (const std::exception &) {
     return false;
   }
 }
@@ -890,7 +976,7 @@ bool ConfigServiceImpl::isExecutable(const std::string &target) const {
 void ConfigServiceImpl::launchProcess(const std::string &programFilePath,
                                       const std::vector<std::string> &programArguments) const {
   try {
-    std::string expTarget = Poco::Path::expand(programFilePath);
+    std::string expTarget = expandEnvironmentInFilepath(programFilePath);
     Poco::Process::launch(expTarget, programArguments);
   } catch (Poco::SystemException &e) {
     throw std::runtime_error(e.what());
@@ -1025,6 +1111,12 @@ std::string ConfigServiceImpl::getOSArchitecture() {
     size_t size = sizeof(ret);
     if (sysctlbyname("sysctl.proc_translated", &ret, &size, nullptr, 0) != -1 && ret == 1) {
       osArch = "arm64_(x86_64)";
+      g_log.warning("You are running an Intel build of Mantid on Apple silicon, which will be significantly slower and "
+                    "use more power. For best performance, install the Arm version of Mantid. This version is "
+                    "available here: https://downloads.mantidproject.org");
+    } else {
+      // TODO this can be removed after the v6.14 code freeze because the feature will be dropped
+      g_log.warning("Mantid v6.14 is the last version that will support Intel macOS.");
     }
   }
 #endif
@@ -1046,13 +1138,13 @@ std::string ConfigServiceImpl::getOSVersion() { return m_pSysConfig->getString("
 /// @returns true if the file exists and can be read
 bool canRead(const std::string &filename) {
   // check for existence of the file
-  Poco::File pocoFile(filename);
-  if (!pocoFile.exists()) {
+  if (!std::filesystem::exists(filename)) {
     return false;
   }
 
-  // just return if it is readable
-  return pocoFile.canRead();
+  // Try to open the file to check if it's readable
+  std::ifstream file(filename);
+  return file.good();
 }
 
 /// @returns the value associated with the key.
@@ -1116,7 +1208,7 @@ std::string ConfigServiceImpl::getOSVersionReadable() {
     std::string line;
     while (std::getline(handle, line)) {
       if (!line.empty()) {
-        description = line;
+        description = std::move(line);
         break;
       }
     }
@@ -1233,15 +1325,18 @@ std::string ConfigServiceImpl::getAppDataDir() {
   wchar_t *w_appdata = _wgetenv(L"APPDATA");
   std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
   std::string appdata = converter.to_bytes(w_appdata);
-  Poco::Path path(appdata);
-  path.makeDirectory();
-  path.pushDirectory(vendorName);
-  path.pushDirectory(applicationName);
-  return path.toString();
+  std::filesystem::path path(appdata);
+  path /= vendorName;
+  path /= applicationName;
+  return path.string();
 #else // linux and mac
-  Poco::Path path(Poco::Path::home());
-  path.pushDirectory("." + applicationName);
-  return path.toString();
+  const char *home = std::getenv("HOME");
+  if (!home) {
+    throw std::runtime_error("HOME environment variable not set - seen in ConfigService.getAppDataDir()");
+  }
+  std::filesystem::path path(home);
+  path /= ("." + applicationName);
+  return path.string();
 #endif
 }
 
@@ -1251,7 +1346,8 @@ std::string ConfigServiceImpl::getAppDataDir() {
  * containing the executable, including a trailing slash
  */
 std::string ConfigServiceImpl::getDirectoryOfExecutable() const {
-  return Poco::Path(getPathToExecutable()).parent().toString();
+  std::filesystem::path execPath(getPathToExecutable());
+  return execPath.parent_path().string() + "/";
 }
 
 /**
@@ -1385,11 +1481,11 @@ std::string ConfigServiceImpl::getUserPropertiesDir() const {
 #ifdef _WIN32
   return m_strBaseDir;
 #else
-  Poco::Path datadir(m_pSysConfig->getString("system.homeDir"));
-  datadir.append(".mantid");
+  std::filesystem::path datadir(m_pSysConfig->getString("system.homeDir"));
+  datadir /= ".mantid";
   // Create the directory if it doesn't already exist
-  Poco::File(datadir).createDirectory();
-  return datadir.toString() + "/";
+  std::filesystem::create_directory(datadir);
+  return datadir.string() + "/";
 #endif
 }
 
@@ -1426,27 +1522,27 @@ void ConfigServiceImpl::appendDataSearchSubDir(const std::string &subdir) {
   if (subdir.empty())
     return;
 
-  Poco::Path subDirPath;
+  std::filesystem::path subDirPath;
   try {
-    subDirPath = Poco::Path(subdir);
-  } catch (Poco::PathSyntaxException &) {
+    subDirPath = std::filesystem::path(subdir);
+  } catch (const std::exception &) {
     return;
   }
 
-  if (!subDirPath.isDirectory() || !subDirPath.isRelative()) {
+  // Check if path has trailing slash (indicates directory) and is relative
+  if (!subDirPath.is_relative()) {
     return;
   }
 
   auto newDataDirs = m_dataSearchDirs;
   for (const auto &path : m_dataSearchDirs) {
-    Poco::Path newDirPath;
+    std::filesystem::path newDirPath;
     try {
-      newDirPath = Poco::Path(path);
-      newDirPath.append(subDirPath);
+      newDirPath = std::filesystem::path(path) / subDirPath;
       // only add new path if it isn't already there
-      if (std::find(newDataDirs.begin(), newDataDirs.end(), newDirPath.toString()) == newDataDirs.end())
-        newDataDirs.emplace_back(newDirPath.toString());
-    } catch (Poco::PathSyntaxException &) {
+      if (std::find(newDataDirs.begin(), newDataDirs.end(), newDirPath.string()) == newDataDirs.end())
+        newDataDirs.emplace_back(newDirPath.string());
+    } catch (const std::exception &) {
       continue;
     }
   }
@@ -1463,17 +1559,21 @@ void ConfigServiceImpl::appendDataSearchDir(const std::string &path) {
   if (path.empty())
     return;
 
-  Poco::Path dirPath;
+  std::filesystem::path dirPath;
   try {
-    dirPath = Poco::Path(path);
-    dirPath.makeDirectory();
-  } catch (Poco::PathSyntaxException &) {
+    dirPath = std::filesystem::path(path);
+    // Ensure it has a trailing slash for consistency
+    std::string pathStr = dirPath.string();
+    if (pathStr.back() != '/' && pathStr.back() != '\\') {
+      pathStr += "/";
+    }
+    if (!isInDataSearchList(pathStr)) {
+      auto newSearchString = Strings::join(std::begin(m_dataSearchDirs), std::end(m_dataSearchDirs), ";");
+      newSearchString.append(";" + path);
+      setString("datasearch.directories", newSearchString);
+    }
+  } catch (const std::exception &) {
     return;
-  }
-  if (!isInDataSearchList(dirPath.toString())) {
-    auto newSearchString = Strings::join(std::begin(m_dataSearchDirs), std::end(m_dataSearchDirs), ";");
-    newSearchString.append(";" + path);
-    setString("datasearch.directories", newSearchString);
   }
 }
 
@@ -1505,11 +1605,10 @@ const std::string ConfigServiceImpl::getVTPFileDirectory() {
   std::string directoryName = getString("instrumentDefinition.vtp.directory");
 
   if (directoryName.empty()) {
-    Poco::Path path(getAppDataDir());
-    path.makeDirectory();
-    path.pushDirectory("instrument");
-    path.pushDirectory("geometryCache");
-    directoryName = path.toString();
+    std::filesystem::path path(getAppDataDir());
+    path /= "instrument";
+    path /= "geometryCache";
+    directoryName = path.string();
   }
   return directoryName;
 }
@@ -1526,10 +1625,9 @@ const std::string ConfigServiceImpl::getVTPFileDirectory() {
 void ConfigServiceImpl::cacheInstrumentPaths() {
   m_instrumentDirs.clear();
 
-  Poco::Path path(getAppDataDir());
-  path.makeDirectory();
-  path.pushDirectory("instrument");
-  const std::string appdatadir = path.toString();
+  std::filesystem::path path(getAppDataDir());
+  path /= "instrument";
+  const std::string appdatadir = path.string();
   addDirectoryifExists(appdatadir, m_instrumentDirs);
 
 #ifndef _WIN32
@@ -1542,7 +1640,8 @@ void ConfigServiceImpl::cacheInstrumentPaths() {
     // This is the assumed deployment directory for IDFs, where we need to be
     // relative to the
     // directory of the executable, not the current working directory.
-    directoryName = Poco::Path(getPropertiesDir()).resolve("../instrument").toString();
+    std::filesystem::path basePath(getPropertiesDir());
+    directoryName = (basePath / ".." / "instrument").lexically_normal().string();
   }
   addDirectoryifExists(directoryName, m_instrumentDirs);
 }
@@ -1557,17 +1656,17 @@ void ConfigServiceImpl::cacheInstrumentPaths() {
 bool ConfigServiceImpl::addDirectoryifExists(const std::string &directoryName,
                                              std::vector<std::string> &directoryList) {
   try {
-    if (Poco::File(directoryName).isDirectory()) {
+    if (std::filesystem::is_directory(directoryName)) {
       directoryList.emplace_back(directoryName);
       return true;
     } else {
       g_log.information("Unable to locate directory at: " + directoryName);
       return false;
     }
-  } catch (Poco::PathNotFoundException &) {
+  } catch (const std::filesystem::filesystem_error &) {
     g_log.information("Unable to locate directory at: " + directoryName);
     return false;
-  } catch (Poco::FileNotFoundException &) {
+  } catch (const std::exception &) {
     g_log.information("Unable to locate directory at: " + directoryName);
     return false;
   }
@@ -1578,8 +1677,7 @@ const std::vector<std::string> ConfigServiceImpl::getFacilityFilenames(const std
 
   // first try the supplied file
   if (!fName.empty()) {
-    const Poco::File fileObj(fName);
-    if (fileObj.exists()) {
+    if (std::filesystem::exists(fName)) {
       returnPaths.emplace_back(fName);
       return returnPaths;
     }
@@ -1603,12 +1701,11 @@ const std::vector<std::string> ConfigServiceImpl::getFacilityFilenames(const std
 
   // look through all the possible files
   for (; instrDir != directoryNames.end(); ++instrDir) {
-    Poco::Path p(*instrDir);
-    p.append("Facilities.xml");
-    std::string filename = p.toString();
-    Poco::File fileObj(filename);
+    std::filesystem::path p(*instrDir);
+    p /= "Facilities.xml";
+    std::string filename = p.string();
 
-    if (fileObj.exists())
+    if (std::filesystem::exists(filename))
       returnPaths.emplace_back(filename);
   }
 
@@ -1696,10 +1793,12 @@ void ConfigServiceImpl::updateFacilities(const std::string &fName) {
 /// Empty the list of facilities, deleting the FacilityInfo objects in the
 /// process
 void ConfigServiceImpl::clearFacilities() {
-  for (auto &facility : m_facilities) {
+  for (const auto &facility : m_facilities) {
     delete facility;
   }
   m_facilities.clear();
+  m_instrumentPrefixesCache.clear();
+  m_isInstrumentPrefixesCached = false;
 }
 
 /**
@@ -1737,6 +1836,49 @@ const InstrumentInfo &ConfigServiceImpl::getInstrument(const std::string &instru
   const std::string errMsg = "Failed to find an instrument with this name in any facility: '" + instrumentName + "' -";
   g_log.debug("Instrument " + instrumentName + " not found");
   throw Exception::NotFoundError(errMsg, instrumentName);
+}
+
+const std::string ConfigServiceImpl::findLongestInstrumentPrefix(const std::string &hint) const {
+  if (!m_isInstrumentPrefixesCached) {
+    std::vector<std::string> names;
+
+    for (const auto &facility : m_facilities) {
+      const auto &insts = facility->instruments();
+      for (const auto &inst : insts) {
+        names.emplace_back(inst.shortName());
+        names.emplace_back(inst.name());
+      }
+    }
+
+    std::sort(names.begin(), names.end());
+    const auto last = std::unique(names.begin(), names.end());
+    names.erase(last, names.end());
+    m_instrumentPrefixesCache = std::move(names);
+    m_isInstrumentPrefixesCached = true;
+  }
+
+  std::string longestPrefix;
+  // Binary search for the hint in the list of instrument prefixes. Since this is a sorted list the longest prefix will
+  // be found by searching backwards from the insertion point.
+  const auto match = std::upper_bound(m_instrumentPrefixesCache.cbegin(), m_instrumentPrefixesCache.cend(), hint);
+  if (match != m_instrumentPrefixesCache.cbegin()) {
+    auto it = std::prev(match);
+    while (true) {
+      if (hint.starts_with(*it)) {
+        longestPrefix = *it;
+        break;
+      }
+      if ((*it)[0] != hint[0]) {
+        break;
+      }
+      if (it == m_instrumentPrefixesCache.cbegin()) {
+        break;
+      }
+      it = std::prev(it);
+    }
+  }
+
+  return longestPrefix;
 }
 
 /** Gets a vector of the facility Information objects
@@ -1859,15 +2001,16 @@ std::string ConfigServiceImpl::getFullPath(const std::string &filename, const bo
   std::string fName = Kernel::Strings::strip(filename);
   g_log.debug() << "getFullPath(" << fName << ")\n";
   // If this is already a full path, nothing to do
-  if (Poco::Path(fName).isAbsolute())
+  std::filesystem::path filepath(fName);
+  if (filepath.is_absolute())
     return fName;
   // First try the path relative to the current directory. Can throw in some
   // circumstances with extensions that have wild cards
   try {
-    Poco::File fullPath(Poco::Path().resolve(fName));
-    if (fullPath.exists() && (!ignoreDirs || !fullPath.isDirectory()))
-      return fullPath.path();
-  } catch (std::exception &) {
+    std::filesystem::path fullPath = std::filesystem::current_path() / fName;
+    if (std::filesystem::exists(fullPath) && (!ignoreDirs || !std::filesystem::is_directory(fullPath)))
+      return fullPath.string();
+  } catch (const std::exception &) {
   }
 
   auto directoryNames = getDataSearchDirs();
@@ -1882,22 +2025,21 @@ std::string ConfigServiceImpl::getFullPath(const std::string &filename, const bo
 #ifdef _WIN32
     if (fName.find("*") != std::string::npos) {
 #endif
-      Poco::Path path(searchPath, fName);
+      std::filesystem::path path = std::filesystem::path(searchPath) / fName;
       std::set<std::string> files;
-      Kernel::Glob::glob(path, files, options);
+      Kernel::Glob::glob(path.string(), files, options);
       if (!files.empty()) {
-        Poco::File matchPath(*files.begin());
-        if (ignoreDirs && matchPath.isDirectory()) {
+        std::filesystem::path matchPath(*files.begin());
+        if (ignoreDirs && std::filesystem::is_directory(matchPath)) {
           continue;
         }
         return *files.begin();
       }
 #ifdef _WIN32
     } else {
-      Poco::Path path(searchPath, fName);
-      Poco::File file(path);
-      if (file.exists() && !(ignoreDirs && file.isDirectory())) {
-        return path.toString();
+      std::filesystem::path path = std::filesystem::path(searchPath) / fName;
+      if (std::filesystem::exists(path) && !(ignoreDirs && std::filesystem::is_directory(path))) {
+        return path.string();
       }
     }
 #endif

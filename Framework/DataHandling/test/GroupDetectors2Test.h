@@ -10,6 +10,7 @@
 #include "MantidFrameworkTestHelpers/ComponentCreationHelper.h"
 #include "MantidFrameworkTestHelpers/WorkspaceCreationHelper.h"
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 
 #include "MantidAPI/AlgorithmManager.h"
 #include "MantidAPI/Axis.h"
@@ -17,7 +18,7 @@
 #include "MantidAPI/NumericAxis.h"
 #include "MantidAPI/SpectraAxis.h"
 #include "MantidAPI/SpectrumInfo.h"
-#include "MantidDataHandling/LoadMuonNexus1.h"
+#include "MantidDataHandling/Load.h"
 #include "MantidDataHandling/MaskDetectors.h"
 #include "MantidDataObjects/ScanningWorkspaceBuilder.h"
 #include "MantidDataObjects/WorkspaceCreation.h"
@@ -28,8 +29,6 @@
 #include "MantidKernel/DateAndTime.h"
 #include "MantidKernel/UnitFactory.h"
 #include "MantidTypes/SpectrumDefinition.h"
-
-#include <Poco/Path.h>
 
 using Mantid::DataHandling::GroupDetectors2;
 using namespace Mantid::Kernel;
@@ -54,7 +53,7 @@ public:
   GroupDetectors2Test()
       : inputWSName("groupdetectorstests_input_workspace"), offsetWSName("groupdetectorstests_offset_workspace"),
         outputWSNameBase("groupdetectorstests_output_basename"),
-        inputFile(Poco::Path::current() + "GroupDetectors2Test_mapfile_example") {
+        inputFile(std::filesystem::current_path() / "GroupDetectors2Test_mapfile_example") {
     // This is needed to load in the plugin algorithms (specifically Divide,
     // which is a Child Algorithm of GroupDetectors)
     FrameworkManager::Instance();
@@ -294,7 +293,7 @@ public:
     grouper.setPropertyValue("InputWorkspace", inputWSName);
     std::string output(outputWSNameBase + "File");
     grouper.setPropertyValue("OutputWorkspace", output);
-    grouper.setPropertyValue("MapFile", inputFile);
+    grouper.setPropertyValue("MapFile", inputFile.string());
     grouper.setProperty<bool>("KeepUngroupedSpectra", true);
 
     TS_ASSERT_THROWS_NOTHING(grouper.execute());
@@ -353,7 +352,7 @@ public:
     TS_ASSERT(spectrumInfo.hasDetectors(4));
     TS_ASSERT(spectrumInfo.hasUniqueDetector(4));
 
-    remove(inputFile.c_str());
+    std::filesystem::remove(inputFile);
   }
 
   void testFileRanges() {
@@ -366,7 +365,7 @@ public:
     grouper.setPropertyValue("InputWorkspace", inputWSName);
     std::string output(outputWSNameBase + "File");
     grouper.setPropertyValue("OutputWorkspace", output);
-    grouper.setPropertyValue("MapFile", inputFile);
+    grouper.setPropertyValue("MapFile", inputFile.string());
     grouper.setProperty<bool>("KeepUngroupedSpectra", true);
 
     TS_ASSERT_THROWS_NOTHING(grouper.execute());
@@ -401,11 +400,11 @@ public:
     }
     TS_ASSERT_EQUALS(outputWS->getAxis(1)->spectraNo(2), 3);
     TS_ASSERT_EQUALS(outputWS->getSpectrum(2).getSpectrumNo(), 3);
-    remove(inputFile.c_str());
+    std::filesystem::remove(inputFile);
   }
 
   void testReadingFromXML() {
-    Mantid::DataHandling::LoadMuonNexus1 nxLoad;
+    Mantid::DataHandling::Load nxLoad;
     nxLoad.initialize();
 
     // Now set required filename and output workspace name
@@ -444,7 +443,7 @@ public:
   }
 
   void testReadingFromXMLCheckDuplicateIndex() {
-    Mantid::DataHandling::LoadMuonNexus1 nxLoad;
+    Mantid::DataHandling::Load nxLoad;
     nxLoad.initialize();
 
     // Now set required filename and output workspace name
@@ -483,7 +482,7 @@ public:
   }
 
   void testReadingFromXMLCheckDublicateIndex2() {
-    Mantid::DataHandling::LoadMuonNexus1 nxLoad;
+    Mantid::DataHandling::Load nxLoad;
     nxLoad.initialize();
 
     // Now set required filename and output workspace name
@@ -1012,7 +1011,8 @@ public:
   }
 
 private:
-  const std::string inputWSName, offsetWSName, outputWSNameBase, inputFile;
+  const std::string inputWSName, offsetWSName, outputWSNameBase;
+  const std::filesystem::path inputFile;
   enum { NHIST = 6, NBINS = 4 };
 
   static void createTestWorkspace(const std::string &name, const int offset) {

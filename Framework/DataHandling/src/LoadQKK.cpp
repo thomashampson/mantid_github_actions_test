@@ -19,8 +19,6 @@
 #include "MantidKernel/UnitFactory.h"
 #include "MantidNexus/NexusClasses.h"
 
-#include <Poco/File.h>
-
 #include <fstream>
 
 using namespace Mantid::DataHandling;
@@ -38,9 +36,9 @@ DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadQKK)
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadQKK::confidence(Kernel::NexusDescriptor &descriptor) const {
+int LoadQKK::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   const auto &firstEntryName = descriptor.firstEntryNameType().first;
-  if (descriptor.pathExists("/" + firstEntryName + "/data/hmm_xy"))
+  if (descriptor.isEntry("/" + firstEntryName + "/data/hmm_xy"))
     return 80;
   else
     return 0;
@@ -71,16 +69,16 @@ void LoadQKK::exec() {
   std::string filename = getPropertyValue("Filename");
 
   // Open the root.
-  NeXus::NXRoot root(filename);
+  Nexus::NXRoot root(filename);
   // Open the first NXentry found in the file.
-  NeXus::NXEntry entry = root.openFirstEntry();
+  Nexus::NXEntry entry = root.openFirstEntry();
   // Open NXdata group with name "data"
-  NeXus::NXData data = entry.openNXData("data");
+  Nexus::NXData data = entry.openNXData("data");
   // Read in wavelength value
   double wavelength = static_cast<double>(data.getFloat("wavelength"));
   // open the data set with the counts. It is identified by the signal=1
   // attribute
-  NeXus::NXInt hmm = data.openIntData();
+  Nexus::NXInt hmm = data.openIntData();
   // Read the data into memory
   hmm.load();
 

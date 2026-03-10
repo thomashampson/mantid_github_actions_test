@@ -6,6 +6,7 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidAPI/WorkspaceGroup.h"
 #include "MantidAPI/AnalysisDataService.h"
+#include "MantidAPI/IPeaksWorkspace.h"
 #include "MantidAPI/MatrixWorkspace.h"
 #include "MantidAPI/Run.h"
 #include "MantidKernel/IPropertyManager.h"
@@ -75,7 +76,7 @@ bool WorkspaceGroup::isInChildGroup(const Workspace &workspaceToCheck) const {
   std::lock_guard<std::recursive_mutex> _lock(m_mutex);
   for (const auto &workspace : m_workspaces) {
     // check child groups only
-    auto *group = dynamic_cast<WorkspaceGroup *>(workspace.get());
+    auto const *group = dynamic_cast<WorkspaceGroup *>(workspace.get());
     if (group) {
       if (group->isInGroup(workspaceToCheck))
         return true;
@@ -93,6 +94,33 @@ void WorkspaceGroup::sortMembersByName() {
   }
   std::sort(m_workspaces.begin(), m_workspaces.end(),
             [](const Workspace_sptr &w1, const Workspace_sptr &w2) { return (w1->getName() < w2->getName()); });
+}
+
+/**
+ *  Reorder the group members using a list of indices (e.g the list 3,2,1,0 would reverse the order)
+ */
+void WorkspaceGroup::reorderMembersWithIndices(const std::vector<int> &indices) {
+  if (indices.size() != this->size()) {
+    g_log.warning("Number of indices must match the number of workspace members\n");
+    return;
+  }
+
+  if (!std::all_of(indices.cbegin(), indices.cend(),
+                   [&](const int i) { return i >= 0 && i < static_cast<int>(m_workspaces.size()); })) {
+    g_log.warning("All indices must be >= 0 and < the number of workspaces in the group\n");
+    return;
+  }
+
+  // check all elements are unique by adding to a set and checking size
+  if (std::unordered_set<int>(indices.cbegin(), indices.cend()).size() != indices.size()) {
+    g_log.warning("All indices must be unique\n");
+    return;
+  }
+
+  std::vector<Mantid::API::Workspace_sptr> reordered;
+  std::transform(indices.cbegin(), indices.cend(), std::back_inserter(reordered),
+                 [&](const auto &i) { return m_workspaces[i]; });
+  m_workspaces = std::move(reordered);
 }
 
 /**
@@ -122,19 +150,16 @@ void WorkspaceGroup::addWorkspace(const Workspace_sptr &workspace) {
  */
 bool WorkspaceGroup::containsInChildren(const std::string &wsName) const {
   std::lock_guard<std::recursive_mutex> _lock(m_mutex);
-  for (const auto &workspace : m_workspaces) {
+
+  const auto it = std::find_if(m_workspaces.cbegin(), m_workspaces.cend(), [&wsName](const auto &workspace) {
     if (workspace->isGroup()) {
-      // Recursive containsInChildren search
       const auto group = std::dynamic_pointer_cast<WorkspaceGroup>(workspace);
-      if (group->containsInChildren(wsName)) {
-        return true;
-      }
-    } else {
-      if (workspace->getName() == wsName)
-        return true;
+      return group->containsInChildren(wsName);
     }
-  }
-  return false;
+    return workspace->getName() == wsName;
+  });
+
+  return it != m_workspaces.cend();
 }
 
 /**
@@ -403,7 +428,7 @@ bool WorkspaceGroup::areNamesSimilar() const {
     return false;
 
   // Check all the members are of similar names
-  for (const auto &workspace : m_workspaces) {
+  return std::all_of(m_workspaces.cbegin(), m_workspaces.cend(), [this](const auto &workspace) {
     const std::string &wsName = workspace->getName();
     // Find the last underscore _
     std::size_t pos = wsName.find_last_of('_');
@@ -415,8 +440,8 @@ bool WorkspaceGroup::areNamesSimilar() const {
     std::string commonpart(wsName.substr(0, pos));
     if (this->getName() != commonpart)
       return false;
-  }
-  return true;
+    return true;
+  });
 }
 
 //------------------------------------------------------------------------------
@@ -434,7 +459,7 @@ bool WorkspaceGroup::isMultiperiod() const {
   for (const auto &workspace : m_workspaces) {
     if (MatrixWorkspace_sptr ws = std::dynamic_pointer_cast<MatrixWorkspace>(workspace)) {
       try {
-        Kernel::Property *nPeriodsProp = ws->run().getLogData("nperiods");
+        const Kernel::Property *nPeriodsProp = ws->run().getLogData("nperiods");
         int num = -1;
         Kernel::Strings::convert(nPeriodsProp->value(), num);
         if (num < 1) {
@@ -456,6 +481,14 @@ bool WorkspaceGroup::isMultiperiod() const {
 }
 
 /**
+ * @return :: True if all of the workspaces in the group are peak workspaces
+ */
+bool WorkspaceGroup::isGroupPeaksWorkspaces() const {
+  return std::all_of(m_workspaces.begin(), m_workspaces.end(),
+                     [](auto ws) { return dynamic_cast<IPeaksWorkspace *>(ws.get()) != nullptr; });
+}
+
+/**
  * @param workspaceToCheck :: A workspace to check.
  * @param level :: The current nesting level. Intended for internal use only
  * by WorkspaceGroup.
@@ -471,7 +504,7 @@ bool WorkspaceGroup::isInGroup(const Workspace &workspaceToCheck, size_t level) 
   for (const auto &workspace : m_workspaces) {
     if (workspace.get() == &workspaceToCheck)
       return true;
-    auto *group = dynamic_cast<WorkspaceGroup *>(workspace.get());
+    const auto *group = dynamic_cast<WorkspaceGroup *>(workspace.get());
     if (group) {
       if (group->isInGroup(workspaceToCheck, level + 1))
         return true;
@@ -503,7 +536,7 @@ namespace Mantid::Kernel {
 template <>
 MANTID_API_DLL Mantid::API::WorkspaceGroup_sptr
 IPropertyManager::getValue<Mantid::API::WorkspaceGroup_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::API::WorkspaceGroup_sptr> *>(getPointerToProperty(name));
+  const auto *prop = dynamic_cast<PropertyWithValue<Mantid::API::WorkspaceGroup_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return *prop;
   } else {
@@ -516,7 +549,7 @@ IPropertyManager::getValue<Mantid::API::WorkspaceGroup_sptr>(const std::string &
 template <>
 MANTID_API_DLL Mantid::API::WorkspaceGroup_const_sptr
 IPropertyManager::getValue<Mantid::API::WorkspaceGroup_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::API::WorkspaceGroup_sptr> *>(getPointerToProperty(name));
+  const auto *prop = dynamic_cast<PropertyWithValue<Mantid::API::WorkspaceGroup_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();
   } else {

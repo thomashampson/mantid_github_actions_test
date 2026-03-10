@@ -9,8 +9,8 @@
 #include <string>
 
 #include "MantidAPI/DllConfig.h"
+
 #include "MantidAPI/Workspace_fwd.h"
-#include "MantidKernel/System.h"
 
 namespace Mantid {
 namespace API {
@@ -49,7 +49,7 @@ public:
   ScopedWorkspace &operator=(const ScopedWorkspace &) = delete;
 
   /// Returns ADS name of the workspace
-  std::string name() const { return m_name; }
+  const std::string &name() const { return m_name; }
 
   /// Retrieve workspace from the ADS
   Workspace_sptr retrieve() const;

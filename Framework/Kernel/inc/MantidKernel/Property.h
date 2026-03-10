@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-namespace NeXus {
+namespace Mantid::Nexus {
 class File;
 }
 
@@ -104,15 +104,19 @@ public:
   const std::type_info *type_info() const;
   const std::string type() const;
 
+  void setName(const std::string &name);
+
   /// Overridden function that checks whether the property, if not overriden
   /// returns ""
   virtual std::string isValid() const;
 
   /// Set the PropertySettings object
-  void setSettings(std::unique_ptr<IPropertySettings> settings);
-  /** @return the PropertySettings for this property */
-  IPropertySettings *getSettings();
-  /** Deletes the PropertySettings object contained */
+  void setSettings(std::unique_ptr<IPropertySettings const> settings);
+
+  /** @return the vector of PropertySettings for this property */
+  std::vector<std::unique_ptr<IPropertySettings const>> const &getSettings() const;
+
+  /** Clears the vector of PropertySettings for this property */
   void clearSettings();
 
   /// Overriden function that returns if property has the same value that it was
@@ -124,7 +128,7 @@ public:
 
   void setDocumentation(const std::string &documentation);
 
-  virtual void saveProperty(::NeXus::File * /*file*/) {
+  virtual void saveProperty(Nexus::File * /*file*/) {
     throw std::invalid_argument("Property::saveProperty - Cannot save '" + this->name() +
                                 "', property type not implemented.");
   }
@@ -199,6 +203,9 @@ public:
   bool disableReplaceWSButton() const;
   void setDisableReplaceWSButton(const bool &disable);
 
+  bool isDynamicDefault() const;
+  void setIsDynamicDefault(const bool &flag);
+
 protected:
   /// Constructor
   Property(std::string name, const std::type_info &type, const unsigned int &direction = Direction::Input);
@@ -221,7 +228,7 @@ private:
   std::string m_units;
 
   /// Property settings (enabled/visible)
-  std::unique_ptr<IPropertySettings> m_settings;
+  std::vector<std::unique_ptr<IPropertySettings const>> m_settings;
 
   /// Name of the "group" of this property, for grouping in the GUI. Default ""
   std::string m_group;
@@ -238,6 +245,10 @@ private:
 
   /// Flag to disable the generation of the "Replace Workspace" button on the OutputWorkspace property
   bool m_disableReplaceWSButton;
+
+  /// Flag to indicate that the property's value has been set programmatically,
+  /// for example, when a default value is dynamic and depends on an upstream property.
+  bool m_isDynamicDefault;
 };
 
 /// Compares this to another property for equality

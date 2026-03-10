@@ -6,8 +6,6 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
-#include "MantidKernel/System.h"
-
 #include "MantidSINQ/DllConfig.h"
 
 #include "MantidSINQ/PoldiUtilities/PoldiAbstractChopper.h"
@@ -52,7 +50,7 @@ public:
   void setWavelengthRange(double lambdaMin, double lambdaMax);
 
   DataObjects::Workspace2D_sptr
-  calculate(DataObjects::Workspace2D_sptr &countData,
+  calculate(const DataObjects::Workspace2D_sptr &countData,
             const DataObjects::Workspace2D_sptr &normCountData = DataObjects::Workspace2D_sptr());
 
 protected:

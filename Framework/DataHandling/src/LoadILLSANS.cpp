@@ -26,14 +26,16 @@
 #include "MantidKernel/PhysicalConstants.h"
 #include "MantidKernel/UnitFactory.h"
 #include "MantidKernel/VectorHelper.h"
-
-#include <Poco/Path.h>
+#include "MantidNexus/H5Util.h"
+#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 namespace Mantid::DataHandling {
 
 using namespace Kernel;
 using namespace API;
-using namespace NeXus;
+using namespace Nexus;
 
 DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadILLSANS)
 
@@ -67,12 +69,12 @@ const std::string LoadILLSANS::summary() const {
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadILLSANS::confidence(Kernel::NexusDescriptor &descriptor) const {
+int LoadILLSANS::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   // fields existent only at the ILL for SANS machines
-  if (descriptor.pathExists("/entry0/mode") &&
-      ((descriptor.pathExists("/entry0/reactor_power") && descriptor.pathExists("/entry0/instrument_name")) ||
-       (descriptor.pathExists("/entry0/instrument/name") && descriptor.pathExists("/entry0/acquisition_mode") &&
-        !descriptor.pathExists("/entry0/instrument/Detector")))) // serves to remove the TOF instruments
+  if (descriptor.isEntry("/entry0/mode") &&
+      ((descriptor.isEntry("/entry0/reactor_power") && descriptor.isEntry("/entry0/instrument_name")) ||
+       (descriptor.isEntry("/entry0/instrument/name") && descriptor.isEntry("/entry0/acquisition_mode") &&
+        !descriptor.isEntry("/entry0/instrument/Detector")))) // serves to remove the TOF instruments
   {
     return 80;
   } else {
@@ -106,15 +108,15 @@ void LoadILLSANS::exec() {
   getMonitorIndices(filename);
   NXRoot root(filename);
   NXEntry firstEntry = root.openFirstEntry();
-  const std::string instrumentPath = LoadHelper::findInstrumentNexusPath(firstEntry);
-  setInstrumentName(firstEntry, instrumentPath);
+  const std::string instrumentAddress = LoadHelper::findInstrumentNexusAddress(firstEntry);
+  setInstrumentName(firstEntry, instrumentAddress);
   Progress progress(this, 0.0, 1.0, 4);
   progress.report("Initializing the workspace for " + m_instrumentName);
   if (m_instrumentName == "D33") {
-    initWorkSpaceD33(firstEntry, instrumentPath);
+    initWorkSpaceD33(firstEntry, instrumentAddress);
     progress.report("Loading the instrument " + m_instrumentName);
     runLoadInstrument();
-    const DetectorPosition detPos = getDetectorPositionD33(firstEntry, instrumentPath);
+    const DetectorPosition detPos = getDetectorPositionD33(firstEntry, instrumentAddress);
     progress.report("Moving detectors");
     moveDetectorsD33(detPos);
     if (m_isTOF) {
@@ -123,27 +125,27 @@ void LoadILLSANS::exec() {
     }
 
   } else if (m_instrumentName == "D16") {
-    initWorkSpace(firstEntry, instrumentPath);
+    initWorkSpace(firstEntry, instrumentAddress);
     progress.report("Loading the instrument " + m_instrumentName);
     runLoadInstrument();
 
     double distance;
     try {
-      distance = firstEntry.getFloat(instrumentPath + "/Det/value") / 1000; // mm to metre
+      distance = firstEntry.getFloat(instrumentAddress + "/Det/value") / 1000; // mm to metre
     } catch (std::runtime_error &) {
       distance = 0;
     }
-    const double angle = firstEntry.getFloat(instrumentPath + "/Gamma/value");
+    const double angle = firstEntry.getFloat(instrumentAddress + "/Gamma/value");
     placeD16(-angle, distance, "detector");
 
   } else if (m_instrumentName == "D11B") {
-    initWorkSpaceD11B(firstEntry, instrumentPath);
+    initWorkSpaceD11B(firstEntry, instrumentAddress);
     progress.report("Loading the instrument " + m_instrumentName);
     runLoadInstrument();
 
     // we move the parent "detector" component, but since it is at (0,0,0), we
     // need to find the distance it has to move and move it to this position
-    double finalDistance = firstEntry.getFloat(instrumentPath + "/Detector 1/det_calc");
+    double finalDistance = firstEntry.getFloat(instrumentAddress + "/Detector 1/det_calc");
     V3D pos = LoadHelper::getComponentPosition(m_localWorkspace, "detector_center");
     double currentDistance = pos.Z();
 
@@ -152,42 +154,42 @@ void LoadILLSANS::exec() {
     runDetails.addProperty<double>("L2", finalDistance, true);
 
   } else if (m_instrumentName == "D22B") {
-    initWorkSpaceD22B(firstEntry, instrumentPath);
+    initWorkSpaceD22B(firstEntry, instrumentAddress);
 
     const std::string backIndex = m_localWorkspace->getInstrument()->getStringParameter("back_detector_index")[0];
     const std::string frontIndex = m_localWorkspace->getInstrument()->getStringParameter("front_detector_index")[0];
 
     // first we move the central (back) detector
-    double distance = firstEntry.getFloat(instrumentPath + "/Detector " + backIndex + "/det" + backIndex + "_calc");
+    double distance = firstEntry.getFloat(instrumentAddress + "/Detector " + backIndex + "/det" + backIndex + "_calc");
     moveDetectorDistance(distance, "detector_back");
     API::Run &runDetails = m_localWorkspace->mutableRun();
     runDetails.addProperty<double>("L2", distance, true);
 
-    double offset = firstEntry.getFloat(instrumentPath + "/Detector " + backIndex + "/dtr" + backIndex + "_actual");
+    double offset = firstEntry.getFloat(instrumentAddress + "/Detector " + backIndex + "/dtr" + backIndex + "_actual");
     moveDetectorHorizontal(-offset / 1000, "detector_back"); // mm to meter
 
     // then the front (right) one
-    distance = firstEntry.getFloat(instrumentPath + "/Detector " + frontIndex + "/det" + frontIndex + "_calc");
+    distance = firstEntry.getFloat(instrumentAddress + "/Detector " + frontIndex + "/det" + frontIndex + "_calc");
     moveDetectorDistance(distance, "detector_front");
 
     // mm to meter
-    offset = firstEntry.getFloat(instrumentPath + "/Detector " + frontIndex + "/dtr" + frontIndex + "_actual");
+    offset = firstEntry.getFloat(instrumentAddress + "/Detector " + frontIndex + "/dtr" + frontIndex + "_actual");
     moveDetectorHorizontal(-offset / 1000, "detector_front"); // mm to meter
-    double angle = firstEntry.getFloat(instrumentPath + "/Detector " + frontIndex + "/dan" + frontIndex + "_actual");
+    double angle = firstEntry.getFloat(instrumentAddress + "/Detector " + frontIndex + "/dan" + frontIndex + "_actual");
     rotateInstrument(-angle, "detector_front");
 
   } else {
     // D11 and D22
-    initWorkSpace(firstEntry, instrumentPath);
+    initWorkSpace(firstEntry, instrumentAddress);
     progress.report("Loading the instrument " + m_instrumentName);
     runLoadInstrument();
-    double distance = LoadHelper::getDoubleFromNexusPath(firstEntry, instrumentPath + "/detector/det_calc");
+    double distance = LoadHelper::getDoubleFromNexusAddress(firstEntry, instrumentAddress + "/detector/det_calc");
     progress.report("Moving detectors");
     moveDetectorDistance(distance, "detector");
     API::Run &runDetails = m_localWorkspace->mutableRun();
     runDetails.addProperty<double>("L2", distance, true);
     if (m_instrumentName == "D22") {
-      double offset = LoadHelper::getDoubleFromNexusPath(firstEntry, instrumentPath + "/detector/dtr_actual");
+      double offset = LoadHelper::getDoubleFromNexusAddress(firstEntry, instrumentAddress + "/detector/dtr_actual");
       moveDetectorHorizontal(-offset / 1000, "detector"); // mm to meter
     }
   }
@@ -202,13 +204,13 @@ void LoadILLSANS::exec() {
 /**
  * Set member variable with the instrument name
  * @param firstEntry: already opened first entry in nexus
- * @param instrumentNamePath : the path inside nexus where the instrument name is written
+ * @param instrumentNameAddress : the address inside nexus where the instrument name is written
  */
-void LoadILLSANS::setInstrumentName(const NeXus::NXEntry &firstEntry, const std::string &instrumentNamePath) {
-  if (instrumentNamePath.empty()) {
+void LoadILLSANS::setInstrumentName(const Nexus::NXEntry &firstEntry, const std::string &instrumentNameAddress) {
+  if (instrumentNameAddress.empty()) {
     throw std::runtime_error("Cannot set the instrument name from the Nexus file!");
   }
-  m_instrumentName = LoadHelper::getStringFromNexusPath(firstEntry, instrumentNamePath + "/name");
+  m_instrumentName = LoadHelper::getStringFromNexusAddress(firstEntry, instrumentNameAddress + "/name");
   const auto inst = std::find(m_supportedInstruments.begin(), m_supportedInstruments.end(), m_instrumentName);
 
   // set alternative version name. Note that D16B is set later, because we need to open the data to distinguish with D16
@@ -246,21 +248,22 @@ void LoadILLSANS::applySensitivityMap() {
 /**
  * Get detector panel distances from the nexus file
  * @param firstEntry : already opened first entry in nexus
- * @param instrumentNamePath : the path inside nexus where the instrument name is written
+ * @param instrumentNameAddress : the address inside nexus where the instrument name is written
  * @return a structure with the positions
  */
-LoadILLSANS::DetectorPosition LoadILLSANS::getDetectorPositionD33(const NeXus::NXEntry &firstEntry,
-                                                                  const std::string &instrumentNamePath) {
-  std::string detectorPath(instrumentNamePath + "/detector");
+LoadILLSANS::DetectorPosition LoadILLSANS::getDetectorPositionD33(const Nexus::NXEntry &firstEntry,
+                                                                  const std::string &instrumentNameAddress) {
+  std::string detectorAddress(instrumentNameAddress + "/detector");
   DetectorPosition pos;
-  pos.distanceSampleRear = LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/det2_calc");
-  pos.distanceSampleBottomTop = LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/det1_calc");
-  pos.distanceSampleRightLeft = pos.distanceSampleBottomTop +
-                                LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/det1_panel_separation");
-  pos.shiftLeft = LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/OxL_actual") * 1e-3;
-  pos.shiftRight = LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/OxR_actual") * 1e-3;
-  pos.shiftUp = LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/OyT_actual") * 1e-3;
-  pos.shiftDown = LoadHelper::getDoubleFromNexusPath(firstEntry, detectorPath + "/OyB_actual") * 1e-3;
+  pos.distanceSampleRear = LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/det2_calc");
+  pos.distanceSampleBottomTop = LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/det1_calc");
+  pos.distanceSampleRightLeft =
+      pos.distanceSampleBottomTop +
+      LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/det1_panel_separation");
+  pos.shiftLeft = LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/OxL_actual") * 1e-3;
+  pos.shiftRight = LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/OxR_actual") * 1e-3;
+  pos.shiftUp = LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/OyT_actual") * 1e-3;
+  pos.shiftDown = LoadHelper::getDoubleFromNexusAddress(firstEntry, detectorAddress + "/OyB_actual") * 1e-3;
   pos >> g_log.debug();
   return pos;
 }
@@ -273,16 +276,16 @@ LoadILLSANS::DetectorPosition LoadILLSANS::getDetectorPositionD33(const NeXus::N
  * @param numberOfTubes
  * @param numberOfPixelsPerTube
  */
-void LoadILLSANS::getDataDimensions(const NeXus::NXInt &data, int &numberOfChannels, int &numberOfTubes,
-                                    int &numberOfPixelsPerTube) {
+void LoadILLSANS::getDataDimensions(const Nexus::NXInt &data, size_t &numberOfChannels, size_t &numberOfTubes,
+                                    size_t &numberOfPixelsPerTube) {
   if (m_isD16Omega) {
-    numberOfChannels = data.dim0();
-    numberOfTubes = data.dim1();
-    numberOfPixelsPerTube = data.dim2();
+    numberOfChannels = static_cast<size_t>(data.dim0());
+    numberOfTubes = static_cast<size_t>(data.dim1());
+    numberOfPixelsPerTube = static_cast<size_t>(data.dim2());
   } else {
-    numberOfPixelsPerTube = data.dim1();
-    numberOfChannels = data.dim2();
-    numberOfTubes = data.dim0();
+    numberOfPixelsPerTube = static_cast<size_t>(data.dim1());
+    numberOfChannels = static_cast<size_t>(data.dim2());
+    numberOfTubes = static_cast<size_t>(data.dim0());
   }
   g_log.debug() << "Dimensions found:\n- Number of tubes: " << numberOfTubes
                 << "\n- Number of pixels per tube: " << numberOfPixelsPerTube
@@ -305,7 +308,7 @@ void LoadILLSANS::getMonitorIndices(const std::string &filename) {
    * to open the same file with these two libraries (H5 and NX) simultaneously.
    */
   try {
-    H5::H5File h5file(filename, H5F_ACC_RDONLY);
+    H5::H5File h5file(filename, H5F_ACC_RDONLY, Nexus::H5Util::defaultFileAcc());
     H5::DataSet scanVarNames = h5file.openDataSet("entry0/data_scan/scanned_variables/variables_names/name");
     H5::DataSpace scanVarNamesSpace = scanVarNames.getSpace();
     const auto nDims = scanVarNamesSpace.getSimpleExtentNdims();
@@ -329,17 +332,17 @@ void LoadILLSANS::getMonitorIndices(const std::string &filename) {
 /**
  * Loads data for D11, D16 and D22
  * @param firstEntry : already opened first entry in nexus
- * @param instrumentPath : the path inside nexus where the instrument name is written
+ * @param instrumentAddress : the address inside nexus where the instrument name is written
  */
-void LoadILLSANS::initWorkSpace(NeXus::NXEntry &firstEntry, const std::string &instrumentPath) {
+void LoadILLSANS::initWorkSpace(Nexus::NXEntry &firstEntry, const std::string &instrumentAddress) {
   g_log.debug("Fetching data...");
-  std::string path;
+  std::string address;
   if (firstEntry.containsGroup("data")) {
-    path = "data";
+    address = "data";
   } else {
-    path = "data_scan/detector_data/data";
+    address = "data_scan/detector_data/data";
   }
-  auto data = LoadHelper::getIntDataset(firstEntry, path);
+  auto data = LoadHelper::getIntDataset(firstEntry, address);
   data.load();
 
   // determine if the data comes from a D16 scan
@@ -357,7 +360,7 @@ void LoadILLSANS::initWorkSpace(NeXus::NXEntry &firstEntry, const std::string &i
     }
   }
 
-  int numberOfTubes, numberOfPixelsPerTubes, numberOfChannels;
+  size_t numberOfTubes, numberOfPixelsPerTubes, numberOfChannels;
   getDataDimensions(data, numberOfChannels, numberOfTubes, numberOfPixelsPerTubes);
 
   // For these monochromatic instruments, one bin is "TOF" mode, and more than that is a scan
@@ -366,7 +369,7 @@ void LoadILLSANS::initWorkSpace(NeXus::NXEntry &firstEntry, const std::string &i
   size_t numberOfHistograms = numberOfPixelsPerTubes * numberOfTubes + m_numberOfMonitors;
 
   createEmptyWorkspace(numberOfHistograms, numberOfChannels, type);
-  loadMetaData(firstEntry, instrumentPath);
+  loadMetaData(firstEntry, instrumentAddress);
 
   std::vector<double> binning = m_isD16Omega && numberOfChannels > 1
                                     ? getOmegaBinning(firstEntry, "data_scan/scanned_variables/data")
@@ -388,9 +391,9 @@ void LoadILLSANS::initWorkSpace(NeXus::NXEntry &firstEntry, const std::string &i
 /**
  * @brief LoadILLSANS::initWorkSpaceD11B Load D11B data
  * @param firstEntry : already opened first entry in nexus
- * @param instrumentPath : the path inside nexus where the instrument name is written
+ * @param instrumentAddress : the address inside nexus where the instrument name is written
  */
-void LoadILLSANS::initWorkSpaceD11B(NeXus::NXEntry &firstEntry, const std::string &instrumentPath) {
+void LoadILLSANS::initWorkSpaceD11B(Nexus::NXEntry &firstEntry, const std::string &instrumentAddress) {
   g_log.debug("Fetching data...");
 
   auto dataCenter = LoadHelper::getIntDataset(firstEntry, "D11/Detector 1/data");
@@ -405,18 +408,18 @@ void LoadILLSANS::initWorkSpaceD11B(NeXus::NXEntry &firstEntry, const std::strin
                           dataLeft.dim0() * dataLeft.dim1()) +
       m_numberOfMonitors;
 
-  int numberOfChannels, numberOfPixelsPerTubeCenter, numberOfTubesCenter;
+  size_t numberOfChannels, numberOfPixelsPerTubeCenter, numberOfTubesCenter;
   getDataDimensions(dataCenter, numberOfChannels, numberOfTubesCenter, numberOfPixelsPerTubeCenter);
 
   MultichannelType type = (numberOfChannels != 1) ? MultichannelType::KINETIC : MultichannelType::TOF;
   createEmptyWorkspace(numberOfHistograms, numberOfChannels, type);
-  loadMetaData(firstEntry, instrumentPath);
+  loadMetaData(firstEntry, instrumentAddress);
 
   // we need to adjust the default binning after loadmetadata
   if (numberOfChannels != 1) {
     std::vector<double> frames(numberOfChannels, 0);
-    for (int i = 0; i < numberOfChannels; ++i) {
-      frames[i] = i;
+    for (size_t i = 0; i < numberOfChannels; ++i) {
+      frames[i] = static_cast<double>(i);
     }
     m_defaultBinning.resize(numberOfChannels);
     std::copy(frames.cbegin(), frames.cend(), m_defaultBinning.begin());
@@ -447,9 +450,9 @@ void LoadILLSANS::initWorkSpaceD11B(NeXus::NXEntry &firstEntry, const std::strin
 /**
  * @brief LoadILLSANS::initWorkSpaceD22B Load D22B data
  * @param firstEntry : already opened first entry in nexus
- * @param instrumentPath : the path inside nexus where the instrument name is written
+ * @param instrumentAddress : the address inside nexus where the instrument name is written
  */
-void LoadILLSANS::initWorkSpaceD22B(NeXus::NXEntry &firstEntry, const std::string &instrumentPath) {
+void LoadILLSANS::initWorkSpaceD22B(Nexus::NXEntry &firstEntry, const std::string &instrumentAddress) {
   g_log.debug("Fetching data...");
 
   auto data1_data = LoadHelper::getIntDataset(firstEntry, "data1");
@@ -461,19 +464,19 @@ void LoadILLSANS::initWorkSpaceD22B(NeXus::NXEntry &firstEntry, const std::strin
       static_cast<size_t>(data2_data.dim0() * data2_data.dim1() + data1_data.dim0() * data1_data.dim1()) +
       m_numberOfMonitors;
 
-  int numberOfChannels, numberOfPixelsPerTubeCenter, numberOfTubesCenter;
+  size_t numberOfChannels, numberOfPixelsPerTubeCenter, numberOfTubesCenter;
   getDataDimensions(data1_data, numberOfChannels, numberOfTubesCenter, numberOfPixelsPerTubeCenter);
 
   MultichannelType type = (numberOfChannels != 1) ? MultichannelType::KINETIC : MultichannelType::TOF;
 
   createEmptyWorkspace(numberOfHistograms, numberOfChannels, type);
-  loadMetaData(firstEntry, instrumentPath);
+  loadMetaData(firstEntry, instrumentAddress);
 
   // we need to adjust the default binning after loadmetadata
   if (numberOfChannels != 1) {
     std::vector<double> frames(numberOfChannels, 0);
-    for (int i = 0; i < numberOfChannels; ++i) {
-      frames[i] = i;
+    for (size_t i = 0; i < numberOfChannels; ++i) {
+      frames[i] = static_cast<double>(i);
     }
     m_defaultBinning.resize(numberOfChannels);
     std::copy(frames.cbegin(), frames.cend(), m_defaultBinning.begin());
@@ -506,9 +509,9 @@ void LoadILLSANS::initWorkSpaceD22B(NeXus::NXEntry &firstEntry, const std::strin
 /**
  * Loads data for D33
  * @param firstEntry : already opened first entry in nexus
- * @param instrumentPath : the path inside nexus where the instrument name is written
+ * @param instrumentAddress : the address inside nexus where the instrument name is written
  */
-void LoadILLSANS::initWorkSpaceD33(NeXus::NXEntry &firstEntry, const std::string &instrumentPath) {
+void LoadILLSANS::initWorkSpaceD33(Nexus::NXEntry &firstEntry, const std::string &instrumentAddress) {
 
   g_log.debug("Fetching data...");
 
@@ -536,7 +539,7 @@ void LoadILLSANS::initWorkSpaceD33(NeXus::NXEntry &firstEntry, const std::string
   g_log.debug("Creating empty workspace...");
   createEmptyWorkspace(numberOfHistograms + m_numberOfMonitors, static_cast<size_t>(dataRear.dim2()));
 
-  loadMetaData(firstEntry, instrumentPath);
+  loadMetaData(firstEntry, instrumentAddress);
 
   std::vector<double> binningRear, binningRight, binningLeft, binningDown, binningUp;
 
@@ -571,7 +574,7 @@ void LoadILLSANS::initWorkSpaceD33(NeXus::NXEntry &firstEntry, const std::string
       NXFloat channelWidthTimes = firstEntry.openNXFloat(m_instrumentName + "/tof/chwidth_times");
       channelWidthSum.load();
       channelWidthTimes.load();
-      std::string distancePrefix(instrumentPath + "/tof/tof_distance_detector");
+      std::string distancePrefix(instrumentAddress + "/tof/tof_distance_detector");
       binningRear = getVariableTimeBinning(firstEntry, distancePrefix + "1", channelWidthSum, channelWidthTimes);
       binningRight = getVariableTimeBinning(firstEntry, distancePrefix + "2", channelWidthSum, channelWidthTimes);
       binningLeft = getVariableTimeBinning(firstEntry, distancePrefix + "3", channelWidthSum, channelWidthTimes);
@@ -583,12 +586,12 @@ void LoadILLSANS::initWorkSpaceD33(NeXus::NXEntry &firstEntry, const std::string
     if (!vtof) {
       try {
         // LTOF mode
-        std::string binPathPrefix(instrumentPath + "/tof/tof_wavelength_detector");
-        binningRear = LoadHelper::getTimeBinningFromNexusPath(firstEntry, binPathPrefix + "1");
-        binningRight = LoadHelper::getTimeBinningFromNexusPath(firstEntry, binPathPrefix + "2");
-        binningLeft = LoadHelper::getTimeBinningFromNexusPath(firstEntry, binPathPrefix + "3");
-        binningDown = LoadHelper::getTimeBinningFromNexusPath(firstEntry, binPathPrefix + "4");
-        binningUp = LoadHelper::getTimeBinningFromNexusPath(firstEntry, binPathPrefix + "5");
+        std::string binAddressPrefix(instrumentAddress + "/tof/tof_wavelength_detector");
+        binningRear = LoadHelper::getTimeBinningFromNexusAddress(firstEntry, binAddressPrefix + "1");
+        binningRight = LoadHelper::getTimeBinningFromNexusAddress(firstEntry, binAddressPrefix + "2");
+        binningLeft = LoadHelper::getTimeBinningFromNexusAddress(firstEntry, binAddressPrefix + "3");
+        binningDown = LoadHelper::getTimeBinningFromNexusAddress(firstEntry, binAddressPrefix + "4");
+        binningUp = LoadHelper::getTimeBinningFromNexusAddress(firstEntry, binAddressPrefix + "5");
       } catch (std::runtime_error &e) {
         throw std::runtime_error("Unable to load the wavelength axes for TOF data " + std::string(e.what()));
       }
@@ -612,7 +615,7 @@ void LoadILLSANS::initWorkSpaceD33(NeXus::NXEntry &firstEntry, const std::string
  * @param type : used to discrimante between TOF and Kinetic
  * @return the next ws index after all the monitors
  */
-size_t LoadILLSANS::loadDataFromMonitors(NeXus::NXEntry &firstEntry, size_t firstIndex, const MultichannelType type) {
+size_t LoadILLSANS::loadDataFromMonitors(Nexus::NXEntry &firstEntry, size_t firstIndex, const MultichannelType type) {
 
   // let's find the monitors; should be monitor1 and monitor2
   for (std::vector<NXClassInfo>::const_iterator it = firstEntry.groups().begin(); it != firstEntry.groups().end();
@@ -655,12 +658,12 @@ size_t LoadILLSANS::loadDataFromMonitors(NeXus::NXEntry &firstEntry, size_t firs
  * @param binning: the binning to assign the monitor values
  * @return the new workspace index on which to load next
  */
-size_t LoadILLSANS::loadDataFromD16ScanMonitors(const NeXus::NXEntry &firstEntry, size_t firstIndex,
+size_t LoadILLSANS::loadDataFromD16ScanMonitors(const Nexus::NXEntry &firstEntry, size_t firstIndex,
                                                 const std::vector<double> &binning) {
-  std::string path = "/data_scan/scanned_variables/data";
+  std::string address = "/data_scan/scanned_variables/data";
   // It is not possible to ensure that monitors are in the same position in the scanned_variables data table.
   // Therefore, the order is obtained by getting monitor indices explicitly via getMonitorIndices method.
-  auto scannedVariables = LoadHelper::getDoubleDataset(firstEntry, path);
+  auto scannedVariables = LoadHelper::getDoubleDataset(firstEntry, address);
   scannedVariables.load();
   auto monitorNumber = 1; // for the naming of sample log variable
   for (auto monitorIndex : m_monitorIndices) {
@@ -717,10 +720,10 @@ size_t LoadILLSANS::loadDataFromD16ScanMonitors(const NeXus::NXEntry &firstEntry
  * @param type : used to discrimante between TOF and Kinetic
  * @return the next ws index after all the tubes in the given detector bank
  */
-size_t LoadILLSANS::loadDataFromTubes(NeXus::NXInt &data, const std::vector<double> &timeBinning, size_t firstIndex,
-                                      const MultichannelType type) {
+size_t LoadILLSANS::loadDataFromTubes(Nexus::NXInt const &data, const std::vector<double> &timeBinning,
+                                      size_t firstIndex, const MultichannelType type) {
 
-  int numberOfTubes, numberOfChannels, numberOfPixelsPerTube;
+  size_t numberOfTubes, numberOfChannels, numberOfPixelsPerTube;
   getDataDimensions(data, numberOfChannels, numberOfTubes, numberOfPixelsPerTube);
 
   bool pointData = true;
@@ -737,7 +740,7 @@ size_t LoadILLSANS::loadDataFromTubes(NeXus::NXInt &data, const std::vector<doub
     dimOrder = std::tuple<short, short, short>{0, 1, 2}; // default, tubes-pixels-channels
   }
   LoadHelper::fillStaticWorkspace(m_localWorkspace, data, timeBinning, static_cast<int>(firstIndex), pointData,
-                                  std::vector<int>(), std::set<int>(), dimOrder);
+                                  std::vector<int>(), std::set<detid_t>(), dimOrder);
   return firstIndex + numberOfTubes * numberOfPixelsPerTube;
 }
 
@@ -778,10 +781,9 @@ void LoadILLSANS::createEmptyWorkspace(const size_t numberOfHistograms, const si
  */
 std::string LoadILLSANS::getInstrumentFilePath(const std::string &instName) const {
 
-  Poco::Path directory(ConfigService::Instance().getInstrumentDirectory());
-  Poco::Path file(instName + "_Definition.xml");
-  Poco::Path fullPath(directory, file);
-  return fullPath.toString();
+  std::filesystem::path directory(ConfigService::Instance().getInstrumentDirectory());
+  std::filesystem::path fullPath = directory / (instName + "_Definition.xml");
+  return fullPath.string();
 }
 
 /**
@@ -922,9 +924,9 @@ void LoadILLSANS::moveDetectorVertical(double shift, const std::string &componen
 /**
  * Loads some metadata present in the nexus file
  * @param entry : opened nexus entry
- * @param instrumentNamePath : the nexus entry of the instrument
+ * @param instrumentNameAddress : the nexus entry of the instrument
  */
-void LoadILLSANS::loadMetaData(const NeXus::NXEntry &entry, const std::string &instrumentNamePath) {
+void LoadILLSANS::loadMetaData(const Nexus::NXEntry &entry, const std::string &instrumentNameAddress) {
 
   g_log.debug("Loading metadata...");
   API::Run &runDetails = m_localWorkspace->mutableRun();
@@ -938,9 +940,9 @@ void LoadILLSANS::loadMetaData(const NeXus::NXEntry &entry, const std::string &i
   double wavelength;
   if (getPointerToProperty("Wavelength")->isDefault()) {
     if (m_instrumentName == "D16" || m_instrumentName == "D16B") {
-      wavelength = entry.getFloat(instrumentNamePath + "/Beam/wavelength");
+      wavelength = entry.getFloat(instrumentNameAddress + "/Beam/wavelength");
     } else {
-      wavelength = entry.getFloat(instrumentNamePath + "/selector/wavelength");
+      wavelength = entry.getFloat(instrumentNameAddress + "/selector/wavelength");
     }
     g_log.debug() << "Wavelength found in the nexus file: " << wavelength << '\n';
   } else {
@@ -960,7 +962,7 @@ void LoadILLSANS::loadMetaData(const NeXus::NXEntry &entry, const std::string &i
     }
   } else {
     double wavelengthRes = 10.;
-    const std::string entryResolution = instrumentNamePath + "/selector/";
+    const std::string entryResolution = instrumentNameAddress + "/selector/";
     try {
       wavelengthRes = entry.getFloat(entryResolution + "wavelength_res");
     } catch (const std::runtime_error &) {
@@ -996,11 +998,11 @@ void LoadILLSANS::loadMetaData(const NeXus::NXEntry &entry, const std::string &i
  */
 void LoadILLSANS::setFinalProperties(const std::string &filename) {
   API::Run &runDetails = m_localWorkspace->mutableRun();
-  NXhandle nxHandle;
-  NXstatus nxStat = NXopen(filename.c_str(), NXACC_READ, &nxHandle);
-  if (nxStat != NX_ERROR) {
+  try {
+    Nexus::File nxHandle(filename, NXaccess::READ);
     LoadHelper::addNexusFieldsToWsRun(nxHandle, runDetails);
-    NXclose(&nxHandle);
+  } catch (Nexus::Exception const &e) {
+    g_log.debug() << "Failed to open nexus file \"" << filename << "\" in read mode: " << e.what() << "\n";
   }
 }
 
@@ -1056,18 +1058,18 @@ void LoadILLSANS::moveSource() {
  * @brief LoadILLSANS::getOmegaBinning
  * Get the binning for an omega scan for D16B files
  * @param entry opened root nexus entry
- * @param path path of the scanned variables entry
+ * @param address address of the scanned variables entry
  * @return the omega binning vector
  */
-std::vector<double> LoadILLSANS::getOmegaBinning(const NXEntry &entry, const std::string &path) const {
+std::vector<double> LoadILLSANS::getOmegaBinning(const NXEntry &entry, const std::string &address) const {
 
-  auto scannedValues = LoadHelper::getDoubleDataset(entry, path);
+  auto scannedValues = LoadHelper::getDoubleDataset(entry, address);
   scannedValues.load();
 
-  const int nBins = scannedValues.dim1();
+  const int64_t nBins = scannedValues.dim1();
   std::vector<double> binning(nBins, 0);
 
-  for (int i = 0; i < nBins; ++i) {
+  for (int64_t i = 0; i < nBins; ++i) {
     // for D16, we are only interested in the first line, which contains the omega values
     binning[i] = scannedValues(0, i);
   }
@@ -1077,19 +1079,19 @@ std::vector<double> LoadILLSANS::getOmegaBinning(const NXEntry &entry, const std
 /**
  * Returns the wavelength axis computed in VTOF mode
  * @param entry : opened root nexus entry
- * @param path : path of the detector distance entry
+ * @param address : address of the detector distance entry
  * @param sum : loaded channel width sums
  * @param times : loaded channel width times
  * @return binning : wavelength bin boundaries
  */
-std::vector<double> LoadILLSANS::getVariableTimeBinning(const NXEntry &entry, const std::string &path, const NXInt &sum,
-                                                        const NXFloat &times) const {
-  const int nBins = sum.dim0();
+std::vector<double> LoadILLSANS::getVariableTimeBinning(const NXEntry &entry, const std::string &address,
+                                                        const NXInt &sum, const NXFloat &times) const {
+  const int64_t nBins = sum.dim0();
   std::vector<double> binCenters;
   binCenters.reserve(nBins);
-  NXFloat distance = entry.openNXFloat(path);
+  NXFloat distance = entry.openNXFloat(address);
   distance.load();
-  for (int bin = 0; bin < nBins; ++bin) {
+  for (int64_t bin = 0; bin < nBins; ++bin) {
     // sum is in nanoseconds, times is in microseconds
     const double tof = sum[bin] * 1E-9 - times[bin] * 1E-6 / 2.;
     // velocity in m/s

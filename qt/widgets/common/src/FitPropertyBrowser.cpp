@@ -1044,7 +1044,7 @@ void FitPropertyBrowser::deleteFunction() {
 //
 
 // Get the default function name
-std::string FitPropertyBrowser::defaultFunctionType() const { return m_defaultFunction; }
+const std::string &FitPropertyBrowser::defaultFunctionType() const { return m_defaultFunction; }
 
 // Set the default function name
 void FitPropertyBrowser::setDefaultFunctionType(const std::string &fnType) { m_defaultFunction = fnType; }
@@ -1064,7 +1064,7 @@ void FitPropertyBrowser::setDefaultPeakType(const std::string &fnType) {
   setDefaultFunctionType(fnType);
 }
 /// Get the default background type
-std::string FitPropertyBrowser::defaultBackgroundType() const { return m_defaultBackground; }
+const std::string &FitPropertyBrowser::defaultBackgroundType() const { return m_defaultBackground; }
 /// Set the default background type
 void FitPropertyBrowser::setDefaultBackgroundType(const std::string &fnType) {
   m_defaultBackground = fnType;
@@ -2827,7 +2827,7 @@ void FitPropertyBrowser::workspaceChange(const QString &wsName) {
 /**
  * Returns the list of workspace names the fit property browser is working on
  */
-QStringList FitPropertyBrowser::getWorkspaceNames() { return m_workspaceNames; }
+const QStringList &FitPropertyBrowser::getWorkspaceNames() { return m_workspaceNames; }
 
 /**
  * Call MultifitSetupDialog to populate MultiBG function.
@@ -3194,12 +3194,12 @@ QStringList FitPropertyBrowser::getParameterNames() const {
 /**=================================================================================================
  * Get Fit Algorithm parameters
  */
-std::string FitPropertyBrowser::getFitAlgorithmParameters() const { return m_fitAlgParameters; }
+const std::string &FitPropertyBrowser::getFitAlgorithmParameters() const { return m_fitAlgParameters; }
 
 /**=================================================================================================
  * Get Fit Algorithm output statuss
  */
-std::string FitPropertyBrowser::getFitAlgorithmOutputStatus() const { return m_fitAlgOutputStatus; }
+const std::string &FitPropertyBrowser::getFitAlgorithmOutputStatus() const { return m_fitAlgOutputStatus; }
 
 /**=================================================================================================
  * Show online function help
@@ -3319,7 +3319,7 @@ PropertyHandler *FitPropertyBrowser::getPeakHandler(const QString &prefix) {
     throw std::runtime_error("Peak function prefix cannot be empty");
   auto const indexList = prefix.split(".");
   auto const n = indexList.size() - 1;
-  auto handler = getHandler();
+  auto const *handler = getHandler();
   for (int i = 0; i < n; ++i) {
     auto const index = indexList[i].mid(1).toInt();
     handler = handler->getHandler(index);

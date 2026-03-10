@@ -15,10 +15,12 @@
 #include "MantidGeometry/ICompAssembly.h"
 #include "MantidGeometry/IDTypes.h"
 #include "MantidGeometry/Instrument.h"
+#include "MantidGeometry/Instrument/ComponentInfo.h"
+#include "MantidGeometry/Instrument/DetectorInfo.h"
 #include "MantidKernel/ListValidator.h"
 #include "MantidKernel/OptionalBool.h"
+
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
 
 #include <Poco/DOM/DOMParser.h>
 #include <Poco/DOM/Element.h>
@@ -27,8 +29,8 @@
 #include <Poco/DOM/NodeIterator.h>
 #include <Poco/DOM/NodeList.h>
 #include <Poco/Exception.h>
-#include <Poco/Path.h>
 #include <Poco/String.h>
+#include <filesystem>
 
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
@@ -64,9 +66,9 @@ void LoadDetectorsGroupingFile::init() {
 
 /// Run the algorithm
 void LoadDetectorsGroupingFile::exec() {
-  Poco::Path inputFile(static_cast<std::string>(getProperty(PropertyNames::INPUT_FILE)));
+  std::filesystem::path inputFile(static_cast<std::string>(getProperty(PropertyNames::INPUT_FILE)));
 
-  std::string ext = Poco::toLower(inputFile.getExtension());
+  std::string ext = Poco::toLower(inputFile.extension().string().substr(1)); // skip `.`
 
   // The number of steps depends on the type of input file
   // Set them to zero for the moment
@@ -80,7 +82,7 @@ void LoadDetectorsGroupingFile::exec() {
 
     // 1. Parse XML File
     LoadGroupXMLFile loader;
-    loader.loadXMLFile(inputFile.toString());
+    loader.loadXMLFile(inputFile.string());
 
     MatrixWorkspace_sptr inputWS = getProperty(PropertyNames::INPUT_WKSP);
     if (inputWS) {
@@ -126,7 +128,7 @@ void LoadDetectorsGroupingFile::exec() {
 
     // 3. Create output workspace
     this->intializeGroupingWorkspace();
-    m_groupWS->mutableRun().addProperty("Filename", inputFile.toString());
+    m_groupWS->mutableRun().addProperty("Filename", inputFile.string());
     setProperty("OutputWorkspace", m_groupWS);
 
     progress.report("Setting geometry");
@@ -160,7 +162,7 @@ void LoadDetectorsGroupingFile::exec() {
     progress.report("Parsing map file");
 
     // Load data from file
-    LoadGroupMapFile loader(inputFile.toString(), g_log);
+    LoadGroupMapFile loader(inputFile.string(), g_log);
     loader.parseFile();
 
     progress.report("Setting spectra map");
@@ -173,7 +175,7 @@ void LoadDetectorsGroupingFile::exec() {
     // There is no way to specify instrument name in .map file
     generateNoInstrumentGroupWorkspace();
 
-    m_groupWS->mutableRun().addProperty("Filename", inputFile.toString());
+    m_groupWS->mutableRun().addProperty("Filename", inputFile.string());
     setProperty("OutputWorkspace", m_groupWS);
 
     this->setBySpectrumNos();
@@ -202,6 +204,8 @@ void LoadDetectorsGroupingFile::setByComponents() {
 
   // 1. Prepare
   const detid2index_map indexmap = m_groupWS->getDetectorIDToWorkspaceIndexMap(true);
+  const auto &componentInfo = m_groupWS->componentInfo();
+  const auto &detectorInfo = m_groupWS->detectorInfo();
 
   // 2. Set
   for (auto &componentMap : m_groupComponentsMap) {
@@ -209,33 +213,26 @@ void LoadDetectorsGroupingFile::setByComponents() {
 
     for (auto &componentName : componentMap.second) {
 
-      // a) get component
-      Geometry::IComponent_const_sptr component = m_instrument->getComponentByName(componentName);
+      // a) get component by name and find its index
+      const size_t componentIndex = componentInfo.indexOfAny(componentName);
 
-      // b) component -> component assembly --> children (more than detectors)
-      std::shared_ptr<const Geometry::ICompAssembly> asmb =
-          std::dynamic_pointer_cast<const Geometry::ICompAssembly>(component);
-      std::vector<Geometry::IComponent_const_sptr> children;
-      asmb->getChildren(children, true);
+      // b) get all detectors in the subtree of this component
+      const auto detectorIndices = componentInfo.detectorsInSubtree(componentIndex);
 
-      g_log.debug() << "Component Name = " << componentName << "  Component ID = " << component->getComponentID()
-                    << "Number of Children = " << children.size() << '\n';
+      g_log.debug() << "Component Name = " << componentName
+                    << "  Component ID = " << componentInfo.componentID(componentIndex)
+                    << "  Number of Children = " << detectorIndices.size() << '\n';
 
-      for (const auto &child : children) {
-        // c) convert component to detector
-        Geometry::IDetector_const_sptr det = std::dynamic_pointer_cast<const Geometry::IDetector>(child);
-
-        if (det) {
-          // Component is DETECTOR:
-          int32_t detid = det->getID();
-          auto itx = indexmap.find(detid);
-          if (itx != indexmap.end()) {
-            size_t wsindex = itx->second;
-            m_groupWS->mutableY(wsindex)[0] = componentMap.first;
-          } else {
-            g_log.error() << "Pixel w/ ID = " << detid << " Cannot Be Located\n";
-          }
-        } // ENDIF Detector
+      for (const auto &detIndex : detectorIndices) {
+        // c) get detector ID
+        const auto detid = detectorInfo.detectorIDs()[detIndex];
+        auto itx = indexmap.find(detid);
+        if (itx != indexmap.end()) {
+          size_t wsindex = itx->second;
+          m_groupWS->mutableY(wsindex)[0] = componentMap.first;
+        } else {
+          g_log.error() << "Pixel w/ ID = " << detid << " Cannot Be Located\n";
+        }
 
       } // ENDFOR (children of component)
     } // ENDFOR (component)

@@ -12,7 +12,6 @@
 #include "Reduction/ParseReflectometryStrings.h"
 #include "Reduction/PreviewRow.h"
 #include "Reduction/RowExceptions.h"
-#include "Reduction/ValidateLookupRow.h"
 
 namespace MantidQt::CustomInterfaces::ISISReflectometry {
 // unnamed namespace
@@ -106,7 +105,7 @@ void ExperimentPresenter::notifyInstrumentChanged(std::string const &instrumentN
 }
 
 namespace {
-bool hasUpdatedSettings(boost::optional<LookupRow> const lookupRow, PreviewRow const &previewRow) {
+bool hasUpdatedSettings(std::optional<LookupRow> const lookupRow, PreviewRow const &previewRow) {
   return lookupRow->roiDetectorIDs() != previewRow.getSelectedBanks() ||
          lookupRow->processingInstructions() != previewRow.getProcessingInstructions(ROIType::Signal) ||
          lookupRow->backgroundProcessingInstructions() != previewRow.getProcessingInstructions(ROIType::Background) ||
@@ -120,6 +119,7 @@ void ExperimentPresenter::notifyPreviewApplyRequested(PreviewRow const &previewR
   }
   if (auto const foundRow = m_model.findLookupRow(previewRow, m_thetaTolerance)) {
     if (!hasUpdatedSettings(foundRow, previewRow)) {
+      g_log.information("No updated experiment settings to apply from preview.");
       return;
     }
 
@@ -134,6 +134,7 @@ void ExperimentPresenter::notifyPreviewApplyRequested(PreviewRow const &previewR
     m_model.updateLookupRow(std::move(lookupRowCopy), m_thetaTolerance);
     updateViewFromModel();
     m_mainPresenter->notifySettingsChanged();
+    g_log.information("Updated experiment settings applied from preview.");
   } else {
     throw RowNotFoundException("There is no row with angle matching '" + std::to_string(previewRow.theta()) +
                                "' in the Lookup Table.");
@@ -175,12 +176,13 @@ PolarizationCorrections ExperimentPresenter::polarizationCorrectionsFromView() {
   if (polCorrType == PolarizationCorrectionType::None || polCorrType == PolarizationCorrectionType::ParameterFile) {
     return PolarizationCorrections(polCorrType);
   }
+  auto const &fredrikzeSpinStateOrder = m_view->getFredrikzeSpinStateOrder();
   if (polCorrOptionString == "FilePath") {
     auto const &polCorrFilePath = m_view->getPolarizationEfficienciesFilePath();
     showPolCorrFilePathValidity(polCorrFilePath);
-    return PolarizationCorrections(polCorrType, polCorrFilePath);
+    return PolarizationCorrections(polCorrType, polCorrFilePath, fredrikzeSpinStateOrder);
   }
-  return PolarizationCorrections(polCorrType, m_view->getPolarizationEfficienciesWorkspace());
+  return PolarizationCorrections(polCorrType, m_view->getPolarizationEfficienciesWorkspace(), fredrikzeSpinStateOrder);
 }
 
 void ExperimentPresenter::showPolCorrFilePathValidity(std::string const &filePath) {
@@ -252,11 +254,13 @@ void ExperimentPresenter::updatePolarizationCorrectionEnabledState() {
   }
   if (polCorrOption == "Workspace") {
     m_view->enablePolarizationEfficiencies();
+    m_view->enableFredrikzeSpinStateOrder();
     m_view->setPolarizationEfficienciesWorkspaceMode();
     return;
   }
   if (polCorrOption == "FilePath") {
     m_view->enablePolarizationEfficiencies();
+    m_view->enableFredrikzeSpinStateOrder();
     m_view->setPolarizationEfficienciesFilePathMode();
     return;
   }
@@ -265,6 +269,7 @@ void ExperimentPresenter::updatePolarizationCorrectionEnabledState() {
 void ExperimentPresenter::disablePolarizationEfficiencies() {
   m_view->setPolarizationEfficienciesWorkspaceMode();
   m_view->disablePolarizationEfficiencies();
+  m_view->disableFredrikzeSpinStateOrder();
 }
 
 void ExperimentPresenter::updateFloodCorrectionEnabledState() {
@@ -291,7 +296,7 @@ void ExperimentPresenter::disableFloodCorrectionInputs() {
   m_view->disableFloodCorrectionInputs();
 }
 
-boost::optional<RangeInLambda> ExperimentPresenter::transmissionRunRangeFromView() {
+std::optional<RangeInLambda> ExperimentPresenter::transmissionRunRangeFromView() {
   auto const range = RangeInLambda(m_view->getTransmissionStartOverlap(), m_view->getTransmissionEndOverlap());
   auto const bothOrNoneMustBeSet = false;
 
@@ -301,7 +306,7 @@ boost::optional<RangeInLambda> ExperimentPresenter::transmissionRunRangeFromView
     m_view->showTransmissionRangeInvalid();
 
   if (range.unset() || !range.isValid(bothOrNoneMustBeSet))
-    return boost::none;
+    return std::nullopt;
   else
     return range;
 }
@@ -317,7 +322,7 @@ std::string ExperimentPresenter::transmissionStitchParamsFromView() {
   // If set, the params should be a list containing an odd number of double
   // values (as per the Params property of Rebin)
   auto maybeParamsList = parseList(stitchParams, parseDouble);
-  if (maybeParamsList.is_initialized() && maybeParamsList->size() % 2 != 0) {
+  if (maybeParamsList.has_value() && maybeParamsList->size() % 2 != 0) {
     m_view->showTransmissionStitchParamsValid();
     return stitchParams;
   }
@@ -335,9 +340,9 @@ TransmissionStitchOptions ExperimentPresenter::transmissionStitchOptionsFromView
 
 std::map<std::string, std::string> ExperimentPresenter::stitchParametersFromView() {
   auto maybeStitchParameters = parseOptions(m_view->getStitchOptions());
-  if (maybeStitchParameters.is_initialized()) {
+  if (maybeStitchParameters.has_value()) {
     m_view->showStitchParametersValid();
-    return maybeStitchParameters.get();
+    return maybeStitchParameters.value();
   }
 
   m_view->showStitchParametersInvalid();
@@ -355,6 +360,7 @@ ExperimentValidationResult ExperimentPresenter::validateExperimentFromView() {
     auto const summationType = summationTypeFromString(m_view->getSummationType());
     auto const includePartialBins = m_view->getIncludePartialBins();
     auto const debugOption = m_view->getDebugOption();
+    auto const diagnosticsOption = m_view->getDiagnosticsOption();
     auto transmissionStitchOptions = transmissionStitchOptionsFromView();
     auto backgroundSubtraction = backgroundSubtractionFromView();
     auto polarizationCorrections = polarizationCorrectionsFromView();
@@ -363,7 +369,7 @@ ExperimentValidationResult ExperimentPresenter::validateExperimentFromView() {
     return ExperimentValidationResult(Experiment(analysisMode, reductionType, summationType, includePartialBins,
                                                  debugOption, backgroundSubtraction, polarizationCorrections,
                                                  floodCorrections, transmissionStitchOptions, stitchParameters,
-                                                 lookupTableValidationResult.assertValid()));
+                                                 lookupTableValidationResult.assertValid(), diagnosticsOption));
   } else {
     return ExperimentValidationResult(ExperimentValidationErrors(lookupTableValidationResult.assertError()));
   }
@@ -382,7 +388,7 @@ void ExperimentPresenter::showLookupTableErrors(LookupTableValidationError const
   for (auto const &validationError : errors.errors()) {
     for (auto const &column : validationError.invalidColumns()) {
       if (errors.fullTableError()) {
-        showFullTableError(errors.fullTableError().get(), validationError.row(), column);
+        showFullTableError(errors.fullTableError().value(), validationError.row(), column);
       }
       m_view->showLookupRowAsInvalid(validationError.row(), column);
     }
@@ -418,6 +424,7 @@ void ExperimentPresenter::updateViewFromModel() {
   m_view->setSummationType(summationTypeToString(m_model.summationType()));
   m_view->setIncludePartialBins(m_model.includePartialBins());
   m_view->setDebugOption(m_model.debug());
+  m_view->setDiagnosticsOption(m_model.diagnostics());
   m_view->setLookupTable(m_model.lookupTableToArray());
   // Transmission
   if (m_model.transmissionStitchOptions().overlapRange()) {
@@ -440,10 +447,11 @@ void ExperimentPresenter::updateViewFromModel() {
       polarizationCorrectionTypeToString(m_model.polarizationCorrections().correctionType()));
   m_view->setPolarizationEfficienciesFilePath("");
   if (m_model.polarizationCorrections().workspace())
-    m_view->setPolarizationEfficienciesWorkspace(m_model.polarizationCorrections().workspace().get());
+    m_view->setPolarizationEfficienciesWorkspace(m_model.polarizationCorrections().workspace().value());
+  m_view->setFredrikzeSpinStateOrder(m_model.polarizationCorrections().fredrikzeSpinStateOrder());
   m_view->setFloodCorrectionType(floodCorrectionTypeToString(m_model.floodCorrections().correctionType()));
   if (m_model.floodCorrections().workspace())
-    m_view->setFloodWorkspace(m_model.floodCorrections().workspace().get());
+    m_view->setFloodWorkspace(m_model.floodCorrections().workspace().value());
   else
     m_view->setFloodWorkspace("");
   m_view->setFloodFilePath("");

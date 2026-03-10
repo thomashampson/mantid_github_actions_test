@@ -1,6 +1,6 @@
 # Mantid Repository : https://github.com/mantidproject/mantid
 #
-# Copyright &copy; 2020 ISIS Rutherford Appleton Laboratory UKRI,
+# Copyright &copy; 2025 ISIS Rutherford Appleton Laboratory UKRI,
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
@@ -10,13 +10,18 @@ from .tabs.calibration.model import CalibrationModel
 from .tabs.calibration.view import CalibrationView
 from .tabs.calibration.presenter import CalibrationPresenter
 from .tabs.focus.model import FocusModel
-from .tabs.focus.view import FocusView
 from .tabs.focus.presenter import FocusPresenter
+from .tabs.correction.model import CorrectionModel
+from .tabs.correction.view import TextureCorrectionView
+from .tabs.correction.presenter import TextureCorrectionPresenter
 from .tabs.fitting.view import FittingView
 from .tabs.fitting.presenter import FittingPresenter
 from .tabs.gsas2.model import GSAS2Model
 from .tabs.gsas2.presenter import GSAS2Presenter
 from .tabs.gsas2.view import GSAS2View
+from .tabs.texture.model import ProjectionModel
+from .tabs.texture.view import TextureView
+from .tabs.texture.presenter import TexturePresenter
 from .settings.settings_model import SettingsModel
 from .settings.settings_view import SettingsView
 from .settings.settings_presenter import SettingsPresenter
@@ -29,8 +34,10 @@ from mantidqt.utils.observer_pattern import GenericObservable
 class EngineeringDiffractionPresenter(object):
     def __init__(self):
         self.calibration_presenter = None
+        self.correction_presenter = None
         self.focus_presenter = None
         self.fitting_presenter = None
+        self.texture_presenter = None
         self.settings_presenter = None
         self.gsas2_presenter = None
 
@@ -50,24 +57,28 @@ class EngineeringDiffractionPresenter(object):
 
     def setup_calibration(self, view):
         cal_model = CalibrationModel()
+        focus_model = FocusModel()
         cal_view = CalibrationView(parent=view.tabs)
         self.calibration_presenter = CalibrationPresenter(cal_model, cal_view)
-        view.tabs.addTab(cal_view, "Calibration")
+        self.focus_presenter = FocusPresenter(focus_model, cal_view)
+        view.tabs.addTab(cal_view, "Run Processing")
 
     def setup_calibration_notifier(self):
         self.calibration_presenter.calibration_notifier.add_subscriber(self.focus_presenter.calibration_observer)
         self.calibration_presenter.calibration_notifier.add_subscriber(self.calibration_observer)
 
-    def setup_focus(self, view):
-        focus_model = FocusModel()
-        focus_view = FocusView()
-        self.focus_presenter = FocusPresenter(focus_model, focus_view)
-        view.tabs.addTab(focus_view, "Focus")
+    def setup_correction(self, view):
+        correction_model = CorrectionModel()
+        correction_view = TextureCorrectionView()
+        self.correction_presenter = TextureCorrectionPresenter(correction_model, correction_view)
+        view.tabs.addTab(correction_view, "Absorption Correction")
+        self.correction_presenter.add_correction_subscriber(self.focus_presenter.correction_observer)
 
     def setup_fitting(self, view):
         fitting_view = FittingView()
         self.fitting_presenter = FittingPresenter(fitting_view)
         self.focus_presenter.add_focus_subscriber(self.fitting_presenter.data_widget.presenter.focus_run_observer)
+        self.focus_presenter.add_focus_texture_subscriber(self.fitting_presenter.data_widget.presenter.focus_combined_observer)
         view.tabs.addTab(fitting_view, "Fitting")
 
     def setup_gsas2(self, view):
@@ -77,6 +88,13 @@ class EngineeringDiffractionPresenter(object):
         self.focus_presenter.add_focus_gsas2_subscriber(self.gsas2_presenter.focus_run_observer_gsas2)
         self.calibration_presenter.add_prm_gsas2_subscriber(self.gsas2_presenter.prm_filepath_observer_gsas2)
         view.tabs.addTab(gsas2_view, "GSAS II")
+
+    def setup_texture(self, view):
+        texture_model = ProjectionModel()
+        texture_view = TextureView()
+        self.texture_presenter = TexturePresenter(texture_model, texture_view)
+        self.focus_presenter.add_focus_texture_subscriber(self.texture_presenter.focus_run_observer)
+        view.tabs.addTab(texture_view, "Texture")
 
     def setup_settings(self, view):
         settings_model = SettingsModel()
@@ -103,7 +121,8 @@ class EngineeringDiffractionPresenter(object):
     def update_calibration(self, calibration):
         instrument = calibration.get_instrument()
         ceria_no = calibration.get_ceria_runno()
-        self.statusbar_observable.notify_subscribers(f"CeO2: {ceria_no}, Instrument: {instrument}")
+        vanadium_no = calibration.get_vanadium_runno()
+        self.statusbar_observable.notify_subscribers(f"CeO2: {ceria_no}, V: {vanadium_no}, Instrument: {instrument}")
 
     @staticmethod
     def get_saved_rb_number() -> str:

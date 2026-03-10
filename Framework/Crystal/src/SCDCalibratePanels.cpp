@@ -23,10 +23,10 @@
 #include "MantidGeometry/Crystal/IndexingUtils.h"
 #include "MantidGeometry/Crystal/OrientedLattice.h"
 #include "MantidGeometry/Crystal/ReducedCell.h"
+#include "MantidGeometry/Instrument/ComponentInfo.h"
 #include "MantidKernel/BoundedValidator.h"
 #include "MantidKernel/EnabledWhenProperty.h"
 #include "MantidKernel/ListValidator.h"
-#include <Poco/File.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/math/special_functions/round.hpp>
 #include <fstream>
@@ -42,6 +42,12 @@ namespace Mantid::Crystal {
 
 DECLARE_ALGORITHM(SCDCalibratePanels)
 
+// Default constructor
+SCDCalibratePanels::SCDCalibratePanels() {
+  useAlgorithm("SCDCalibratePanels", 2);
+  deprecatedDate("2025-05-27");
+}
+
 const std::string SCDCalibratePanels::name() const { return "SCDCalibratePanels"; }
 
 int SCDCalibratePanels::version() const { return 1; }
@@ -56,10 +62,11 @@ void SCDCalibratePanels::exec() {
   // Remove peaks on edge
   int edge = this->getProperty("EdgePixels");
   Geometry::Instrument_const_sptr inst = peaksWs->getInstrument();
+  Geometry::ComponentInfo const &compInfo = peaksWs->componentInfo();
   if (edge > 0) {
     std::vector<Peak> &peaks = peaksWs->getPeaks();
-    auto it = std::remove_if(peaks.begin(), peaks.end(), [edge, inst](const Peak &pk) {
-      return edgePixel(inst, pk.getBankName(), pk.getCol(), pk.getRow(), edge);
+    auto it = std::remove_if(peaks.begin(), peaks.end(), [edge, &compInfo](const Peak &pk) {
+      return edgePixel(compInfo, pk.getBankName(), pk.getCol(), pk.getRow(), edge);
     });
     peaks.erase(it, peaks.end());
   }
@@ -106,7 +113,7 @@ void SCDCalibratePanels::exec() {
   std::vector<std::string> fit_workspaces(MyBankNames.size() + MyPanels.size(), "fit_");
   std::vector<std::string> parameter_workspaces(MyBankNames.size() + MyPanels.size(), "params_");
   int bankAndPanelCount = 0;
-  for (auto &MyPanel : MyPanels) {
+  for (const auto &MyPanel : MyPanels) {
     fit_workspaces[bankAndPanelCount] += MyPanel;
     parameter_workspaces[bankAndPanelCount] += MyPanel;
     bankAndPanelCount++;
@@ -121,7 +128,7 @@ void SCDCalibratePanels::exec() {
     g_log.notice() << "For east rotation change det_arc2 " << delta << " degrees\n";
   }
 
-  for (auto &MyBankName : MyBankNames) {
+  for (const auto &MyBankName : MyBankNames) {
     fit_workspaces[bankAndPanelCount] += MyBankName;
     parameter_workspaces[bankAndPanelCount] += MyBankName;
     bankAndPanelCount++;
@@ -186,11 +193,11 @@ void SCDCalibratePanels::exec() {
   // Save as DetCal and XML if requested
   string DetCalFileName = getProperty("DetCalFilename");
   API::Run &run = peaksWs->mutableRun();
-  double mT0 = 0.0;
+  double T0 = 0.0;
   if (run.hasProperty("T0")) {
-    mT0 = run.getPropertyValueAsType<double>("T0");
+    T0 = run.getPropertyValueAsType<double>("T0");
   }
-  saveIsawDetCal(inst2, MyBankNames, mT0, DetCalFileName);
+  saveIsawDetCal(inst2, MyBankNames, T0, DetCalFileName);
   string XmlFileName = getProperty("XmlFilename");
   saveXmlFile(XmlFileName, MyBankNames, *inst2);
   // create table of theoretical vs calculated

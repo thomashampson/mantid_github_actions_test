@@ -60,14 +60,14 @@ class PointGroupTest(unittest.TestCase):
     def test_to_string(self):
         pg = PointGroupFactory.createPointGroup("m-3m")
 
-        expected_str = "Point group with:\nLattice system: Cubic" "\nCrystal system: Cubic\nSymbol: m-3m"
+        expected_str = "Point group with:\nLattice system: Cubic\nCrystal system: Cubic\nSymbol: m-3m"
 
         expected_repr = 'PointGroupFactory.createPointGroup("m-3m")'
 
         self.assertEqual(expected_str, str(pg))
         self.assertEqual(expected_repr, pg.__repr__())
 
-        newPg = eval(pg.__repr__())
+        newPg = eval(pg.__repr__())  # noqa: S307
         self.assertEqual(pg.getHMSymbol(), newPg.getHMSymbol())
 
 

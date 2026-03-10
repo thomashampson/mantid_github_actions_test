@@ -20,10 +20,9 @@
 #include "MantidKernel/EnabledWhenProperty.h"
 #include "MantidKernel/Matrix.h"
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
-#include <Poco/File.h>
+#include <filesystem>
 
-using file_holder_type = std::unique_ptr<::NeXus::File>;
+using file_holder_type = std::unique_ptr<Mantid::Nexus::File>;
 
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
@@ -33,11 +32,9 @@ namespace {
 template <typename MDE, size_t nd>
 void prepareUpdate(MDBoxFlatTree &BoxFlatStruct, BoxController *bc, typename MDEventWorkspace<MDE, nd>::sptr ws,
                    const std::string &filename) {
-  // remove all boxes from the DiskBuffer. DB will calculate boxes positions
-  // on HDD.
+  // remove all boxes from the DiskBuffer. DB will calculate boxes positions on HDD.
   bc->getFileIO()->flushCache();
-  // flatten the box structure; this will remember boxes file positions in the
-  // box structure
+  // flatten the box structure; this will remember boxes file positions in the box structure
   BoxFlatStruct.initFlatStructure(ws, filename);
 }
 } // namespace
@@ -75,8 +72,7 @@ void SaveMD::init() {
 
 //----------------------------------------------------------------------------------------------
 /** Save the MDEventWorskpace to a file.
- * Based on the Intermediate Data Format Detailed Design Document, v.1.R3 found
- *in SVN.
+ * Based on the Intermediate Data Format Detailed Design Document, v.1.R3 found in SVN.
  *
  * @param ws :: MDEventWorkspace of the given type
  */
@@ -101,15 +97,12 @@ template <typename MDE, size_t nd> void SaveMD::doSaveEvents(typename MDEventWor
   }
 
   if (!wsIsFileBacked) {
-    Poco::File oldFile(filename);
-    if (oldFile.exists())
-      oldFile.remove();
+    if (std::filesystem::exists(filename))
+      std::filesystem::remove(filename);
   }
 
   auto prog = std::make_unique<Progress>(this, 0.0, 0.05, 1);
-  if (updateFileBackend) // workspace has its own file and ignores any changes
-                         // to the
-                         // algorithm parameters
+  if (updateFileBackend) // workspace has its own file and ignores any changes to the algorithm parameters
   {
     if (!ws->isFileBacked())
       throw std::runtime_error(" attempt to update non-file backed workspace");
@@ -117,8 +110,7 @@ template <typename MDE, size_t nd> void SaveMD::doSaveEvents(typename MDEventWor
   }
 
   //-----------------------------------------------------------------------------------------------------
-  // create or open WS group and put there additional information about WS and
-  // its dimensions
+  // create or open WS group and put there additional information about WS and its dimensions
   auto nDims = static_cast<int>(nd);
   bool data_exist;
   auto file =
@@ -167,8 +159,7 @@ template <typename MDE, size_t nd> void SaveMD::doSaveEvents(typename MDEventWor
           // do not spend time on empty or masked boxes
           if (boxe->getDataInMemorySize() == 0 || boxe->getIsMasked())
             continue;
-          // save boxes directly using the boxes file postion, precalculated in
-          // boxFlatStructure.
+          // save boxes directly using the boxes file postion, precalculated in boxFlatStructure.
           saveableTag->save();
           // remove boxes data from memory. This will actually correctly set the
           // tag indicatin that data were not loaded.
@@ -223,12 +214,11 @@ void SaveMD::doSaveHisto(const Mantid::DataObjects::MDHistoWorkspace_sptr &ws) {
   std::string filename = getPropertyValue("Filename");
 
   // Erase the file if it exists
-  Poco::File oldFile(filename);
-  if (oldFile.exists())
-    oldFile.remove();
+  if (std::filesystem::exists(filename))
+    std::filesystem::remove(filename);
 
   // Create a new file in HDF5 mode.
-  auto file = std::make_unique<::NeXus::File>(filename, NXACC_CREATE5);
+  auto file = std::make_unique<Nexus::File>(filename, NXaccess::CREATE5);
 
   // The base entry. Named so as to distinguish from other workspace types.
   file->makeGroup("MDHistoWorkspace", "NXentry", true);
@@ -275,19 +265,19 @@ void SaveMD::doSaveHisto(const Mantid::DataObjects::MDHistoWorkspace_sptr &ws) {
   // Number of data points
   auto nPoints = static_cast<int>(ws->getNPoints());
 
-  file->makeData("signal", ::NeXus::FLOAT64, nPoints, true);
+  file->makeData("signal", NXnumtype::FLOAT64, nPoints, true);
   file->putData(ws->getSignalArray());
   file->closeData();
 
-  file->makeData("errors_squared", ::NeXus::FLOAT64, nPoints, true);
+  file->makeData("errors_squared", NXnumtype::FLOAT64, nPoints, true);
   file->putData(ws->getErrorSquaredArray());
   file->closeData();
 
-  file->makeData("num_events", ::NeXus::FLOAT64, nPoints, true);
+  file->makeData("num_events", NXnumtype::FLOAT64, nPoints, true);
   file->putData(ws->getNumEventsArray());
   file->closeData();
 
-  file->makeData("mask", ::NeXus::INT8, nPoints, true);
+  file->makeData("mask", NXnumtype::INT8, nPoints, true);
   file->putData(ws->getMaskArray());
   file->closeData();
 

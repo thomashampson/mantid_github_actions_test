@@ -264,9 +264,7 @@ FunctionFactoryImpl::createComposite(const Expression &expr,
     }
   }
 
-  if (cfun) {
-    cfun->applyTies();
-  }
+  cfun->applyTies();
   return cfun;
 }
 
@@ -350,9 +348,7 @@ void FunctionFactoryImpl::addTies(const IFunction_sptr &fun, const Expression &e
   if (expr.name() == "=") {
     addTie(fun, expr);
   } else if (expr.name() == ",") {
-    for (const auto &constraint : expr) {
-      addTie(fun, constraint);
-    }
+    fun->addTies(expr.str());
   }
 }
 

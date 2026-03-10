@@ -14,24 +14,17 @@
 #include "MantidAPI/SpectraAxis.h"
 #include "MantidAPI/SpectrumInfo.h"
 #include "MantidAPI/WorkspaceFactory.h"
-#include "MantidKernel/DeltaEMode.h"
-#include "MantidKernel/UnitFactory.h"
-
-#include "MantidNexus/NexusClasses.h"
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
-
 #include "MantidGeometry/Instrument.h"
 #include "MantidGeometry/Instrument/Detector.h"
 #include "MantidGeometry/Instrument/Goniometer.h"
 #include "MantidGeometry/Objects/ShapeFactory.h"
+#include "MantidKernel/DeltaEMode.h"
+#include "MantidKernel/UnitFactory.h"
+#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
-#include <boost/regex.hpp>
-
-#include <Poco/File.h>
-
+#include <filesystem>
 #include <map>
 #include <sstream>
 #include <string>
@@ -46,18 +39,22 @@ using namespace Mantid::API;
 using Mantid::HistogramData::BinEdges;
 
 /**
- * Calculate the confidence in the string value. This is used for file
- * identification.
+ * Calculate the confidence in the string value. This is used for file identification.
  * @param value
  * @return confidence 0 - 100%
  */
 int LoadNXSPE::identiferConfidence(const std::string &value) {
-  int identifierConfidence = 0;
-  if (value == "NXSPE") {
+  int identifierConfidence(0);
+  if (value.empty()) {
+    identifierConfidence = 0;
+  } else if (value == "NXSPE") {
     identifierConfidence = 99;
   } else {
-    boost::regex re("^NXSP", boost::regex::icase);
-    if (boost::regex_match(value, re)) {
+    // convert to be uppercase for case insensitive comparison
+    std::string valueUpper = value;
+    std::transform(valueUpper.begin(), valueUpper.end(), valueUpper.begin(),
+                   [](unsigned char c) { return std::toupper(c); });
+    if (valueUpper.starts_with("NXSP")) {
       identifierConfidence = 95;
     }
   }
@@ -70,21 +67,21 @@ int LoadNXSPE::identiferConfidence(const std::string &value) {
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadNXSPE::confidence(Kernel::NexusDescriptor &descriptor) const {
+int LoadNXSPE::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
   int confidence(0);
-  using string_map_t = std::map<std::string, std::string>;
-  try {
-    ::NeXus::File file = ::NeXus::File(descriptor.filename());
-    string_map_t entries = file.getEntries();
-    for (string_map_t::const_iterator it = entries.begin(); it != entries.end(); ++it) {
-      if (it->second == "NXentry") {
-        file.openGroup(it->first, it->second);
-        file.openData("definition");
-        const std::string value = file.getStrData();
-        confidence = identiferConfidence(value);
+  auto entries = descriptor.getAllEntries();
+  // look for a group of type NXentry with a dataset called definition
+  for (const auto &it : entries) {
+    if (it.second == "NXentry") {
+      std::string defAddress = it.first + "/definition";
+      if (descriptor.isEntry(defAddress, Mantid::Nexus::SCIENTIFIC_DATA_SET)) {
+        // check the dataset to see if it matches the definition we are looking for
+        confidence = identiferConfidence(descriptor.getStrData(defAddress));
       }
     }
-  } catch (::NeXus::Exception &) {
+    if (confidence > 80) {
+      break; // no need to continue checking
+    }
   }
   return confidence;
 }
@@ -102,9 +99,9 @@ void LoadNXSPE::init() {
  */
 void LoadNXSPE::exec() {
   std::string filename = getProperty("Filename");
-  // quicly check if it's really nxspe
+  // quickly check if it's really nxspe
   try {
-    ::NeXus::File file(filename);
+    Nexus::File file(filename);
     std::string mainEntry = (*(file.getEntries().begin())).first;
     file.openGroup(mainEntry, "NXentry");
     file.openData("definition");
@@ -117,7 +114,7 @@ void LoadNXSPE::exec() {
   }
 
   // Load the data
-  ::NeXus::File file(filename);
+  Nexus::File file(filename);
 
   std::string mainEntry = (*(file.getEntries().begin())).first;
   file.openGroup(mainEntry, "NXentry");
@@ -164,7 +161,7 @@ void LoadNXSPE::exec() {
     throw std::invalid_argument("data field was not found");
   }
   file.openData("data");
-  ::NeXus::Info info = file.getInfo();
+  Nexus::Info info = file.getInfo();
   auto numSpectra = static_cast<std::size_t>(info.dims.at(0));
   auto numBins = static_cast<std::size_t>(info.dims.at(1));
   std::vector<double> data;
@@ -327,7 +324,7 @@ void LoadNXSPE::exec() {
   if (!instrument_name.empty() && instrument_name != "NXSPE") {
     std::string IDF_filename = InstrumentFileFinder::getInstrumentFilename(instrument_name);
     std::string instrument_parfile = IDF_filename.substr(0, IDF_filename.find("_Definition")) + "_Parameters.xml";
-    if (Poco::File(instrument_parfile).exists()) {
+    if (std::filesystem::exists(instrument_parfile)) {
       try {
         auto loadParamAlg = createChildAlgorithm("LoadParameterFile");
         loadParamAlg->setProperty("Filename", instrument_parfile);

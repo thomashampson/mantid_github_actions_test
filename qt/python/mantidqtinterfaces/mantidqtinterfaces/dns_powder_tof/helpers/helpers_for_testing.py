@@ -4,8 +4,10 @@
 #     NScD Oak Ridge National Laboratory, European Spallation Source
 #     & Institut Laue - Langevin
 # SPDX - License - Identifier: GPL - 3.0 +
-from mantid.simpleapi import BinMD, FakeMDEventData, CreateMDWorkspace
 
+import numpy as np
+
+from mantid.simpleapi import BinMD, FakeMDEventData, CreateMDWorkspace
 from mantidqtinterfaces.dns_powder_tof.data_structures.object_dict import ObjectDict
 
 dataset_dic = [
@@ -24,9 +26,7 @@ dataset_dic = [
         "selector_speed": 7032.0,
         "scan_number": "14743",
         "scan_command": (
-            "scan([det_rot, sample_rot], [-5.0000, 125.0000], "
-            "[-0.5000, -0.5000], 10, tsf=120.0, field=['z7_sf', 'z7_nsf'],"
-            " tnsf=240.0)"
+            "scan([det_rot, sample_rot], [-5.0000, 125.0000], [-0.5000, -0.5000], 10, tsf=120.0, field=['z7_sf', 'z7_nsf'], tnsf=240.0)"
         ),
         "scan_points": "20",
         "new_format": True,
@@ -46,7 +46,7 @@ dataset_dic = [
         "selector_speed": 7030.0,
         "scan_number": "14932",
         "scan_command": (
-            "scan([det_rot, sample_rot], [-8.0000, 127.0000], " "[0, 1.0000], 170, tsf=30.0, field=['z7_sf', 'z7_nsf'], tnsf=30.0)"
+            "scan([det_rot, sample_rot], [-8.0000, 127.0000], [0, 1.0000], 170, tsf=30.0, field=['z7_sf', 'z7_nsf'], tnsf=30.0)"
         ),
         "scan_points": "340",
         "new_format": True,
@@ -66,7 +66,7 @@ dataset_dic = [
         "selector_speed": 7032.0,
         "scan_number": "14933",
         "scan_command": (
-            "scan([det_rot, sample_rot], [-9.0000, 126.0000], " "[0, 1.0000], 170, tsf=30.0, field=['z7_sf', 'z7_nsf'], tnsf=30.0)"
+            "scan([det_rot, sample_rot], [-9.0000, 126.0000], [0, 1.0000], 170, tsf=30.0, field=['z7_sf', 'z7_nsf'], tnsf=30.0)"
         ),
         "scan_points": "1",
         "new_format": True,
@@ -231,8 +231,7 @@ def get_fake_tof_options():
     return tof_opt
 
 
-# OKcomment: not used anywhere
-def get_fake_elastic_sc_options():
+def get_fake_elastic_single_crystal_options():
     el_opt = {
         "a": 2,
         "b": 3,
@@ -293,6 +292,15 @@ def get_elastic_standard_data_dic():
             "z_nsf": range(50, 60, 1),
             "z_sf": range(40, 50, 1),
         },
+    }
+
+
+def get_fake_elastic_single_crystal_dataset():
+    return {
+        "two_theta_array": [0, 1, 2],
+        "omega_array": [4, 5],
+        "intensity": np.transpose(np.asarray([[8.0, 9.0, 10.0], [11.0, 12.0, 13.0]])),
+        "error": np.transpose(np.asarray([[14.0, 15.0, 16.0], [17.0, 18.0, 19.0]])),
     }
 
 

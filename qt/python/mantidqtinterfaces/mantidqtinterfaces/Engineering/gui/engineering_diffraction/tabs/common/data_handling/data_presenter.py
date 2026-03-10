@@ -4,7 +4,10 @@
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
-from mantidqtinterfaces.Engineering.gui.engineering_diffraction.tabs.common import create_error_message
+from mantidqtinterfaces.Engineering.gui.engineering_diffraction.tabs.common import (
+    create_error_message,
+    wsname_in_instr_run_ceria_group_ispec_unit_format,
+)
 from mantid.simpleapi import logger
 from mantidqt.utils.asynchronous import AsyncTask
 from mantidqt.utils.observer_pattern import GenericObservable, GenericObserverWithArgPassing
@@ -17,7 +20,6 @@ class FittingDataPresenter(object):
         self.view = view
         self.worker = None
         self.iplot = []
-
         self.row_numbers = TwoWayRowDict()  # {ws_name: table_row} and {table_row: ws_name}
         self.plotted = set()  # List of plotted workspace names
 
@@ -38,7 +40,22 @@ class FittingDataPresenter(object):
         self.plot_removed_notifier = GenericObservable()
         self.all_plots_removed_notifier = GenericObservable()
         # Observers
-        self.focus_run_observer = GenericObserverWithArgPassing(self.view.set_default_files)
+        self.focus_run_observer = GenericObserverWithArgPassing(self.set_default_files_tof)
+        self.focus_combined_observer = GenericObserverWithArgPassing(self.set_default_files_texture)
+
+    def set_default_files_tof(self, filepaths):
+        if not self.model.texture_auto_populate():
+            self._set_default_files(filepaths)
+
+    def set_default_files_texture(self, filepaths):
+        if self.model.texture_auto_populate():
+            index = self.view.combo_xunit.findText("dSpacing")
+            self.view.combo_xunit.setCurrentIndex(index)
+            self._set_default_files(filepaths)
+
+    def _set_default_files(self, filepaths):
+        directory = self.model.get_last_directory(filepaths)
+        self.view.set_default_files(filepaths, directory)
 
     def get_sorted_active_ws_list(self):
         return self.model.get_active_ws_sorted_by_primary_log()
@@ -61,11 +78,13 @@ class FittingDataPresenter(object):
             self._start_load_worker(filenames)
 
     def remove_workspace(self, ws_name):
+        self.plotted.discard(ws_name)
         if ws_name in self.model.get_all_workspace_names():
+            if ws_name in self.model.get_loaded_workspaces():
+                self.row_numbers.pop(ws_name)
             self.model.remove_workspace(ws_name)
             # plot_presenter will already be notified of ws being removed via its own ADS observer
-            self.plotted.discard(ws_name)
-            self._repopulate_table()
+            self._repopulate_table(False)
         elif ws_name in self.model.get_all_log_workspaces_names():
             self.model.update_sample_log_workspace_group()
 
@@ -132,10 +151,8 @@ class FittingDataPresenter(object):
         Will also handle any workspaces that need to be plotted.
         """
         workspaces_to_be_plotted = self.plotted.copy()
-
         if clear_plotted:
             self.plotted.clear()
-
         self._remove_all_table_rows()
         self.row_numbers.clear()
         self.all_plots_removed_notifier.notify_subscribers()
@@ -283,12 +300,19 @@ class FittingDataPresenter(object):
         if run_no is not None and bank is not None:
             self.view.add_table_row(run_no, bank, plotted, bgsub, niter, xwindow, SG)
         elif len(words) == 4 and words[2] == "bank":
+            # this seems to now be obsolete - common file name format is now:
+            # INSTR_RUNNUM_CERIANUM_GROUP_ispec_UNIT?
+            # will maintain this path for legacy data?
             logger.notice("No sample logs present, determining information from workspace name.")
             self.view.add_table_row(words[1], words[3], plotted, bgsub, niter, xwindow, SG)
+        elif wsname_in_instr_run_ceria_group_ispec_unit_format(ws_name):
+            logger.notice("No sample logs present, determining information from workspace name.")
+            self.view.add_table_row(words[1], f"{words[3]} {words[4]}", plotted, bgsub, niter, xwindow, SG)
         else:
             logger.warning(
-                "The workspace '{}' was not in the correct naming format. Files should be named in the following way: "
-                "INSTRUMENT_RUNNUMBER_bank_BANK. Using workspace name as identifier.".format(ws_name)
+                "The workspace '{}' was not in the correct naming format. Files should be named in either of these ways: "
+                "INSTRUMENT_RUNNUMBER_bank_BANK or INSTR_CERIANUM_RUNNUM_GROUP_ispec_UNIT."
+                "Using workspace name as identifier.".format(ws_name)
             )
             self.view.add_table_row(ws_name, "N/A", plotted, bgsub, niter, xwindow, SG)
 

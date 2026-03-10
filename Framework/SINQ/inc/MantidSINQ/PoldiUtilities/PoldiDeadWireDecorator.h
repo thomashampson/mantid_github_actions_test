@@ -6,8 +6,6 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
-#include "MantidKernel/System.h"
-
 #include "MantidSINQ/DllConfig.h"
 #include "MantidSINQ/PoldiUtilities/PoldiDetectorDecorator.h"
 
@@ -37,7 +35,7 @@ public:
       const std::shared_ptr<PoldiAbstractDetector> &sqdetector = std::shared_ptr<PoldiAbstractDetector>());
 
   void setDeadWires(std::set<int> deadWires);
-  std::set<int> deadWires();
+  const std::set<int> &deadWires();
 
   size_t elementCount() override;
   const std::vector<int> &availableElements() override;

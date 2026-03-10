@@ -14,7 +14,7 @@
 #include "MantidFrameworkTestHelpers/MDAlgorithmsTestHelper.h"
 #include "MantidMDAlgorithms/PlusMD.h"
 
-#include <Poco/File.h>
+#include <filesystem>
 
 using namespace Mantid::API;
 using namespace Mantid::DataObjects;
@@ -107,7 +107,7 @@ public:
         freeSpace += freeSpaceMap[2 * i + 1];
       }
 
-      ::NeXus::File *file = loader->getFile();
+      Mantid::Nexus::File *file = loader->getFile();
       // The file should have an entry of 20000 points too (with some error due
       // to the free space blocks). This means the file back-end was updated
       if (mask_ws_num == 0) {
@@ -121,24 +121,24 @@ public:
       if (deleteFile) {
         std::string fileName = ws->getBoxController()->getFileIO()->getFileName();
         ws->clearFileBacked(false);
-        Poco::File(fileName).remove();
+        std::filesystem::remove(fileName);
       }
     }
     // cleanup
     if ((inPlace == 1) && rhs->isFileBacked()) {
       std::string fileName = rhs->getBoxController()->getFileIO()->getFileName();
       rhs->clearFileBacked(false);
-      Poco::File(fileName).remove();
+      std::filesystem::remove(fileName);
     }
     if ((inPlace == 2) && lhs->isFileBacked()) {
       std::string fileName = lhs->getBoxController()->getFileIO()->getFileName();
       lhs->clearFileBacked(false);
-      Poco::File(fileName).remove();
+      std::filesystem::remove(fileName);
     }
     if (ws->isFileBacked()) {
       std::string fileName = ws->getBoxController()->getFileIO()->getFileName();
       ws->clearFileBacked(false);
-      Poco::File(fileName).remove();
+      std::filesystem::remove(fileName);
     }
   }
 

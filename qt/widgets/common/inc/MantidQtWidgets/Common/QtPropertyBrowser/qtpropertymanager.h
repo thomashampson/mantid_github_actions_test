@@ -89,6 +89,8 @@
 
 #include "qtpropertybrowser.h"
 
+#include <utility>
+
 #if QT_VERSION >= 0x040400
 QT_BEGIN_NAMESPACE
 #endif
@@ -876,8 +878,10 @@ QSize qBound(QSize minVal, QSize val, QSize maxVal);
 QSizeF qBound(QSizeF minVal, QSizeF val, QSizeF maxVal);
 
 template <class Value> static void orderBorders(Value &minVal, Value &maxVal) {
-  if (minVal > maxVal)
-    qSwap(minVal, maxVal);
+  if (minVal > maxVal) {
+    using std::swap;
+    swap(minVal, maxVal);
+  }
 }
 
 template <class Value> void orderSizeBorders(Value &minVal, Value &maxVal) {
@@ -955,7 +959,8 @@ static void setValueInRange(PropertyManager *manager, PropertyManagerPrivate *ma
                             void (PropertyManager::*propertyChangedSignal)(QtProperty *),
                             void (PropertyManager::*valueChangedSignal)(QtProperty *, ValueChangeParameter),
                             QtProperty *property, const Value &val,
-                            void (PropertyManagerPrivate::*setSubPropertyValue)(QtProperty *, ValueChangeParameter)) {
+                            void (PropertyManagerPrivate::*setSubPropertyValue)(const QtProperty *,
+                                                                                ValueChangeParameter)) {
   using PrivateData = typename PropertyManagerPrivate::Data;
   using PropertyToData = QMap<const QtProperty *, PrivateData>;
   using PropertyToDataIterator = typename PropertyToData::iterator;
@@ -1100,10 +1105,10 @@ class QtFontPropertyManagerPrivate {
 public:
   QtFontPropertyManagerPrivate();
 
-  void slotIntChanged(QtProperty *property, int value);
-  void slotEnumChanged(QtProperty *property, int value);
-  void slotBoolChanged(QtProperty *property, bool value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotIntChanged(const QtProperty *property, int value);
+  void slotEnumChanged(const QtProperty *property, int value);
+  void slotBoolChanged(const QtProperty *property, bool value);
+  void slotPropertyDestroyed(const QtProperty *property);
   void slotFontDatabaseChanged();
   void slotFontDatabaseDelayedChange();
 
@@ -1140,7 +1145,7 @@ class QtFlagPropertyManagerPrivate {
   QtFlagPropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtFlagPropertyManager)
 public:
-  void slotBoolChanged(QtProperty *property, bool value);
+  void slotBoolChanged(const QtProperty *property, bool value);
   void slotPropertyDestroyed(QtProperty *property);
 
   struct Data {
@@ -1163,8 +1168,8 @@ class QtColorPropertyManagerPrivate {
   QtColorPropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtColorPropertyManager)
 public:
-  void slotIntChanged(QtProperty *property, int value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotIntChanged(const QtProperty *property, int value);
+  void slotPropertyDestroyed(const QtProperty *property);
 
   using PropertyValueMap = QMap<const QtProperty *, QColor>;
   PropertyValueMap m_values;
@@ -1188,8 +1193,8 @@ class QtLocalePropertyManagerPrivate {
 public:
   QtLocalePropertyManagerPrivate();
 
-  void slotEnumChanged(QtProperty *property, int value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotEnumChanged(const QtProperty *property, int value);
+  void slotPropertyDestroyed(const QtProperty *property);
 
   using PropertyValueMap = QMap<const QtProperty *, QLocale>;
   PropertyValueMap m_values;
@@ -1207,8 +1212,8 @@ class QtPointPropertyManagerPrivate {
   QtPointPropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtPointPropertyManager)
 public:
-  void slotIntChanged(QtProperty *property, int value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotIntChanged(const QtProperty *property, int value);
+  void slotPropertyDestroyed(const QtProperty *property);
 
   using PropertyValueMap = QMap<const QtProperty *, QPoint>;
   PropertyValueMap m_values;
@@ -1232,8 +1237,8 @@ public:
     int decimals;
   };
 
-  void slotDoubleChanged(QtProperty *property, double value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotDoubleChanged(const QtProperty *property, double value);
+  void slotPropertyDestroyed(const QtProperty *property);
 
   using PropertyValueMap = QMap<const QtProperty *, Data>;
   PropertyValueMap m_values;
@@ -1251,8 +1256,8 @@ class QtRectFPropertyManagerPrivate {
   QtRectFPropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtRectFPropertyManager)
 public:
-  void slotDoubleChanged(QtProperty *property, double value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotDoubleChanged(const QtProperty *property, double value);
+  void slotPropertyDestroyed(const QtProperty *property);
   void setConstraint(QtProperty *property, const QRectF &constraint, const QRectF &val);
 
   struct Data {
@@ -1282,8 +1287,8 @@ class QtRectPropertyManagerPrivate {
   QtRectPropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtRectPropertyManager)
 public:
-  void slotIntChanged(QtProperty *property, int value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotIntChanged(const QtProperty *property, int value);
+  void slotPropertyDestroyed(const QtProperty *property);
   void setConstraint(QtProperty *property, const QRect &constraint, const QRect &val);
 
   struct Data {
@@ -1312,9 +1317,9 @@ class QtSizeFPropertyManagerPrivate {
   QtSizeFPropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtSizeFPropertyManager)
 public:
-  void slotDoubleChanged(QtProperty *property, double value);
-  void slotPropertyDestroyed(QtProperty *property);
-  void setValue(QtProperty *property, const QSizeF &val);
+  void slotDoubleChanged(const QtProperty *property, double value);
+  void slotPropertyDestroyed(const QtProperty *property);
+  void setValue(const QtProperty *property, const QSizeF &val);
   void setRange(QtProperty *property, const QSizeF &minVal, const QSizeF &maxVal, const QSizeF &val);
 
   struct Data {
@@ -1347,9 +1352,9 @@ class QtSizePolicyPropertyManagerPrivate {
 public:
   QtSizePolicyPropertyManagerPrivate();
 
-  void slotIntChanged(QtProperty *property, int value);
-  void slotEnumChanged(QtProperty *property, int value);
-  void slotPropertyDestroyed(QtProperty *property);
+  void slotIntChanged(const QtProperty *property, int value);
+  void slotEnumChanged(const QtProperty *property, int value);
+  void slotPropertyDestroyed(const QtProperty *property);
 
   using PropertyValueMap = QMap<const QtProperty *, QSizePolicy>;
   PropertyValueMap m_values;
@@ -1372,9 +1377,9 @@ class QtSizePropertyManagerPrivate {
   QtSizePropertyManager *q_ptr;
   Q_DECLARE_PUBLIC(QtSizePropertyManager)
 public:
-  void slotIntChanged(QtProperty *property, int value);
-  void slotPropertyDestroyed(QtProperty *property);
-  void setValue(QtProperty *property, const QSize &val);
+  void slotIntChanged(const QtProperty *property, int value);
+  void slotPropertyDestroyed(const QtProperty *property);
+  void setValue(const QtProperty *property, const QSize &val);
   void setRange(QtProperty *property, const QSize &minVal, const QSize &maxVal, const QSize &val);
 
   struct Data {

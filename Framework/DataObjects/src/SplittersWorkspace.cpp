@@ -7,6 +7,7 @@
 #include "MantidDataObjects/SplittersWorkspace.h"
 #include "MantidAPI/Column.h"
 #include "MantidAPI/TableRow.h"
+#include "MantidAPI/WorkspaceFactory.h"
 #include "MantidKernel/IPropertyManager.h"
 
 using namespace Mantid::Kernel;
@@ -17,6 +18,9 @@ namespace {
 /// static logger
 Kernel::Logger g_log("SplittersWorkspace");
 } // namespace
+
+DECLARE_WORKSPACE(SplittersWorkspace)
+
 //----------------------------------------------------------------------------------------------
 /** Constructor
  */
@@ -86,7 +90,7 @@ IPropertyManager::getValue<Mantid::DataObjects::SplittersWorkspace_sptr>(const s
 template <>
 DLLExport Mantid::DataObjects::SplittersWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::SplittersWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop =
+  auto const *prop =
       dynamic_cast<PropertyWithValue<Mantid::DataObjects::SplittersWorkspace_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();

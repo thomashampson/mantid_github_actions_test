@@ -11,9 +11,11 @@
 //---------------------------------------------------
 
 #include "MantidAPI/IFileLoader.h"
+#include "MantidAPI/LogManager.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidGeometry/Instrument.h"
-#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusClasses_fwd.h"
+#include <algorithm>
 #include <regex>
 
 #define TarTypeFlag_NormalFile '0'
@@ -30,7 +32,7 @@ namespace DataHandling {
 namespace ANSTO {
 
 /// extract datasets from a group that match a regex filter
-std::vector<std::string> filterDatasets(const NeXus::NXEntry &entry, const std::string &groupPath,
+std::vector<std::string> filterDatasets(const Nexus::NXEntry &entry, const std::string &groupAddress,
                                         const std::string &regexFilter);
 
 /// pointer to the vector of events
@@ -55,6 +57,7 @@ public:
   // methods
   void update(int64_t position);
   void complete();
+  void setTarget(int64_t target);
 };
 
 class EventProcessor {
@@ -172,35 +175,20 @@ public:
 namespace Tar {
 
 struct EntryHeader {
-  // cppcheck-suppress unusedStructMember
   char FileName[100];
-  // cppcheck-suppress unusedStructMember
   char FileMode[8];
-  // cppcheck-suppress unusedStructMember
   char OwnerUserID[8];
-  // cppcheck-suppress unusedStructMember
   char OwnerGroupID[8];
-  // cppcheck-suppress unusedStructMember
-  char FileSize[12]; // in bytes (octal base)
-  // cppcheck-suppress unusedStructMember
+  char FileSize[12];         // in bytes (octal base)
   char LastModification[12]; // time in numeric Unix time format (octal)
-  // cppcheck-suppress unusedStructMember
   char Checksum[8];
-  // cppcheck-suppress unusedStructMember
   char TypeFlag;
-  // cppcheck-suppress unusedStructMember
   char LinkedFileName[100];
-  // cppcheck-suppress unusedStructMember
   char UStar[8];
-  // cppcheck-suppress unusedStructMember
   char OwnerUserName[32];
-  // cppcheck-suppress unusedStructMember
   char OwnerGroupName[32];
-  // cppcheck-suppress unusedStructMember
   char DeviceMajorNumber[8];
-  // cppcheck-suppress unusedStructMember
   char DeviceMinorNumber[8];
-  // cppcheck-suppress unusedStructMember
   char FilenamePrefix[155];
 
   // methods
@@ -234,12 +222,12 @@ private:
   size_t m_bufferAvailable;
 
   // not supported
-  File(const File &);
-  File &operator=(const File &);
+  File(const File &) = delete;
+  File &operator=(const File &) = delete;
 
 public:
   // construction
-  File(const std::string &path);
+  explicit File(const std::string &path);
   void close();
 
   // properties
@@ -261,6 +249,34 @@ public:
 };
 
 } // namespace Tar
+
+namespace Anxs {
+// options to capture timeseries data
+enum class ScanLog { Start, End, Mean };
+
+std::string extractWorkspaceTitle(const std::string &nxsFile);
+
+int64_t epochRelDateTimeBase(int64_t epochInNanoSeconds);
+
+template <typename T> bool loadNXDataSet(const Nexus::NXEntry &entry, const std::string &path, T &value, int index);
+bool loadNXString(const Nexus::NXEntry &entry, const std::string &path, std::string &value);
+
+bool isTimedDataSet(const Nexus::NXEntry &entry, const std::string &path);
+std::pair<uint64_t, uint64_t> getTimeScanLimits(const Nexus::NXEntry &entry, int datasetIx);
+std::pair<uint64_t, uint64_t> getHMScanLimits(const Nexus::NXEntry &entry, int datasetIx);
+
+template <typename T>
+uint64_t extractTimedDataSet(const Nexus::NXEntry &entry, const std::string &path, uint64_t startTime, uint64_t endTime,
+                             std::vector<uint64_t> &times, std::vector<T> &events, std::string &units);
+template <typename T>
+bool extractTimedDataSet(const Nexus::NXEntry &entry, const std::string &path, uint64_t startTime, uint64_t endTime,
+                         ScanLog valueOption, uint64_t &eventTime, T &eventValue, std::string &units);
+
+void ReadEventData(ProgressTracker &prog, const Nexus::NXEntry &entry, EventProcessor *handler, uint64_t start_nsec,
+                   uint64_t end_nsec, const std::string &neutron_path, int tube_resolution = 1024);
+
+} // namespace Anxs
+
 } // namespace ANSTO
 } // namespace DataHandling
 } // namespace Mantid

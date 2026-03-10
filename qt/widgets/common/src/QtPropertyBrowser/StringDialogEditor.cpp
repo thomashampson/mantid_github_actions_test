@@ -34,7 +34,7 @@ StringDialogEditor::StringDialogEditor(QtProperty *property, QWidget *parent) : 
   layout->addWidget(m_lineEdit);
   setFocusProxy(m_lineEdit);
   connect(m_lineEdit, SIGNAL(editingFinished()), this, SLOT(updateProperty()));
-  auto *mgr = dynamic_cast<QtStringPropertyManager *>(property->propertyManager());
+  auto const *mgr = dynamic_cast<QtStringPropertyManager const *>(property->propertyManager());
   if (mgr) {
     m_lineEdit->setText(mgr->value(property));
   }
@@ -43,8 +43,7 @@ StringDialogEditor::StringDialogEditor(QtProperty *property, QWidget *parent) : 
   button->setMaximumSize(20, 1000000);
   connect(button, SIGNAL(clicked()), this, SLOT(runDialog()));
   layout->addWidget(button);
-  layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(0);
+  layout->setContentsMargins(0, 0, 20, 0);
   layout->setStretchFactor(button, 0);
   this->setLayout(layout);
 }

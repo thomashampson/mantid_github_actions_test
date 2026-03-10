@@ -134,7 +134,7 @@ class MuonDataContext(object):
             and self._main_field_direction
         ):
             self.message_notifier.notify_subscribers(
-                "MainFieldDirection has changed between" " data sets, click default to reset grouping if required"
+                "MainFieldDirection has changed between data sets, click default to reset grouping if required"
             )
         self._main_field_direction = self.current_data["MainFieldDirection"]
 
@@ -144,7 +144,7 @@ class MuonDataContext(object):
         if self.current_runs:
             loaded_data = self._loaded_data.get_data(run=self.current_runs[0], instrument=self.instrument)
 
-        return loaded_data if loaded_data else {"workspace": load_utils.empty_loaded_data(), "run": []}
+        return loaded_data or {"workspace": load_utils.empty_loaded_data(), "run": []}
 
     @property
     def current_data(self):

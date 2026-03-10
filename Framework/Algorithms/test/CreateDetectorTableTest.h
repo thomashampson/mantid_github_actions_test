@@ -41,7 +41,7 @@ public:
     TS_ASSERT(alg.isInitialized());
 
     const auto &props = alg.getProperties();
-    TS_ASSERT_EQUALS(props.size(), 4);
+    TS_ASSERT_EQUALS(props.size(), 6);
 
     TS_ASSERT_EQUALS(props[0]->name(), "InputWorkspace");
     TS_ASSERT(props[0]->isDefault());
@@ -52,17 +52,23 @@ public:
     TS_ASSERT_EQUALS(props[2]->name(), "IncludeData");
     TS_ASSERT(props[2]->isDefault());
 
-    TS_ASSERT_EQUALS(props[3]->name(), "DetectorTableWorkspace");
+    TS_ASSERT_EQUALS(props[3]->name(), "IncludeDetectorPosition");
     TS_ASSERT(props[3]->isDefault());
-    TS_ASSERT(dynamic_cast<WorkspaceProperty<TableWorkspace> *>(props[3]));
+
+    TS_ASSERT_EQUALS(props[4]->name(), "PickOneDetectorID");
+    TS_ASSERT(props[4]->isDefault());
+
+    TS_ASSERT_EQUALS(props[5]->name(), "DetectorTableWorkspace");
+    TS_ASSERT(props[5]->isDefault());
+    TS_ASSERT(dynamic_cast<WorkspaceProperty<TableWorkspace> *>(props[5]));
   }
 
   void test_Exec_Matrix_Workspace() {
     Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(2, 10);
 
     CreateDetectorTable alg;
-    TS_ASSERT_THROWS_NOTHING(alg.initialize())
-    TS_ASSERT(alg.isInitialized())
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
     TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
     TS_ASSERT_THROWS_NOTHING(alg.execute();)
     TS_ASSERT(alg.isExecuted());
@@ -81,6 +87,39 @@ public:
     // Check the results
     TS_ASSERT_EQUALS(ws->columnCount(), 11);
     TS_ASSERT_EQUALS(ws->rowCount(), 2);
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 1), 1); // Spectrum No should be 1, if not in the exception
+
+    // Remove workspace from the data service.
+    AnalysisDataService::Instance().remove(ws->getName());
+  }
+
+  void test_Exec_Matrix_Workspace_with_no_valid_spectra() {
+    Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(1, 10);
+    auto &spec = inputWS->getSpectrum(0);
+    spec.clearDetectorIDs(); // clear the detectors to test the exception catching
+
+    CreateDetectorTable alg;
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.execute();)
+    TS_ASSERT(alg.isExecuted());
+
+    // Not setting an output workspace name should give the name:
+    //[input workspace name] + "-Detectors"
+    TableWorkspace_sptr ws;
+    TS_ASSERT_THROWS_NOTHING(
+        ws = AnalysisDataService::Instance().retrieveWS<TableWorkspace>(inputWS->getName() + "-Detectors"));
+    TS_ASSERT(ws);
+
+    if (!ws) {
+      return;
+    }
+
+    // Check the results
+    TS_ASSERT_EQUALS(ws->columnCount(), 11);
+    TS_ASSERT_EQUALS(ws->rowCount(), 1);
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 1), -1); // Spectrum No should be -1
 
     // Remove workspace from the data service.
     AnalysisDataService::Instance().remove(ws->getName());
@@ -91,8 +130,8 @@ public:
     std::string outWSName{"Detector Table Test"};
 
     CreateDetectorTable alg;
-    TS_ASSERT_THROWS_NOTHING(alg.initialize())
-    TS_ASSERT(alg.isInitialized())
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
     TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
     TS_ASSERT_THROWS_NOTHING(alg.setProperty("WorkspaceIndices", "1"));
     TS_ASSERT_THROWS_NOTHING(alg.setProperty("IncludeData", true));
@@ -122,6 +161,7 @@ public:
     // Check the results
     TS_ASSERT_EQUALS(ws->columnCount(), 13);
     TS_ASSERT_EQUALS(ws->rowCount(), 1);
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 1), 2); // Spectrum No should be 2 due to the WorkspaceIndex
 
     // Remove workspace from the data service.
     AnalysisDataService::Instance().remove(outWSName);
@@ -131,11 +171,11 @@ public:
     PeaksWorkspace_sptr inputWS = WorkspaceCreationHelper::createPeaksWorkspace(5, false);
 
     CreateDetectorTable alg;
-    TS_ASSERT_THROWS_NOTHING(alg.initialize())
-    TS_ASSERT(alg.isInitialized())
-    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", inputWS))
-    TS_ASSERT_THROWS_NOTHING(alg.execute())
-    TS_ASSERT(alg.isExecuted())
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", inputWS));
+    TS_ASSERT_THROWS_NOTHING(alg.execute());
+    TS_ASSERT(alg.isExecuted());
 
     TableWorkspace_sptr ws;
     TS_ASSERT_THROWS_NOTHING(
@@ -147,8 +187,9 @@ public:
     }
 
     // Check the results
-    TS_ASSERT_EQUALS(ws->columnCount(), 2)
-    TS_ASSERT_EQUALS(ws->rowCount(), 5)
+    TS_ASSERT_EQUALS(ws->columnCount(), 2);
+    TS_ASSERT_EQUALS(ws->rowCount(), 5);
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 1), 0); // First column is Index when exec on PeaksWorkspace, so expect 0
 
     // Remove workspace from the data service.
     AnalysisDataService::Instance().remove(ws->getName());
@@ -158,11 +199,156 @@ public:
     ITableWorkspace_sptr inputWS = std::make_shared<TableWorkspace>();
 
     CreateDetectorTable alg;
-    TS_ASSERT_THROWS_NOTHING(alg.initialize())
-    TS_ASSERT(alg.isInitialized())
-    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", inputWS))
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", inputWS));
 
     TS_ASSERT_THROWS(alg.executeAsChildAlg(), const std::runtime_error &);
+  }
+
+  void test_Exec_Matrix_Workspace_with_Include_DetPos() {
+    Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(3, 10, true);
+
+    CreateDetectorTable alg;
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("IncludeDetectorPosition", true));
+    TS_ASSERT_THROWS_NOTHING(alg.execute());
+    TS_ASSERT(alg.isExecuted());
+
+    // Not setting an output workspace name should give the name:
+    //[input workspace name] + "-Detectors"
+    TableWorkspace_sptr ws;
+    TS_ASSERT_THROWS_NOTHING(
+        ws = AnalysisDataService::Instance().retrieveWS<TableWorkspace>(inputWS->getName() + "-Detectors"));
+    TS_ASSERT(ws);
+
+    if (!ws) {
+      return;
+    }
+
+    // Check the results
+    TS_ASSERT_EQUALS(ws->columnCount(), 12); // extra column compared to test_Exec_Matrix_Workspace
+    TS_ASSERT_EQUALS(ws->rowCount(), 3);
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 1), 1); // Spectrum No should be 1, if not in the exception
+    TS_ASSERT_EQUALS(ws->cell<V3D>(1, 11),
+                     V3D(0.0, 0.0, -9.0)); // Last two are monitors, first position should be (0.0, 0.0, -9.0)
+
+    // Remove workspace from the data service.
+    AnalysisDataService::Instance().remove(ws->getName());
+  }
+
+  void test_Exec_Matrix_Workspace_with_no_valid_spectra_include_DetPos() {
+    Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(1, 10);
+    auto &spec = inputWS->getSpectrum(0);
+    spec.clearDetectorIDs(); // clear the detectors to test the exception catching
+
+    CreateDetectorTable alg;
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("IncludeDetectorPosition", true));
+    TS_ASSERT_THROWS_NOTHING(alg.execute());
+    TS_ASSERT(alg.isExecuted());
+
+    // Not setting an output workspace name should give the name:
+    //[input workspace name] + "-Detectors"
+    TableWorkspace_sptr ws;
+    TS_ASSERT_THROWS_NOTHING(
+        ws = AnalysisDataService::Instance().retrieveWS<TableWorkspace>(inputWS->getName() + "-Detectors"));
+    TS_ASSERT(ws);
+
+    if (!ws) {
+      return;
+    }
+
+    // Check the results
+    TS_ASSERT_EQUALS(ws->columnCount(), 12);
+    TS_ASSERT_EQUALS(ws->rowCount(), 1);
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 1), -1);                  // Spectrum No should be -1
+    TS_ASSERT_EQUALS(ws->cell<V3D>(0, 11), V3D(0.0, 0.0, 0.0)); // Detector Position should be (0.0, 0.0, 0.0)
+
+    // Remove workspace from the data service.
+    AnalysisDataService::Instance().remove(ws->getName());
+  }
+
+  void test_Exec_Matrix_Workspace_with_Detector_ID_as_integers() {
+
+    Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(3, 10, true);
+    std::string outWSName = "out_int_detid";
+
+    CreateDetectorTable alg;
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("PickOneDetectorID", true));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("DetectorTableWorkspace", outWSName));
+    TS_ASSERT_THROWS_NOTHING(alg.execute());
+    TS_ASSERT(alg.isExecuted());
+
+    TableWorkspace_sptr ws;
+    TS_ASSERT_THROWS_NOTHING(ws = AnalysisDataService::Instance().retrieveWS<TableWorkspace>(outWSName));
+    TS_ASSERT(ws);
+
+    if (!ws) {
+      return;
+    }
+
+    // Check the results
+    TS_ASSERT_EQUALS(ws->cell<int>(0, 2), 1);
+    // Remove workspace from the data service.
+    AnalysisDataService::Instance().remove(ws->getName());
+  }
+
+  void test_Exec_Matrix_Workspace_with_Detector_ID_as_strings() {
+
+    Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(3, 10, true);
+    std::string outWSName = "out_int_detid";
+
+    CreateDetectorTable alg;
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("DetectorTableWorkspace", outWSName));
+    TS_ASSERT_THROWS_NOTHING(alg.execute());
+    TS_ASSERT(alg.isExecuted());
+
+    TableWorkspace_sptr ws;
+    TS_ASSERT_THROWS_NOTHING(ws = AnalysisDataService::Instance().retrieveWS<TableWorkspace>(outWSName));
+    TS_ASSERT(ws);
+
+    if (!ws) {
+      return;
+    }
+
+    // Check the results
+    TS_ASSERT_EQUALS(ws->cell<std::string>(0, 2), "1");
+    // Remove workspace from the data service.
+    AnalysisDataService::Instance().remove(ws->getName());
+  }
+
+  void test_index_column_is_int() {
+    Workspace2D_sptr inputWS = WorkspaceCreationHelper::create2DWorkspaceWithFullInstrument(3, 10, true);
+    std::string outWSName = "out_int_detid";
+    CreateDetectorTable alg;
+    TS_ASSERT_THROWS_NOTHING(alg.initialize());
+    TS_ASSERT(alg.isInitialized());
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("InputWorkspace", std::dynamic_pointer_cast<MatrixWorkspace>(inputWS)));
+    TS_ASSERT_THROWS_NOTHING(alg.setProperty("DetectorTableWorkspace", outWSName));
+    TS_ASSERT_THROWS_NOTHING(alg.execute());
+    TS_ASSERT(alg.isExecuted());
+
+    TableWorkspace_sptr ws;
+    TS_ASSERT_THROWS_NOTHING(ws = AnalysisDataService::Instance().retrieveWS<TableWorkspace>(outWSName));
+    TS_ASSERT(ws);
+    if (!ws) {
+      return;
+    }
+    const auto indexCol = ws->getColumn(0);
+    TS_ASSERT_EQUALS("Index", indexCol->name());
+    TS_ASSERT(indexCol->isType<int>());
+    AnalysisDataService::Instance().remove(ws->getName());
   }
 };
 

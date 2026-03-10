@@ -37,14 +37,12 @@ class SettingsPresenter(object):
         fitting_model = FittingSettingsModel()
         general_model = GeneralSettingsModel()
         plots_model = PlotsSettingsModel()
-        self.view = view if view else SettingsView(parent, self)
-        self.model = model if model else SettingsModel([categories_model, fitting_model, general_model, plots_model])
-        self.general_settings = (
-            general_settings if general_settings else GeneralSettings(parent, settings_presenter=self, model=general_model)
-        )
-        self.categories_settings = categories_settings if categories_settings else CategoriesSettings(parent, model=categories_model)
-        self.plot_settings = plot_settings if plot_settings else PlotSettings(parent, model=plots_model)
-        self.fitting_settings = fitting_settings if fitting_settings else FittingSettings(parent, model=fitting_model)
+        self.view = view or SettingsView(parent, self)
+        self.model = model or SettingsModel([categories_model, fitting_model, general_model, plots_model])
+        self.general_settings = general_settings or GeneralSettings(parent, settings_presenter=self, model=general_model)
+        self.categories_settings = categories_settings or CategoriesSettings(parent, model=categories_model)
+        self.plot_settings = plot_settings or PlotSettings(parent, model=plots_model)
+        self.fitting_settings = fitting_settings or FittingSettings(parent, model=fitting_model)
         self.parent = parent
         self.all_properties = []
         for properties in [CategoryProperties, FittingProperties, GeneralProperties, GeneralUserConfigProperties, PlotProperties]:
@@ -58,6 +56,11 @@ class SettingsPresenter(object):
         self.view.container.addWidget(self.plot_settings.get_view())
         self.view.container.addWidget(self.fitting_settings.get_view())
 
+        self.plot_settings.subscribe_parent_presenter(self)
+        self.categories_settings.subscribe_parent_presenter(self)
+        self.general_settings.subscribe_parent_presenter(self)
+        self.fitting_settings.subscribe_parent_presenter(self)
+
         self.view.okay_button.clicked.connect(self.action_okay_button_pushed)
         self.view.apply_button.clicked.connect(self.action_apply_button_pushed)
 
@@ -67,6 +70,8 @@ class SettingsPresenter(object):
 
         self.model.register_property_which_needs_a_restart(str(GeneralUserConfigProperties.FONT.value))
         self.model.register_property_which_needs_a_restart(str(GeneralUserConfigProperties.PROMPT_ON_DELETING_WORKSPACE.value))
+
+        self.update_apply_button()
 
     def show(self, modal=True):
         if modal:
@@ -90,6 +95,14 @@ class SettingsPresenter(object):
         self.model.apply_all_settings()
         self.parent.config_updated()
         self.view.notify_changes_need_restart(changes_that_need_restart)
+        self.update_apply_button()
+
+    def changes_updated(self, unsaved_changes: bool):
+        self.view.apply_button.setEnabled(unsaved_changes)
+
+    def update_apply_button(self):
+        unsaved_changes = self.model.unsaved_changes() != {}
+        self.view.apply_button.setEnabled(unsaved_changes)
 
     def action_section_changed(self, new_section_pos):
         """
@@ -112,7 +125,7 @@ class SettingsPresenter(object):
         self.current.show()
 
     def action_open_help_window(self):
-        InterfaceManager().showHelpPage("qthelp://org.mantidproject/doc/workbench/settings.html")
+        InterfaceManager().showHelpPage("workbench/settings.html")
 
     def view_closing(self):
         """

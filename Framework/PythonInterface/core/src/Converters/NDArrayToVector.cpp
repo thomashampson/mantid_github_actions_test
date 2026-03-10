@@ -123,7 +123,7 @@ NDArrayToVector<DestElementType>::NDArrayToVector(const NDArray &value) : m_arr(
  */
 template <typename DestElementType>
 typename NDArrayToVector<DestElementType>::TypedVector NDArrayToVector<DestElementType>::operator()() {
-  std::vector<DestElementType> cvector(PyArray_SIZE((PyArrayObject *)m_arr.ptr()));
+  std::vector<DestElementType> cvector(PyArray_SIZE(reinterpret_cast<PyArrayObject *>(m_arr.ptr())));
   copyTo(cvector);
   return cvector;
 }
@@ -134,9 +134,9 @@ typename NDArrayToVector<DestElementType>::TypedVector NDArrayToVector<DestEleme
  * It's size is checked against the array size.
  */
 template <typename DestElementType> void NDArrayToVector<DestElementType>::copyTo(TypedVector &dest) const {
-  if (PyArray_SIZE((PyArrayObject *)m_arr.ptr()) > 0) {
+  if (PyArray_SIZE(reinterpret_cast<PyArrayObject *>(m_arr.ptr())) > 0) {
     throwIfSizeMismatched(dest);
-    CopyToImpl<DestElementType>()(std::begin(dest), (PyArrayObject *)m_arr.ptr());
+    CopyToImpl<DestElementType>()(std::begin(dest), reinterpret_cast<PyArrayObject *>(m_arr.ptr()));
   }
 }
 
@@ -148,13 +148,14 @@ template <typename DestElementType> void NDArrayToVector<DestElementType>::copyT
  */
 template <typename DestElementType>
 void NDArrayToVector<DestElementType>::throwIfSizeMismatched(const TypedVector &dest) const {
-  if (PyArray_SIZE((PyArrayObject *)m_arr.ptr()) == static_cast<boost::python::ssize_t>(dest.size())) {
+  if (PyArray_SIZE(reinterpret_cast<PyArrayObject *>(m_arr.ptr())) ==
+      static_cast<boost::python::ssize_t>(dest.size())) {
     return;
   } else {
     throw std::invalid_argument("Invalid number of elements while copying from ndarray. "
                                 "ndarray=" +
-                                std::to_string(PyArray_SIZE((PyArrayObject *)m_arr.ptr())) + " destination=(" +
-                                std::to_string(dest.size()) + ",)");
+                                std::to_string(PyArray_SIZE(reinterpret_cast<PyArrayObject *>(m_arr.ptr()))) +
+                                " destination=(" + std::to_string(dest.size()) + ",)");
   }
 }
 

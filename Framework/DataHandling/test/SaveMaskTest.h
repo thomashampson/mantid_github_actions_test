@@ -11,12 +11,10 @@
 #include "MantidAPI/AnalysisDataService.h"
 #include "MantidDataHandling/LoadMask.h"
 #include "MantidDataObjects/SpecialWorkspace2D.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
 
-#include "Poco/File.h"
-
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 
 using namespace Mantid;
 using namespace Mantid::DataHandling;
@@ -64,7 +62,7 @@ public:
 
     // 3. Set property and run
     TS_ASSERT(savealg.setProperty("InputWorkspace", maskws));
-    TS_ASSERT(savealg.setProperty("OutputFile", "maskcopy.xml"));
+    TS_ASSERT(savealg.setProperty("OutputFile", "maskcopy"));
 
     savealg.execute();
     TS_ASSERT(savealg.isExecuted());
@@ -91,7 +89,6 @@ public:
     }
 
     // 6. Clean the file
-    Poco::File cleanfile(file1);
-    cleanfile.remove(false);
+    std::filesystem::remove(file1);
   }
 };

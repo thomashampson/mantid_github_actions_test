@@ -70,6 +70,7 @@ GNU_DIAG_OFF("unused-local-typedef")
 // Seen with GCC 7.1.1 and Boost 1.63.0
 GNU_DIAG_OFF("conversion")
 // Overload generator for getInstrument
+// cppcheck-suppress unknownMacro
 BOOST_PYTHON_FUNCTION_OVERLOADS(getInstrument_Overload, getInstrument, 1, 2)
 // Overload generator for getString
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(getString_Overload, ConfigServiceImpl::getString, 1, 2)
@@ -148,10 +149,10 @@ void export_ConfigService() {
            "filename")
       .def("getLogLevel", &ConfigServiceImpl::getLogLevel, arg("self"),
            "Return the string value for the log representation")
-      .def("setLogLevel", (void(ConfigServiceImpl::*)(int, bool)) & ConfigServiceImpl::setLogLevel,
+      .def("setLogLevel", (void (ConfigServiceImpl::*)(int, bool))&ConfigServiceImpl::setLogLevel,
            (arg("self"), arg("logLevel"), arg("quiet") = false),
            "Sets the log level priority for all the log channels, logLevel 1 = Fatal, 6 = information, 7 = Debug")
-      .def("setLogLevel", (void(ConfigServiceImpl::*)(std::string const &, bool)) & ConfigServiceImpl::setLogLevel,
+      .def("setLogLevel", (void (ConfigServiceImpl::*)(std::string const &, bool))&ConfigServiceImpl::setLogLevel,
            (arg("self"), arg("logLevel"), arg("quiet") = false),
            "Sets the log level priority for all the log channels. Allowed values are fatal, critical, error, warning, "
            "notice, information, debug, and trace.")

@@ -81,7 +81,7 @@ def get_workspace(workspace_name):
     :param workspace_name:
     :return:
     """
-    assert isinstance(workspace_name, str), "Input workspace name {0} must be a string but not a {1}." "".format(
+    assert isinstance(workspace_name, str), "Input workspace name {0} must be a string but not a {1}.".format(
         workspace_name, type(workspace_name)
     )
 
@@ -136,7 +136,6 @@ class SNSPowderReduction(DataProcessorAlgorithm):
     _instrument = None
     _filterBadPulses = None
     _removePromptPulseWidth = None
-    _LRef = None
     _DIFCref = None
     _wavelengthMin = None
     _wavelengthMax = None
@@ -291,6 +290,19 @@ class SNSPowderReduction(DataProcessorAlgorithm):
         )
         self.declareProperty("SampleFormula", "", doc="Chemical formula of the sample")
         self.declareProperty("SampleGeometry", {}, doc="A dictionary of geometry parameters for the sample.")
+        self.declareProperty("ContainerGeometry", {}, doc="A dictionary of geometry parameters for the container.")
+        self.declareProperty("ContainerMaterial", {}, doc="A dictionary of material parameters for the container.")
+        self.declareProperty(
+            "GaugeVolume", "", "A string in XML form for gauge volume definition indicating sample portion visible to the beam."
+        )
+        self.declareProperty(
+            "ContainerGaugeVolume", "", "A string in XML form for gauge volume definition indicating container portion visible to the beam."
+        )
+        self.declareProperty(
+            "BeamHeight",
+            defaultValue=Property.EMPTY_DBL,
+            doc="Height of the neutron beam cross section in cm",
+        )
         self.declareProperty(
             "MeasuredMassDensity",
             defaultValue=0.1,
@@ -379,6 +391,10 @@ class SNSPowderReduction(DataProcessorAlgorithm):
 
         if self.getProperty("InterpolateTargetTemp").value > 0.0 and not len(self.getProperty("BackgroundNumber").value) == 2:
             issues["InterpolateTargetTemp"] = "If InterpolateTargetTemp specified, you must provide two background run numbers"
+
+        # Deprecated properties
+        if not self.getProperty("UnwrapRef").isDefault:
+            issues["UnwrapRef"] = "SNSPowderReduction property UnwrapRef is deprecated since 2025-03-24."
         return issues
 
     # pylint: disable=too-many-locals,too-many-branches,too-many-statements
@@ -400,7 +416,6 @@ class SNSPowderReduction(DataProcessorAlgorithm):
         self._filterBadPulses = self.getProperty("FilterBadPulses").value
         self._removePromptPulseWidth = self.getProperty("RemovePromptPulseWidth").value
         self._lorentz = self.getProperty("LorentzCorrection").value
-        self._LRef = self.getProperty("UnwrapRef").value
         self._DIFCref = self.getProperty("LowResRef").value
         self._wavelengthMin = self.getProperty("CropWavelengthMin").value
         self._wavelengthMax = self.getProperty("CropWavelengthMax").value
@@ -423,6 +438,11 @@ class SNSPowderReduction(DataProcessorAlgorithm):
         self._absMethod = self.getProperty("TypeOfCorrection").value
         self._sampleFormula = self.getProperty("SampleFormula").value
         self._sampleGeometry = self.getProperty("SampleGeometry").value
+        self._containerGeometry = self.getProperty("ContainerGeometry").value
+        self._containerMaterial = self.getProperty("ContainerMaterial").value
+        self._gaugeVolume = self.getProperty("GaugeVolume").value
+        self._containerGaugeVolume = self.getProperty("ContainerGaugeVolume").value
+        self._beamHeight = self.getProperty("BeamHeight").value
         self._massDensity = self.getProperty("MeasuredMassDensity").value
         self._numberDensity = self.getProperty("SampleNumberDensity").value
         self._containerShape = self.getProperty("ContainerShape").value
@@ -524,6 +544,11 @@ class SNSPowderReduction(DataProcessorAlgorithm):
             self._sampleFormula,  # Material for absorption correction
             self._massDensity,  # Mass density of the sample
             self._sampleGeometry,  # Geometry parameters for the sample
+            self._containerGeometry,  # Geometry parameters for the container
+            self._containerMaterial,  # Material parameters for the container
+            self._gaugeVolume,  # Gauge volume definition for sample
+            self._containerGaugeVolume,  # Gauge volume definition for container
+            self._beamHeight,  # Height of the neutron beam cross section in cm
             self._numberDensity,  # Optional number density of sample to be added
             self._containerShape,  # Shape definition of container
             self._num_wl_bins,  # Number of bins: len(ws.readX(0))-1
@@ -540,7 +565,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                 raise NotImplementedError("Summing spectra and filtering events are not supported simultaneously.")
 
             sam_ws_name = self._focusAndSum(samRuns, preserveEvents=preserveEvents, absorptionWksp=a_sample)
-            assert isinstance(sam_ws_name, str), "Returned from _focusAndSum() must be a string but not" "%s. " % str(type(sam_ws_name))
+            assert isinstance(sam_ws_name, str), "Returned from _focusAndSum() must be a string but not %s. " % str(type(sam_ws_name))
 
             workspacelist.append(sam_ws_name)
             samwksplist.append(sam_ws_name)
@@ -561,9 +586,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                     # Returned with a list of workspaces
                     focusedwksplist = returned
                     for sam_ws_name in focusedwksplist:
-                        assert isinstance(sam_ws_name, str), (
-                            "Impossible to have a non-string value in " "returned focused workspaces' names."
-                        )
+                        assert isinstance(sam_ws_name, str), "Impossible to have a non-string value in returned focused workspaces' names."
                         samwksplist.append(sam_ws_name)
                         workspacelist.append(sam_ws_name)
                     # END-FOR
@@ -611,7 +634,8 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                             self.log().information(f"Remove {can_run_ws_name} as it is generated with a different method")
                             mtd.remove(can_run_ws_name)
 
-            can_run_ws_name = self._process_container_runs(can_run_numbers, samRunIndex, preserveEvents, absorptionWksp=a_container)
+            can_abs_ws = a_container if self._absMethod == "FullPaalmanPings" else a_sample
+            can_run_ws_name = self._process_container_runs(can_run_numbers, samRunIndex, preserveEvents, absorptionWksp=can_abs_ws)
             if can_run_ws_name is not None:
                 workspacelist.append(can_run_ws_name)
 
@@ -625,32 +649,38 @@ class SNSPowderReduction(DataProcessorAlgorithm):
             else:
                 van_run_ws_name = None
 
-            # return if there is no sample run
-            # Note: sample run must exist in logic
-            # VZ: Discuss with Pete
-            # if sam_ws_name == 0:
-            #   return
+            van_bkgd_ws_name = self._process_vanadium_background_runs(samRunIndex, absorptionWksp=a_sample)
 
-            # the final bit of math to remove container run and vanadium run
-            if can_run_ws_name is not None and self._containerScaleFactor != 0:
-                # must convert the sample to a matrix workspace if the can run isn't one
-                if not allEventWorkspaces(can_run_ws_name, sam_ws_name):
-                    api.ConvertToMatrixWorkspace(InputWorkspace=sam_ws_name, OutputWorkspace=sam_ws_name)
+            if self._absMethod == "SampleOnly" and van_bkgd_ws_name is not None:
+                # I_S = (I_{S+C}^E - I_{MTI}^E) / A_SS
+                self._subtract_workspace(sam_ws_name, van_bkgd_ws_name)
 
-                # remove container run
-                api.RebinToWorkspace(WorkspaceToRebin=can_run_ws_name, WorkspaceToMatch=sam_ws_name, OutputWorkspace=can_run_ws_name)
-                if samRunIndex == 0:
-                    api.Scale(InputWorkspace=can_run_ws_name, OutputWorkspace=can_run_ws_name, Factor=self._containerScaleFactor)
-                api.Minus(LHSWorkspace=sam_ws_name, RHSWorkspace=can_run_ws_name, OutputWorkspace=sam_ws_name)
-                # compress event if the sample run workspace is EventWorkspace
-                if is_event_workspace(sam_ws_name) and self.COMPRESS_TOL_TOF != 0.0:
-                    api.CompressEvents(
-                        InputWorkspace=sam_ws_name,
-                        OutputWorkspace=sam_ws_name,
-                        Tolerance=self.COMPRESS_TOL_TOF,
-                        BinningMode=self._compressBinningMode,
-                    )  # 10ns
-                # canRun = str(canRun)
+            elif self._absMethod == "FullPaalmanPings" and van_bkgd_ws_name is not None:
+                # I_S = I_{S+C}^E / A_SSC - A_CSC / (A_CC * A_SSC) * I_C - (I_{MTI}^E / A_SSC - A_CSC / (A_CC * A_SSC) * I_{MTI}^E)
+                van_bkgd_name_can = self._process_vanadium_background_runs(samRunIndex, absorptionWksp=a_container)
+                self._subtract_workspace(van_bkgd_ws_name, van_bkgd_name_can)
+                self._subtract_workspace(sam_ws_name, can_run_ws_name)
+                self._subtract_workspace(sam_ws_name, van_bkgd_name_can)
+                if van_bkgd_name_can and mtd.doesExist(van_bkgd_name_can):
+                    api.DeleteWorkspace(Workspace=van_bkgd_name_can)
+
+            elif (can_run_ws_name is not None and self._containerScaleFactor != 0) or self._absMethod == "SampleAndContainer":
+                # I_S = (I_{S+C}^E - I_C) / A_SS
+                self._subtract_workspace(sam_ws_name, can_run_ws_name)
+            else:
+                self.log().notice("No absorption correction applied to sample run %s." % sam_ws_name)
+            # ENDIF (absorption correction)
+
+            if van_bkgd_ws_name and mtd.doesExist(van_bkgd_ws_name):
+                api.DeleteWorkspace(Workspace=van_bkgd_ws_name)
+
+            if is_event_workspace(sam_ws_name) and self.COMPRESS_TOL_TOF != 0.0:
+                api.CompressEvents(
+                    InputWorkspace=sam_ws_name,
+                    OutputWorkspace=sam_ws_name,
+                    Tolerance=self.COMPRESS_TOL_TOF,
+                    BinningMode=self._compressBinningMode,
+                )
 
             if van_run_ws_name is not None:
                 # subtract vanadium run from sample run by division
@@ -815,7 +845,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
 
             if is_event_workspace(out_ws_name):
                 # Event workspace
-                message = "FilterBadPulses reduces number of events from %d to %d (under %s percent) " "of workspace %s." % (
+                message = "FilterBadPulses reduces number of events from %d to %d (under %s percent) of workspace %s." % (
                     num_original_events,
                     get_workspace(out_ws_name).getNumberEvents(),
                     str(self._filterBadPulses),
@@ -923,7 +953,6 @@ class SNSPowderReduction(DataProcessorAlgorithm):
             CompressTolerance=self.COMPRESS_TOL_TOF,
             CompressBinningMode=self._compressBinningMode,
             LorentzCorrection=self._lorentz,
-            UnwrapRef=self._LRef,
             LowResRef=self._DIFCref,
             LowResSpectrumOffset=self._lowResTOFoffset,
             CropWavelengthMin=self._wavelengthMin,
@@ -1039,7 +1068,6 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                     CompressTolerance=self.COMPRESS_TOL_TOF,
                     CompressBinningMode=self._compressBinningMode,
                     LorentzCorrection=self._lorentz,
-                    UnwrapRef=self._LRef,
                     LowResRef=self._DIFCref,
                     LowResSpectrumOffset=self._lowResTOFoffset,
                     CropWavelengthMin=self._wavelengthMin,
@@ -1228,9 +1256,9 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                 If there is no split workspace defined, filter is (0., 0.) as the default
         """
         # supported case: support both workspace and workspace name
-        assert (
-            isinstance(split_ws_name, str) and len(split_ws_name) > 0
-        ), "SplittersWorkspace {0} must be a non-empty string but not a {1}.".format(split_ws_name, type(split_ws_name))
+        assert isinstance(split_ws_name, str) and len(split_ws_name) > 0, (
+            "SplittersWorkspace {0} must be a non-empty string but not a {1}.".format(split_ws_name, type(split_ws_name))
+        )
         if AnalysisDataService.doesExist(split_ws_name):
             split_ws = get_workspace(split_ws_name)
         else:
@@ -1266,9 +1294,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
         elif isinstance(split_ws, ITableWorkspace):
             # general table workspace: filter start and stop times are in seconds
             if split_ws.columnCount() < 3:
-                raise RuntimeError(
-                    "Table splitters workspace {0} has too few ({1}) columns." "".format(split_ws_name, split_ws.columnCount())
-                )
+                raise RuntimeError("Table splitters workspace {0} has too few ({1}) columns.".format(split_ws_name, split_ws.columnCount()))
 
             num_rows = split_ws.rowCount()
             # Searching for the table
@@ -1384,7 +1410,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
             # Check consistency with filterWall
             if filter_wall[0] < 1.0e-20 and filter_wall[1] < 1.0e-20:
                 # Default definition of filterWall when there is no split workspace specified.
-                raise RuntimeError("It is impossible to have a splitters workspace and a non-defined, i.e., (0,0) time " "filter wall.")
+                raise RuntimeError("It is impossible to have a splitters workspace and a non-defined, i.e., (0,0) time filter wall.")
             # ENDIF
 
             # Note: Unfiltered workspace (remainder) is not considered here
@@ -1478,6 +1504,8 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                         IgnoreXBins=True,
                         AllSpectra=True,
                     )
+            if samRunIndex == 0 and self._containerScaleFactor != 0:
+                api.Scale(InputWorkspace=can_run_ws_name, OutputWorkspace=can_run_ws_name, Factor=self._containerScaleFactor)
 
             # END-IF-ELSE
         # END-IF (can run)
@@ -1519,6 +1547,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                 self._num_wl_bins,
                 material={"ChemicalFormula": "V", "SampleNumberDensity": absorptioncorrutils.VAN_SAMPLE_DENSITY},
                 geometry={"Shape": "Cylinder", "Height": 7.0, "Radius": self._vanRadius, "Center": [0.0, 0.0, 0.0]},
+                beam_height=self._beamHeight,
                 find_environment=False,
                 opt_wl_min=self._wavelengthMin,
                 opt_wl_max=self._wavelengthMax,
@@ -1547,6 +1576,9 @@ class SNSPowderReduction(DataProcessorAlgorithm):
             )
             api.RenameWorkspace(abs_v_wsn, "__V_corr_abs")
 
+            # Here, we are using a combo of absorption correction with the numerical integration approach and multiple
+            # scattering correction with the Carpenter approach - `Absorption` param set to `False` below, making sure
+            # only `__V_corr_ms` will be created without overwriting the already calculated `__V_corr_abs`.
             api.CalculateCarpenterSampleCorrection(
                 InputWorkspace=absWksp, OutputWorkspaceBaseName="__V_corr", CylinderSampleRadius=self._vanRadius, Absorption=False
             )
@@ -1564,40 +1596,16 @@ class SNSPowderReduction(DataProcessorAlgorithm):
                 self._focusAndSum([van_run_number], preserveEvents=True, final_name=van_run_ws_name, absorptionWksp=__V_corr_eff)
 
             # load the vanadium background (if appropriate)
-            van_bkgd_run_number_list = self._info["vanadium_background"].value
-            van_bkgd_run_number_list = ["%s_%d" % (self._instrument, value) for value in van_bkgd_run_number_list]
-            if not noRunSpecified(van_bkgd_run_number_list):
-                # determine the van background workspace name
-                if len(van_bkgd_run_number_list) == 1:
-                    van_bkgd_run_number = van_bkgd_run_number_list[0]
-                else:
-                    van_bkgd_run_number = van_bkgd_run_number_list[samRunIndex]
-                van_bkgd_ws_name = getBasename(van_bkgd_run_number) + "_vanbg"
+            van_bkgd_ws_name = self._process_vanadium_background_runs(samRunIndex, __V_corr_eff)
+            if van_bkgd_ws_name is not None:
                 try:
-                    self.log().notice("Processing vanadium background {}".format(van_bkgd_ws_name))
-                    # load background runs and sum if necessary
-                    if self.getProperty("Sum").value:
-                        self._focusAndSum(
-                            van_bkgd_run_number_list, preserveEvents=True, final_name=van_bkgd_ws_name, absorptionWksp=__V_corr_eff
-                        )
-                    else:
-                        self._focusAndSum(
-                            [van_bkgd_run_number], preserveEvents=True, final_name=van_bkgd_ws_name, absorptionWksp=__V_corr_eff
-                        )
-
-                    # do the subtraction
-                    van_bkgd_ws = get_workspace(van_bkgd_ws_name)
-                    if van_bkgd_ws.id() == EVENT_WORKSPACE_ID and van_bkgd_ws.getNumberEvents() <= 0:
-                        # skip if background run is empty
-                        self.log().warning("vanadium background run has no events")
-                    else:
-                        clear_rhs_ws = allEventWorkspaces(van_run_ws_name, van_bkgd_ws_name)
-                        api.Minus(
-                            LHSWorkspace=van_run_ws_name,
-                            RHSWorkspace=van_bkgd_ws_name,
-                            OutputWorkspace=van_run_ws_name,
-                            ClearRHSWorkspace=clear_rhs_ws,
-                        )
+                    clear_rhs_ws = allEventWorkspaces(van_run_ws_name, van_bkgd_ws_name)
+                    api.Minus(
+                        LHSWorkspace=van_run_ws_name,
+                        RHSWorkspace=van_bkgd_ws_name,
+                        OutputWorkspace=van_run_ws_name,
+                        ClearRHSWorkspace=clear_rhs_ws,
+                    )
 
                     # compress events
                     if is_event_workspace(van_run_ws_name) and self.COMPRESS_TOL_TOF != 0.0:
@@ -1647,6 +1655,55 @@ class SNSPowderReduction(DataProcessorAlgorithm):
 
         return van_run_ws_name
 
+    def _subtract_workspace(self, lhs_ws_name, rhs_ws_name):
+        """
+        Purpose: subtract two workspaces
+        :param lhs_ws_name: left hand side workspace
+        :param rhs_ws_name: right hand side workspace
+        """
+        if not allEventWorkspaces(rhs_ws_name, lhs_ws_name):
+            api.ConvertToMatrixWorkspace(InputWorkspace=lhs_ws_name, OutputWorkspace=lhs_ws_name)
+
+        api.RebinToWorkspace(WorkspaceToRebin=rhs_ws_name, WorkspaceToMatch=lhs_ws_name, OutputWorkspace=rhs_ws_name)
+        api.Minus(LHSWorkspace=lhs_ws_name, RHSWorkspace=rhs_ws_name, OutputWorkspace=lhs_ws_name)
+
+    def _process_vanadium_background_runs(self, samRunIndex, absorptionWksp):
+        """
+        Purpose: process vanadium background runs
+        :param samRunIndex: sample run index
+        :param abs_workspace: absorption workspace
+        :return: van_bkgd_ws_name or None if no vanadium background run is specified
+        """
+        van_bkgd_run_number_list = self._info["vanadium_background"].value
+        van_bkgd_run_number_list = ["%s_%d" % (self._instrument, value) for value in van_bkgd_run_number_list]
+        if noRunSpecified(van_bkgd_run_number_list):
+            return None
+
+        if len(van_bkgd_run_number_list) == 1:
+            van_bkgd_run_number = van_bkgd_run_number_list[0]
+        else:
+            van_bkgd_run_number = van_bkgd_run_number_list[samRunIndex]
+        van_bkgd_ws_name = getBasename(van_bkgd_run_number) + "_vanbg"
+        try:
+            self.log().notice("Processing vanadium background {}".format(van_bkgd_ws_name))
+            # load background runs and sum if necessary
+            if self.getProperty("Sum").value:
+                self._focusAndSum(van_bkgd_run_number_list, preserveEvents=True, final_name=van_bkgd_ws_name, absorptionWksp=absorptionWksp)
+            else:
+                self._focusAndSum([van_bkgd_run_number], preserveEvents=True, final_name=van_bkgd_ws_name, absorptionWksp=absorptionWksp)
+
+            # do the subtraction
+            van_bkgd_ws = get_workspace(van_bkgd_ws_name)
+            if van_bkgd_ws.id() == EVENT_WORKSPACE_ID and van_bkgd_ws.getNumberEvents() <= 0:
+                van_bkgd_ws_name = None
+                # skip if background run is empty
+                self.log().warning("vanadium background run has no events")
+        except RuntimeError as e:
+            self.log().warning("Failed to process vanadium background. Skipping: {}".format(e))
+            van_bkgd_ws_name = None
+
+        return van_bkgd_ws_name
+
     def _split_workspace(self, raw_ws_name, split_ws_name):
         """Split workspace
         Purpose:
@@ -1662,7 +1719,7 @@ class SNSPowderReduction(DataProcessorAlgorithm):
         """
         # Check requirements
         assert isinstance(raw_ws_name, str), "Raw workspace name must be a string."
-        assert isinstance(split_ws_name, str), "Input split workspace name must be string," "but not of type %s" % str(type(split_ws_name))
+        assert isinstance(split_ws_name, str), "Input split workspace name must be string, but not of type %s" % str(type(split_ws_name))
         assert self.does_workspace_exist(split_ws_name)
 
         assert is_event_workspace(raw_ws_name), "Input workspace for splitting must be an EventWorkspace."

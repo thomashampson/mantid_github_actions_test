@@ -46,6 +46,7 @@ set(PYTHON_TEST_FILES
     mantidqt/test/test_algorithm_observer.py
     mantidqt/test/test_import.py
     mantidqt/dialogs/errorreports/test/test_errorreport_presenter.py
+    mantidqt/dialogs/errorreports/test/test_run_pystack.py
     mantidqt/dialogs/test/test_algorithm_dialog.py
     mantidqt/dialogs/test/test_spectraselectiondialog.py
     mantidqt/dialogs/test/test_spectraselectorutils.py
@@ -105,6 +106,7 @@ set(PYTHON_WIDGET_QT5_ONLY_TESTS
     mantidqt/widgets/fitpropertybrowser/addfunctiondialog/test/test_addfunctiondialogpresenter.py
     mantidqt/widgets/fitpropertybrowser/addfunctiondialog/test/test_addfunctiondialogview.py
     mantidqt/widgets/fitpropertybrowser/test/test_interactive_tool.py
+    mantidqt/widgets/helpwindow/test/test_helpwindowmodel.py
     mantidqt/widgets/instrumentview/test/test_instrumentview_io.py
     mantidqt/widgets/instrumentview/test/test_instrumentview_presenter.py
     mantidqt/widgets/instrumentview/test/test_instrumentview_view.py
@@ -125,6 +127,8 @@ set(PYTHON_WIDGET_QT5_ONLY_TESTS
     mantidqt/widgets/sliceviewer/test/test_sliceviewer_cursortracker.py
     mantidqt/widgets/sliceviewer/test/test_sliceviewer_imageinfowidget.py
     mantidqt/widgets/sliceviewer/test/test_sliceviewer_lineplots.py
+    mantidqt/widgets/sliceviewer/test/test_sliceviewer_maskingpresenter.py
+    mantidqt/widgets/sliceviewer/test/test_sliceviewer_maskingmodel.py
     mantidqt/widgets/sliceviewer/test/test_sliceviewer_model.py
     mantidqt/widgets/sliceviewer/test/test_sliceviewer_movemousecursor.py
     mantidqt/widgets/sliceviewer/test/test_sliceviewer_presenter.py
@@ -168,6 +172,9 @@ set(PYTHON_WIDGET_QT5_ONLY_TESTS
     mantidqt/widgets/workspacedisplay/matrix/test/test_matrixworkspacedisplay_view.py
     mantidqt/widgets/workspacedisplay/matrix/test/test_matrixworkspacedisplay_io.py
     mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_error_column.py
+    mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_group_model.py
+    mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_group_table_model.py
+    mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_group_presenter.py
     mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_marked_columns.py
     mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_tableworkspace_item.py
     mantidqt/widgets/workspacedisplay/table/test/test_tableworkspacedisplay_model.py

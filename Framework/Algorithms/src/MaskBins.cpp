@@ -5,7 +5,7 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidAlgorithms/MaskBins.h"
-#include "MantidAPI/Algorithm.tcc"
+#include "MantidAPI/Algorithm.hxx"
 #include "MantidAPI/HistogramValidator.h"
 #include "MantidKernel/ArrayProperty.h"
 #include "MantidKernel/BoundedValidator.h"
@@ -27,9 +27,10 @@ using DataObjects::EventWorkspace_const_sptr;
 using DataObjects::EventWorkspace_sptr;
 
 void MaskBins::init() {
-  declareWorkspaceInputProperties<MatrixWorkspace>("InputWorkspace",
-                                                   "The name of the input workspace. Must contain histogram data.",
-                                                   std::make_shared<HistogramValidator>());
+  declareWorkspaceInputProperties<MatrixWorkspace, static_cast<int>(IndexType::WorkspaceIndex) |
+                                                       static_cast<int>(IndexType::SpectrumNum)>(
+      "InputWorkspace", "The name of the input workspace. Must contain histogram data.",
+      std::make_shared<HistogramValidator>());
   declareProperty(std::make_unique<WorkspaceProperty<>>("OutputWorkspace", "", Direction::Output),
                   "The name of the Workspace containing the masked bins.");
 

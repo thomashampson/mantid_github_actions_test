@@ -5,7 +5,7 @@
 //   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidReflectometry/ReflectometryBackgroundSubtraction.h"
-#include "MantidAPI/Algorithm.tcc"
+#include "MantidAPI/Algorithm.hxx"
 #include "MantidAPI/AnalysisDataService.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidKernel/ArrayLengthValidator.h"
@@ -126,6 +126,7 @@ void ReflectometryBackgroundSubtraction::calculatePolynomialBackground(MatrixWor
   poly->setProperty("XRanges", spectrumRanges);
   poly->setProperty("CostFunction", getPropertyValue("CostFunction"));
   poly->setProperty("Minimizer", "Levenberg-Marquardt");
+  poly->setProperty("IgnoreInvalidData", getPropertyValue("IgnoreInvalidData"));
   poly->execute();
   MatrixWorkspace_sptr bgd = poly->getProperty("OutputWorkspace");
 
@@ -152,7 +153,7 @@ void ReflectometryBackgroundSubtraction::calculatePixelBackground(const MatrixWo
 
   const std::vector<int> backgroundRange{static_cast<int>(indexList.front()), static_cast<int>(indexList.back())};
 
-  auto peakRangeProp = dynamic_cast<IndexProperty *>(getPointerToProperty("PeakRange"));
+  const auto *peakRangeProp = dynamic_cast<IndexProperty *>(getPointerToProperty("PeakRange"));
   Indexing::SpectrumIndexSet peakRangeIndexSet = *peakRangeProp;
   const std::vector<int> peakRange{static_cast<int>(peakRangeIndexSet[0]),
                                    static_cast<int>(peakRangeIndexSet[peakRangeIndexSet.size() - 1])};
@@ -237,6 +238,7 @@ void ReflectometryBackgroundSubtraction::init() {
       std::make_unique<WorkspaceProperty<>>("OutputWorkspace", "", Direction::Output, PropertyMode::Optional),
       "The output workspace containing the InputWorkspace with the "
       "background removed.");
+  declareProperty("IgnoreInvalidData", false, "Flag to ignore infinities, NaNs and data with zero errors.");
 }
 
 //----------------------------------------------------------------------------------------------
@@ -288,7 +290,7 @@ std::map<std::string, std::string> ReflectometryBackgroundSubtraction::validateI
   std::map<std::string, std::string> errors;
 
   MatrixWorkspace_const_sptr inputWS = getProperty("InputWorkspace");
-  auto indexProp = dynamic_cast<IndexProperty *>(getPointerToProperty("ProcessingInstructions"));
+  const auto *indexProp = dynamic_cast<IndexProperty *>(getPointerToProperty("ProcessingInstructions"));
   Indexing::SpectrumIndexSet indexSet;
   try {
     indexSet = *indexProp;
@@ -312,7 +314,7 @@ std::map<std::string, std::string> ReflectometryBackgroundSubtraction::validateI
                                            "AveragePixelFit background subtraction";
       }
 
-      auto peakRangeProp = dynamic_cast<IndexProperty *>(getPointerToProperty("PeakRange"));
+      const auto *peakRangeProp = dynamic_cast<IndexProperty *>(getPointerToProperty("PeakRange"));
       Indexing::SpectrumIndexSet peakRangeSet = *peakRangeProp;
       if (!peakRangeSet.isContiguous()) {
         errors["PeakRange"] = "PeakRange must be a single range";

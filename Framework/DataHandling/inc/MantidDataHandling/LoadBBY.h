@@ -16,7 +16,7 @@
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidGeometry/Instrument.h"
 #include "MantidKernel/FileDescriptor.h"
-#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusClasses_fwd.h"
 
 namespace Mantid {
 namespace DataHandling {
@@ -72,13 +72,13 @@ private:
   void createInstrument(ANSTO::Tar::File &tarFile, InstrumentInfo &instrumentInfo,
                         std::map<std::string, double> &logParams, std::map<std::string, std::string> &logStrings,
                         std::map<std::string, std::string> &allParams);
-  void loadInstrumentParameters(const NeXus::NXEntry &entry, std::map<std::string, double> &logParams,
+  void loadInstrumentParameters(const Nexus::NXEntry &entry, std::map<std::string, double> &logParams,
                                 std::map<std::string, std::string> &logStrings,
                                 std::map<std::string, std::string> &allParams);
 
   // load nx dataset
-  template <class T> static bool loadNXDataSet(const NeXus::NXEntry &entry, const std::string &path, T &value);
-  bool loadNXString(const NeXus::NXEntry &entry, const std::string &path, std::string &value);
+  template <class T> static bool loadNXDataSet(const Nexus::NXEntry &entry, const std::string &address, T &value);
+  bool loadNXString(const Nexus::NXEntry &entry, const std::string &address, std::string &value);
 
   // binary file access
   template <class EventProcessor>

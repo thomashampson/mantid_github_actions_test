@@ -9,8 +9,8 @@
 #include "MantidAPI/Algorithm.h"
 #include "MantidAPI/ITableWorkspace_fwd.h"
 #include "MantidAPI/TableRow.h"
+#include "MantidCurveFitting/DllConfig.h"
 #include "MantidCurveFitting/Functions/PawleyFunction.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Unit.h"
 
 namespace Mantid {
@@ -49,7 +49,7 @@ protected:
 class MANTID_CURVEFITTING_DLL PawleyFit : public API::Algorithm {
 public:
   PawleyFit();
-  virtual ~PawleyFit() = default;
+  virtual ~PawleyFit() override = default;
   const std::string name() const override { return "PawleyFit"; }
   int version() const override { return 1; }
   const std::vector<std::string> seeAlso() const override { return {"PoldiPeakSearch"}; }

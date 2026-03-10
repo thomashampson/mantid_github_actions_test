@@ -35,8 +35,11 @@ set(TEST_PY_FILES
     PropertyManagerTest.py
     PropertyManagerDataServiceTest.py
     PropertyManagerPropertyTest.py
+    PythonObjectPropertyTest.py
     PythonPluginsTest.py
     RebinParamsValidatorTest.py
+    SetValueWhenPropertyTest.py
+    SetDefaultWhenPropertyTest.py
     StatisticsTest.py
     StringContainsValidatorTest.py
     test_funcinspect.py

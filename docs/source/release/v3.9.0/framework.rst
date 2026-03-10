@@ -2,9 +2,6 @@
 Framework Changes
 =================
 
-.. contents:: Table of Contents
-   :local:
-
 Changes
 -------
 
@@ -66,11 +63,11 @@ Bug Fixes
 Deprecated
 ##########
 
-- ``AbortRemoteJob`` is deprecated in favour of v2.
-- ``Authenticate``  is deprecated in favour of v2.
-- :ref:`CentroidPeaksMD	 <algm-CentroidPeaksMD>`  is deprecated in favour of v2.
+- ``AbortRemoteJob v1`` is deprecated in favour of v2.
+- ``Authenticate v1``  is deprecated in favour of v2.
+- ``CentroidPeaksMD v1``  is deprecated in favour of v2.
 - ``ConvertEmptyToTof``
-- :ref:`ConvertUnitsUsingDetectorTable	 <algm-ConvertUnitsUsingDetectorTable>`.
+- ``ConvertUnitsUsingDetectorTable``
 - ``DownloadRemoteFile`` is deprecated in favour of v2.
 - :ref:`FFTSmooth	 <algm-FFTSmooth>` is deprecated in favour of v2.
 - OneStepMDEW.
@@ -80,7 +77,7 @@ Deprecated
 - :ref:`LoadILLAscii	 <algm-LoadILLDiffraction>`.
 - ``StopRemoteTransaction`` is deprecated in favour of v2.
 - ``SubmitRemoteJob`` is deprecated in favour of v2.
-- :ref:`Transpose3D	 <algm-Transpose3D>` is deprecated in favour :ref:`TransposeMD <algm-TransposeMD>`.
+- Transpose3D is deprecated in favour :ref:`TransposeMD <algm-TransposeMD>`.
 - The Python function `IMDDimension.getName()` has been deprecated in favour of `IMDDimension.name`.
 - The duplicate Python function `Workspace.getName()` has been deprecated in favour of `Workspace.name()`.
 

@@ -16,6 +16,8 @@ compile_commands.json
 # Ignore CMakeUserPresets
 CMakeUserPresets.json
 
+# prefer hxx for template definition files
+*.tcc
 
 # Compiled Object files
 *.slo
@@ -207,6 +209,16 @@ rel/
 # in source installed conda
 mambaforge/
 miniconda3/
+miniforge/
+
+# in source build of conda pacakges
+conda/recipes/channeldata.json
+conda/recipes/index.html
+conda/recipes/linux-64/
+conda/recipes/noarch/
+conda/recipes/osx-64/
+conda/recipes/tmp/
+conda/recipes/win-64/
 
 # in source building of windows packages
 installers/conda/win/_conda_env

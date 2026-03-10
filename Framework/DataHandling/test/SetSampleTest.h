@@ -24,9 +24,7 @@
 #include "MantidKernel/Material.h"
 #include "MantidKernel/PropertyManager.h"
 
-#include "Poco/File.h"
-#include "Poco/Path.h"
-
+#include <filesystem>
 #include <fstream>
 
 using Mantid::DataHandling::SetSample;
@@ -41,12 +39,12 @@ public:
 
   SetSampleTest() {
     // Setup a temporary directory structure for testing
-    Poco::Path testDirec(Poco::Path::temp(), "SetSampleTest");
-    m_testRoot = testDirec.toString();
+    std::filesystem::path testDirec = std::filesystem::temp_directory_path() / "SetSampleTest";
+    m_testRoot = testDirec.string();
     testDirec.append("sampleenvironments");
-    testDirec.makeDirectory();
+    std::filesystem::create_directories(testDirec);
     testDirec.append(m_facilityName).append(m_instName);
-    Poco::File(testDirec).createDirectories();
+    std::filesystem::create_directories(testDirec);
 
     // Write test files
     const std::string xml = "<environmentspec>"
@@ -80,8 +78,8 @@ public:
                             "  </containers>"
                             " </components>"
                             "</environmentspec>";
-    Poco::File envFile(Poco::Path(testDirec, m_envName + ".xml"));
-    std::ofstream goodStream(envFile.path(), std::ios_base::out);
+    std::filesystem::path envFile = testDirec / (m_envName + ".xml");
+    std::ofstream goodStream(envFile, std::ios_base::out);
     goodStream << xml;
     goodStream.close();
 
@@ -102,15 +100,15 @@ public:
                                   "  </containers>"
                                   " </components>"
                                   "</environmentspec>";
-    Poco::File envFileFixed(Poco::Path(testDirec, m_envName + "_fixedgeometry.xml"));
-    std::ofstream goodStreamFixed(envFileFixed.path(), std::ios_base::out);
+    std::filesystem::path envFileFixed = testDirec / (m_envName + "_fixedgeometry.xml");
+    std::ofstream goodStreamFixed(envFileFixed, std::ios_base::out);
     goodStreamFixed << xml_fixed;
     goodStreamFixed.close();
   }
 
   ~SetSampleTest() {
     try {
-      Poco::File(m_testRoot).remove(true);
+      std::filesystem::remove_all(m_testRoot);
     } catch (...) {
     }
   }
@@ -495,6 +493,39 @@ public:
                    "val=\"0.004\"/></hollow-cylinder><algebra "
                    "val=\"inner:outer\"/> </type>";
     TS_ASSERT_EQUALS(xml, expectedXML.str());
+  }
+
+  void SetSample_CSGSphereMergedWithCylinder_DoesNotCrash() {
+    // Create a workspace with dummy data
+    auto inputWS = WorkspaceCreationHelper::create2DWorkspaceBinned(1, 1);
+
+    // Define CSG XML shape (sphere merged with cylinder)
+    std::string mergeXML = "<cylinder id=\"stick\">"
+                           "<centre-of-bottom-base x=\"-0.5\" y=\"0.0\" z=\"0.0\" />"
+                           "<axis x=\"1.0\" y=\"0.0\" z=\"0.0\" />"
+                           "<radius val=\"0.05\" />"
+                           "<height val=\"1.0\" />"
+                           "</cylinder>"
+                           "<sphere id=\"some-sphere\">"
+                           "<centre x=\"0.7\" y=\"0.0\" z=\"0.0\" />"
+                           "<radius val=\"0.2\" />"
+                           "</sphere>"
+                           "<rotate-all x=\"90\" y=\"-45\" z=\"0\" />"
+                           "<algebra val=\"some-sphere (: stick)\" />";
+
+    // Set the sample shape
+    auto alg = createAlgorithm(inputWS);
+    alg->setProperty("GeometryShape", "CSG");
+    alg->setProperty("GeometryValue", mergeXML);
+    alg->execute();
+
+    // Check sample shape was set
+    TS_ASSERT_THROWS_NOTHING(alg->execute());
+    TS_ASSERT(alg->isExecuted());
+
+    const auto &sample = inputWS->sample();
+    const auto &sampleShape = sample.getShape();
+    TS_ASSERT(sampleShape.hasValidShape());
   }
 
   void test_Setting_Container_Geometry_As_HollowCylinderHolder() {

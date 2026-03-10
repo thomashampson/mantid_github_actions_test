@@ -7,10 +7,10 @@
 #include "MantidAPI/MDGeometry.h"
 #include "MantidAPI/AnalysisDataService.h"
 #include "MantidAPI/CoordTransform.h"
+
 #include "MantidGeometry/MDGeometry/IMDDimension.h"
 #include "MantidGeometry/MDGeometry/MDGeometryXMLBuilder.h"
 #include "MantidGeometry/MDGeometry/MDHistoDimension.h"
-#include "MantidKernel/System.h"
 
 #include <Poco/NObserver.h>
 #include <memory>
@@ -37,6 +37,10 @@ public:
       API::AnalysisDataService::Instance().notificationCenter.removeObserver(m_replace_observer);
     }
   }
+
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  MDGeometryNotificationHelper(const MDGeometryNotificationHelper &) = delete;
+  MDGeometryNotificationHelper &operator=(const MDGeometryNotificationHelper &) = delete;
 
   void watchForWorkspaceDeletions() {
     if (!m_observingDelete) {
@@ -225,9 +229,11 @@ std::vector<coord_t> MDGeometry::estimateResolution() const {
  * @throw runtime_error if it cannot be found.
  */
 size_t MDGeometry::getDimensionIndexByName(const std::string &name) const {
-  for (size_t d = 0; d < m_dimensions.size(); d++)
-    if (m_dimensions[d]->getName() == name)
-      return d;
+  const auto it = std::find_if(m_dimensions.cbegin(), m_dimensions.cend(),
+                               [&name](const auto &dimension) { return dimension->getName() == name; });
+  if (it != m_dimensions.cend()) {
+    return std::distance(m_dimensions.cbegin(), it);
+  }
   throw std::runtime_error("Dimension named '" + name + "' was not found in the IMDWorkspace.");
 }
 
@@ -239,9 +245,11 @@ size_t MDGeometry::getDimensionIndexByName(const std::string &name) const {
  * @throw runtime_error if it cannot be found.
  */
 size_t MDGeometry::getDimensionIndexById(const std::string &id) const {
-  for (size_t d = 0; d < m_dimensions.size(); d++)
-    if (m_dimensions[d]->getDimensionId() == id)
-      return d;
+  const auto it = std::find_if(m_dimensions.cbegin(), m_dimensions.cend(),
+                               [&id](const auto &dimension) { return dimension->getDimensionId() == id; });
+  if (it != m_dimensions.cend()) {
+    return std::distance(m_dimensions.cbegin(), it);
+  }
   throw std::runtime_error("Dimension with id '" + id + "' was not found in the IMDWorkspace.");
 }
 
@@ -392,7 +400,7 @@ void MDGeometry::setOriginalWorkspace(std::shared_ptr<Workspace> ws, size_t inde
  * @param scaling :: multiply each coordinate by this value.
  * @param offset :: after multiplying, add this offset.
  */
-void MDGeometry::transformDimensions(std::vector<double> &scaling, std::vector<double> &offset) {
+void MDGeometry::transformDimensions(std::vector<double> const &scaling, std::vector<double> const &offset) {
   if (scaling.size() != m_dimensions.size())
     throw std::invalid_argument("MDGeometry::transformDimensions(): "
                                 "scaling.size() must be equal to number of "

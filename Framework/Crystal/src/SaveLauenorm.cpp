@@ -8,6 +8,7 @@
 #include "MantidAPI/FileProperty.h"
 #include "MantidAPI/Sample.h"
 #include "MantidCrystal/AnvredCorrection.h"
+#include "MantidGeometry/Instrument/ComponentInfo.h"
 #include "MantidGeometry/Instrument/Goniometer.h"
 #include "MantidGeometry/Instrument/RectangularDetector.h"
 #include "MantidKernel/ArrayProperty.h"
@@ -18,9 +19,8 @@
 #include "MantidKernel/Utils.h"
 #include "boost/math/special_functions/round.hpp"
 
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 
@@ -77,8 +77,8 @@ void SaveLauenorm::init() {
 void SaveLauenorm::exec() {
 
   std::string filename = getProperty("Filename");
-  Poco::Path path(filename);
-  std::string basename = path.getBaseName(); // Filename minus extension
+  std::filesystem::path path(filename);
+  std::string basename = path.stem().string(); // Filename minus extension
   ws = getProperty("InputWorkspace");
   double scaleFactor = getProperty("ScalePeaks");
   double dMin = getProperty("MinDSpacing");
@@ -161,7 +161,7 @@ void SaveLauenorm::exec() {
   double minD = EMPTY_DBL();
   for (int wi = 0; wi < ws->getNumberPeaks(); wi++) {
 
-    Peak &p = peaks[wi];
+    const Peak &p = peaks[wi];
     double intensity = p.getIntensity();
     double sigI = p.getSigmaIntensity();
     if (intensity == 0.0 || !(std::isfinite(sigI)))
@@ -231,7 +231,7 @@ void SaveLauenorm::exec() {
   // Go through each peak at this run / bank
   for (int wi = 0; wi < ws->getNumberPeaks(); wi++) {
 
-    Peak &p = peaks[wi];
+    const Peak &p = peaks[wi];
     double intensity = p.getIntensity();
     double sigI = p.getSigmaIntensity();
     if (intensity == 0.0 || !(std::isfinite(sigI)))
@@ -286,12 +286,11 @@ void SaveLauenorm::exec() {
       ss << std::setw(3) << std::setfill('0') << sequenceNo;
 
       // Chop off filename
-      path.makeParent();
-      path.append(basename + ss.str());
+      path = path.parent_path();
+      path /= basename + ss.str();
       if (newFormat)
-        path.setExtension("geasc");
-      Poco::File fileobj(path);
-      out.open(path.toString().c_str(), std::ios::out);
+        path.replace_extension("geasc");
+      out.open(path.string(), std::ios::out);
       if (newFormat) {
         out << "TITL\n";
         out << basename << "\n";
@@ -469,14 +468,10 @@ void SaveLauenorm::sizeBanks(const std::string &bankName, int &nCols, int &nRows
     nCols = RDet->xpixels();
     nRows = RDet->ypixels();
   } else {
-    std::vector<Geometry::IComponent_const_sptr> children;
-    std::shared_ptr<const Geometry::ICompAssembly> asmb =
-        std::dynamic_pointer_cast<const Geometry::ICompAssembly>(parent);
-    asmb->getChildren(children, false);
-    std::shared_ptr<const Geometry::ICompAssembly> asmb2 =
-        std::dynamic_pointer_cast<const Geometry::ICompAssembly>(children[0]);
-    std::vector<Geometry::IComponent_const_sptr> grandchildren;
-    asmb2->getChildren(grandchildren, false);
+    const auto &componentInfo = ws->componentInfo();
+    const size_t parentIndex = componentInfo.indexOfAny(bankName);
+    auto children = componentInfo.children(parentIndex);
+    auto grandchildren = componentInfo.children(children[0]);
     nRows = static_cast<int>(grandchildren.size());
     nCols = static_cast<int>(children.size());
   }

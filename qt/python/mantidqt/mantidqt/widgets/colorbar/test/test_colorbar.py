@@ -13,7 +13,7 @@ from unittest import TestCase, mock
 
 from mantidqt.utils.qt.testing import start_qapplication
 from mantidqt.widgets.colorbar.colorbar import ColorbarWidget, NORM_OPTS
-from matplotlib.colors import LogNorm, Normalize, SymLogNorm
+from matplotlib.colors import LogNorm, Normalize, SymLogNorm, AsinhNorm, ListedColormap
 
 
 @start_qapplication
@@ -187,6 +187,19 @@ class ColorbarWidgetTest(TestCase):
         self.assertEqual(vmin, 0.0)
         self.assertEqual(vmax, 99.0)
 
+    def test_colorbar_limits_asinh(self):
+        image = plt.imshow(self.data * np.nan, cmap="plasma", norm=AsinhNorm(vmin=None, vmax=None))
+
+        self.widget.set_mappable(image)
+        self.widget.autoscale.setChecked(True)
+        self.widget.autotype.setCurrentIndex(0)
+        self.widget.norm.setCurrentIndex(4)
+
+        vmin, vmax = self.widget._calculate_auto_color_limits(self.data)
+
+        self.assertEqual(vmin, 0.0)
+        self.assertEqual(vmax, 99.0)
+
     def test_invalid_cmax_range_is_reset(self):
         image = plt.imshow(self.data, cmap="plasma", norm=SymLogNorm(1e-8, vmin=None, vmax=None))
 
@@ -239,3 +252,18 @@ class ColorbarWidgetTest(TestCase):
             self.widget.clim_changed()
 
             self.assertEqual("0.0", self.widget.cmin.text())
+
+    def test_custom_colormaps(self):
+        # test that users can register custom colormaps and have it as an option in the colorbar
+        cmap_name = "custom_cmap"
+        self.assertFalse(cmap_name in plt.colormaps)
+        self.assertTrue(self.widget.cmap.findText(cmap_name) == -1)
+
+        plt.colormaps.register(cmap=ListedColormap([[0, 0, 0], [0, 0, 1]]), name=cmap_name)
+        self.assertTrue(cmap_name in plt.colormaps)
+
+        # now when you create a colorbar widget, the custom colormap should now be available
+        cb = ColorbarWidget()
+        self.assertTrue(cb.cmap.findText(cmap_name) != -1)
+
+        plt.colormaps.unregister(cmap_name)

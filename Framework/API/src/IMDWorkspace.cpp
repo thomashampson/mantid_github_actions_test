@@ -44,7 +44,7 @@ std::unique_ptr<IMDIterator> IMDWorkspace::createIterator(Mantid::Geometry::MDIm
 //---------------------------------------------------------------------------------------------
 /** @return the convention
  */
-std::string IMDWorkspace::getConvention() const { return m_convention; }
+const std::string &IMDWorkspace::getConvention() const { return m_convention; }
 
 /** Sets the convention of the workspace
  * @param convention : The convention to use.
@@ -203,7 +203,7 @@ IPropertyManager::getValue<Mantid::API::IMDWorkspace_sptr>(const std::string &na
 template <>
 MANTID_API_DLL Mantid::API::IMDWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::API::IMDWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::API::IMDWorkspace_sptr> *>(getPointerToProperty(name));
+  auto const *prop = dynamic_cast<PropertyWithValue<Mantid::API::IMDWorkspace_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();
   } else {

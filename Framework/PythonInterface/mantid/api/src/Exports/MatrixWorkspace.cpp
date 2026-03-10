@@ -25,6 +25,7 @@
 
 #include <boost/python/class.hpp>
 #include <boost/python/copy_const_reference.hpp>
+#include <boost/python/dict.hpp>
 #include <boost/python/implicit.hpp>
 #include <boost/python/list.hpp>
 #include <boost/python/overloads.hpp>
@@ -62,6 +63,7 @@ GNU_DIAG_OFF("unused-local-typedef")
 // Seen with GCC 7.1.1 and Boost 1.63.0
 GNU_DIAG_OFF("conversion")
 // Overloads for yIndexOfX function which has 2 optional argument
+// cppcheck-suppress unknownMacro
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(MatrixWorkspace_yIndexOfXOverloads, MatrixWorkspace::yIndexOfX, 1, 3)
 // Overloads for YUnitLabel which has 1 optional argument
 BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(MatrixWorkspace_YUnitLabelOverloads, YUnitLabel, 0, 2)
@@ -171,6 +173,23 @@ void setEFromPyObject(MatrixWorkspace &self, const size_t wsIndex, const boost::
  */
 void setDxFromPyObject(MatrixWorkspace &self, const size_t wsIndex, const boost::python::object &values) {
   setSpectrumFromPyObject(self, &MatrixWorkspace::dataDx, wsIndex, values);
+}
+
+std::vector<double> getIntegratedCountsForWorkspaceIndices(MatrixWorkspace &self,
+                                                           const boost::python::object &workspaceIndices,
+                                                           const size_t numberOfWorkspaces, const double minX,
+                                                           const double maxX, const bool entireRange) {
+
+  std::vector<size_t> sWorkspaceIndices(numberOfWorkspaces);
+  if (NDArray::check(workspaceIndices)) {
+    NDArrayToVector<size_t> converter(workspaceIndices);
+    converter.copyTo(sWorkspaceIndices);
+  } else {
+    PySequenceToVector<size_t> converter(workspaceIndices);
+    converter.copyTo(sWorkspaceIndices);
+  }
+
+  return self.getIntegratedCountsForWorkspaceIndices(sWorkspaceIndices, minX, maxX, entireRange);
 }
 
 /**
@@ -306,6 +325,17 @@ std::vector<size_t> getIndicesFromDetectorIDs(MatrixWorkspace &self, const boost
   return self.getIndicesFromDetectorIDs(Converters::PySequenceToVector<int>(detIDs)());
 }
 
+boost::python::dict getDetectorIDToWorkspaceIndexMap(MatrixWorkspace &self, bool throwIfMultipleDets,
+                                                     bool ignoreIfNoValidDets) {
+  const auto unorderedMap = self.getDetectorIDToWorkspaceIndexMap(throwIfMultipleDets, ignoreIfNoValidDets);
+  boost::python::dict pythonDict;
+  for (const auto &[key, value] : unorderedMap) {
+    pythonDict[key] = value;
+  }
+
+  return pythonDict;
+}
+
 } // namespace
 
 /** Python exports of the Mantid::API::MatrixWorkspace class. */
@@ -332,6 +362,9 @@ void export_MatrixWorkspace() {
            "data).")
       .def("getNumberHistograms", &MatrixWorkspace::getNumberHistograms, arg("self"),
            "Returns the number of spectra in the workspace")
+      .def("getPlotType", &MatrixWorkspace::getPlotType, arg("self"), "Returns the plot type of the workspace")
+      .def("getMarkerStyle", &MatrixWorkspace::getMarkerStyle, arg("self"), "Return the marker style for the workspace")
+      .def("getMarkerSize", &MatrixWorkspace::getMarkerSize, arg("self"), "Returns the marker size for the workspace")
       .def("getSpectrumNumbers", &getSpectrumNumbers, arg("self"),
            "Returns a list of all spectrum numbers in the workspace")
       .def("yIndexOfX", &MatrixWorkspace::yIndexOfX,
@@ -352,6 +385,10 @@ void export_MatrixWorkspace() {
       .def("getIndicesFromDetectorIDs", &getIndicesFromDetectorIDs, (arg("self"), arg("detID_list")),
            "Returns a list of workspace indices from the corrresponding "
            "detector IDs.")
+      .def("getDetectorIDToWorkspaceIndexMap", &getDetectorIDToWorkspaceIndexMap,
+           (arg("self"), arg("throwIfMultipleDets"), arg("ignoreIfNoValidDets")),
+           " Return a map where the key is detector ID (pixel ID), and the value at that index = the corresponding "
+           "workspace index")
       .def("getDetector", &MatrixWorkspace::getDetector, return_value_policy<RemoveConstSharedPtr>(),
            (arg("self"), arg("workspaceIndex")),
            "Return the :class:`~mantid.geometry.Detector` or "
@@ -364,9 +401,9 @@ void export_MatrixWorkspace() {
            "Get a pointer to a workspace axis")
       .def("isHistogramData", &MatrixWorkspace::isHistogramData, arg("self"),
            "Returns ``True`` if this is considered to be binned data.")
-      .def("isDistribution", (bool(MatrixWorkspace::*)() const) & MatrixWorkspace::isDistribution, arg("self"),
+      .def("isDistribution", (bool (MatrixWorkspace::*)() const) & MatrixWorkspace::isDistribution, arg("self"),
            "Returns the status of the distribution flag")
-      .def("YUnit", &MatrixWorkspace::YUnit, arg("self"),
+      .def("YUnit", &MatrixWorkspace::YUnit, arg("self"), return_value_policy<copy_const_reference>(),
            "Returns the current Y unit for the data (Y axis) in the workspace")
       .def("YUnitLabel", &MatrixWorkspace::YUnitLabel,
            MatrixWorkspace_YUnitLabelOverloads((arg("self"), arg("useLatex"), arg("plotAsDistribution")),
@@ -396,6 +433,12 @@ void export_MatrixWorkspace() {
 
       //--------------------------------------- Setters
       //------------------------------------
+      .def("setPlotType", &MatrixWorkspace::setPlotType, (arg("self"), arg("newType")),
+           "Sets a new plot type for the workspace")
+      .def("setMarkerStyle", &MatrixWorkspace::setMarkerStyle, (arg("self"), arg("markerType")),
+           "Sets the marker type for the workspace")
+      .def("setMarkerSize", &MatrixWorkspace::setMarkerSize, (arg("self"), arg("markerSize")),
+           "Sets the size of the marker for the workspace")
       .def("setYUnitLabel", &MatrixWorkspace::setYUnitLabel, (arg("self"), arg("newLabel")),
            "Sets a new caption for the data (Y axis) in the workspace")
       .def("setYUnit", &MatrixWorkspace::setYUnit, (arg("self"), arg("newUnit")),
@@ -490,6 +533,9 @@ void export_MatrixWorkspace() {
            "of memory free that will fit all of the data.")
       .def("getSignalAtCoord", &getSignalAtCoord, args("self", "coords", "normalization"),
            "Return signal for array of coordinates")
+      .def("getIntegratedCountsForWorkspaceIndices", &getIntegratedCountsForWorkspaceIndices,
+           args("self", "workspaceIndices", "numberOfWorkspaces", "minX", "maxX", "entireRange"),
+           "Return a vector with the integrated counts within the given range for the given workspace indices")
       //-------------------------------------- Operators
       //-----------------------------------
       .def("equals", &Mantid::API::equals, args("self", "other", "tolerance"),

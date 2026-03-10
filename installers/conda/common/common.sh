@@ -5,7 +5,7 @@
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
 
-# Take an installed workbench conda enviroment
+# Take an installed workbench conda environment
 # and trim out as much as possible that leaves
 # it functioning
 # Arguments:
@@ -21,16 +21,13 @@ function trim_conda() {
   cp "$bundle_conda_prefix"/bin_tmp/Mantid.properties "$bundle_conda_prefix"/bin/
   cp "$bundle_conda_prefix"/bin_tmp/mantid-scripts.pth "$bundle_conda_prefix"/bin/
   cp "$bundle_conda_prefix"/bin_tmp/workbench "$bundle_conda_prefix"/bin/
-  if [ -f "$bundle_conda_prefix"/bin_tmp/mantidworkbench.standalone ]; then
-    # keep handwritten startup script used on Linux so that we use jemalloc
-    cp "$bundle_conda_prefix"/bin_tmp/mantidworkbench.standalone "$bundle_conda_prefix"/bin/mantidworkbench
+  if [ -f "$bundle_conda_prefix"/bin_tmp/launch_mantidworkbench.standalone ]; then
+    # Keep handwritten startup script used on Linux so that we use jemalloc
+    cp "$bundle_conda_prefix"/bin_tmp/launch_mantidworkbench.standalone "$bundle_conda_prefix"/bin/mantidworkbench
+    # We don't use this workbench script in the Linux standalone, so remove it to avoid confusion
+    rm "$bundle_conda_prefix"/bin/workbench
   fi
-  # Heavily cut down share
-  mv "$bundle_conda_prefix"/share "$bundle_conda_prefix"/share_tmp
-  mkdir "$bundle_conda_prefix"/share
-  mv "$bundle_conda_prefix"/share_tmp/doc "$bundle_conda_prefix"/share/
-  mkdir -p "$bundle_conda_prefix"/share/glib-2.0/schemas
-  mv "$bundle_conda_prefix"/share_tmp/glib-2.0/schemas "$bundle_conda_prefix"/share/glib-2.0/
+
   # Heavily cut down translations
   mv "$bundle_conda_prefix"/translations "$bundle_conda_prefix"/translations_tmp
   mkdir -p "$bundle_conda_prefix"/translations/qtwebengine_locales
@@ -45,7 +42,6 @@ function trim_conda() {
     "$bundle_conda_prefix"/phrasebooks \
     "$bundle_conda_prefix"/qml \
     "$bundle_conda_prefix"/qsci \
-    "$bundle_conda_prefix"/share_tmp \
     "$bundle_conda_prefix"/translations_tmp
 
   find "$bundle_conda_prefix" -name '*.a' -delete
@@ -54,7 +50,7 @@ function trim_conda() {
   find "$bundle_contents" -name '*.plist' -delete
 }
 
-# Take an installed workbench conda enviroment
+# Take an installed workbench conda environment
 # and fix the qt installation. Generates a qt.conf
 # containing a relative prefix path
 # Arguments:

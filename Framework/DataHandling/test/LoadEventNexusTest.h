@@ -22,8 +22,8 @@
 #include "MantidKernel/TimeSeriesProperty.h"
 #include "MantidNexusGeometry/Hdf5Version.h"
 
-#include "Poco/Path.h"
 #include <cxxtest/TestSuite.h>
+#include <filesystem>
 
 using namespace Mantid;
 using namespace Mantid::Geometry;
@@ -33,53 +33,6 @@ using namespace Mantid::Kernel;
 using namespace Mantid::DataHandling;
 using Mantid::Types::Core::DateAndTime;
 using Mantid::Types::Event::TofEvent;
-
-void run_multiprocess_load(const std::string &file, bool precount) {
-  Mantid::API::FrameworkManager::Instance();
-  LoadEventNexus ld;
-  ld.initialize();
-  ld.setPropertyValue("Loadtype", "Multiprocess (experimental)");
-  std::string outws_name = "multiprocess";
-  ld.setPropertyValue("Filename", file);
-  ld.setPropertyValue("OutputWorkspace", outws_name);
-  ld.setPropertyValue("Precount", std::to_string(precount));
-  ld.setProperty<bool>("LoadLogs", false); // Time-saver
-  TS_ASSERT_THROWS_NOTHING(ld.execute());
-  TS_ASSERT(ld.isExecuted())
-
-  EventWorkspace_sptr ws = AnalysisDataService::Instance().retrieveWS<EventWorkspace>(outws_name);
-  TS_ASSERT(ws);
-
-  LoadEventNexus ldRef;
-  ldRef.initialize();
-  ldRef.setPropertyValue("Loadtype", "Default");
-  outws_name = "reference";
-  ldRef.setPropertyValue("Filename", file);
-  ldRef.setPropertyValue("OutputWorkspace", outws_name);
-  ldRef.setPropertyValue("Precount", "1");
-  ldRef.setProperty<bool>("LoadLogs", false); // Time-saver
-  TS_ASSERT_THROWS_NOTHING(ldRef.execute());
-  TS_ASSERT(ldRef.isExecuted())
-
-  EventWorkspace_sptr wsRef = AnalysisDataService::Instance().retrieveWS<EventWorkspace>(outws_name);
-  TS_ASSERT(wsRef);
-
-  TSM_ASSERT_EQUALS("Different spectrum number in reference ws.", wsRef->getNumberHistograms(),
-                    ws->getNumberHistograms());
-  if (wsRef->getNumberHistograms() != ws->getNumberHistograms())
-    return;
-  for (size_t i = 0; i < wsRef->getNumberHistograms(); ++i) {
-    auto &eventList = ws->getSpectrum(i).getEvents();
-    auto &eventListRef = wsRef->getSpectrum(i).getEvents();
-    TSM_ASSERT_EQUALS("Different events number in reference spectra", eventList.size(), eventListRef.size());
-    if (eventList.size() != eventListRef.size())
-      return;
-    for (size_t j = 0; j < eventListRef.size(); ++j) {
-      TSM_ASSERT_EQUALS("Events are not equal", eventList[j].tof(), eventListRef[j].tof());
-      TSM_ASSERT_EQUALS("Events are not equal", eventList[j].pulseTime(), eventListRef[j].pulseTime());
-    }
-  }
-}
 
 class LoadEventNexusTest : public CxxTest::TestSuite {
 private:
@@ -198,6 +151,7 @@ private:
 
 public:
   void test_load_event_nexus_v20_ess() {
+    std::cout << "test load v20_ess\n" << std::flush;
     const std::string file = "V20_ESS_example.nxs";
     LoadEventNexus alg;
     alg.setChild(true);
@@ -216,6 +170,7 @@ public:
   }
 
   void test_load_event_nexus_v20_ess_log_filtered() {
+    std::cout << "test load v20_ess log filtered\n" << std::flush;
     const std::string file = "V20_ESS_example.nxs";
     std::vector<std::string> allowed = {"proton_charge", "S2HGap", "S2VGap"};
 
@@ -240,6 +195,7 @@ public:
   }
 
   void test_load_event_nexus_v20_ess_integration_2018() {
+    std::cout << "test load v20_ess integration 2018\n" << std::flush;
     // Only perform this test if the version of hdf5 supports vlen strings
     if (NexusGeometry::Hdf5Version::checkVariableLengthStringSupport()) {
       const std::string file = "V20_ESSIntegration_2018-12-13_0942.nxs";
@@ -266,6 +222,7 @@ public:
   }
 
   void test_load_event_nexus_POLARIS() {
+    std::cout << "test load polaris" << std::flush;
     // POLARIS file slow to create geometry cache so use a pregenerated vtp file. Details of the geometry don't matter
     // for this test
     const std::string vtpDirectoryKey = "instrumentDefinition.vtp.directory";
@@ -273,7 +230,7 @@ public:
         Kernel::ConfigService::Instance().getFullPath("POLARIS9fbf7121b4274c833043ae8933ec643ff7b9313d.vtp", true, 0);
     bool hasVTPDirectory = ConfigService::Instance().hasProperty(vtpDirectoryKey);
     auto origVTPDirectory = ConfigService::Instance().getString(vtpDirectoryKey);
-    ConfigService::Instance().setString(vtpDirectoryKey, Poco::Path(foundFile).parent().toString());
+    ConfigService::Instance().setString(vtpDirectoryKey, std::filesystem::path(foundFile).parent_path().string());
     const std::string file = "POLARIS00130512.nxs";
     LoadEventNexus alg;
     alg.setChild(true);
@@ -299,6 +256,7 @@ public:
   }
 
   void test_NumberOfBins() {
+    std::cout << "test number bins SANS2D\n" << std::flush;
     const std::string file = "SANS2D00022048.nxs";
     int nBins = 273;
     LoadEventNexus alg;
@@ -317,6 +275,7 @@ public:
   }
 
   void test_load_event_nexus_sans2d_ess() {
+    std::cout << "test load SANS2D ESS\n" << std::flush;
     const std::string file = "SANS2D_ESS_example.nxs";
     LoadEventNexus alg;
     alg.setChild(true);
@@ -344,28 +303,29 @@ public:
     TS_ASSERT_EQUALS(eventWS->indexInfo().spectrumNumber(2), 3);
   }
 
-#ifdef _WIN32
-  bool windows = true;
-#else
-  bool windows = false;
-#endif // _WIN32
-  void test_multiprocess_loader_precount() {
-    if (!windows) {
-      run_multiprocess_load("SANS2D00022048.nxs", true);
-      run_multiprocess_load("LARMOR00003368.nxs", true);
+  void test_multiprocess_loader_does_nothing() {
+    // The experimental multiprocess loader has been removed.
+    // Make sure using it doesn't cause script failures, until it can be fully deprecated
+    std::cout << "test multiprocess loader does nothing" << std::endl;
+    Mantid::API::FrameworkManager::Instance();
+    LoadEventNexus ld;
+    ld.initialize();
+    ld.setPropertyValue("LoadType", "Multiprocess (experimental)");
+    std::string outws_name = "multiprocess";
+    ld.setPropertyValue("Filename", "SANS2D00022048.nxs");
+    ld.setPropertyValue("OutputWorkspace", outws_name);
+    ld.setProperty<bool>("LoadLogs", false); // Time-saver
+    try { // do not need to actually run algorithm, just the private validateInputs method at start
+      ld.execute();
+    } catch (...) {
     }
-  }
-
-  void test_multiprocess_loader_producer_consumer() {
-    if (!windows) {
-      run_multiprocess_load("SANS2D00022048.nxs", false);
-      run_multiprocess_load("LARMOR00003368.nxs", false);
-    }
+    TS_ASSERT_EQUALS(ld.getPropertyValue("LoadType"), "Default");
   }
 
   void test_SingleBank_PixelsOnlyInThatBank() { doTestSingleBank(true, false); }
 
   void test_load_event_nexus_ornl_eqsans() {
+    std::cout << "test nexus ornl eqsans \n" << std::flush;
     // This file has a 2D entry/sample/name
     const std::string file = "EQSANS_89157.nxs.h5";
     LoadEventNexus alg;
@@ -384,6 +344,7 @@ public:
   }
 
   void test_wallclock_filtering() {
+    std::cout << "test wallclock filtering\n" << std::flush;
     const std::string wsName("test_wallclock_filtering");
     const std::string filename("EQSANS_89157.nxs.h5");
     constexpr double filterStart{200}; // seconds
@@ -472,6 +433,7 @@ public:
 
   // FilteredLoadvsLoadThenFilter system test and algorithm usage example
   void test_CNCS_7860_filtering() {
+    std::cout << "test CNCS 7860 filtering\n" << std::flush;
     const std::string filename("CNCS_7860_event.nxs");
     const std::string wsName("CNCS_7860");
     constexpr double filterStart{60};
@@ -516,6 +478,7 @@ public:
   }
 
   void test_Normal_vs_Precount() {
+    std::cout << "test normal vs precount\n" << std::flush;
     Mantid::API::FrameworkManager::Instance();
     LoadEventNexus ld;
     std::string outws_name = "cncs_noprecount";
@@ -634,6 +597,7 @@ public:
   }
 
   void test_TOF_filtered_loading() {
+    std::cout << "test TOF filtering\n" << std::flush;
     const std::string wsName = "test_filtering";
     const double filterStart = 45000;
     const double filterEnd = 59000;
@@ -668,6 +632,7 @@ public:
   }
 
   void test_partial_spectra_loading() {
+    std::cout << "test partial spectra loading\n" << std::flush;
     std::string wsName = "test_partial_spectra_loading_SpectrumList";
     std::vector<int32_t> specList;
     specList.emplace_back(13);
@@ -761,6 +726,7 @@ public:
   }
 
   void test_partial_spectra_loading_ISIS() {
+    std::cout << "test partial spectra loading ISIS\n" << std::flush;
     // This is to test a specific bug where if you selected any spectra and had
     // precount on you got double the number of events
     std::string wsName = "test_partial_spectra_loading_SpectrumListISIS";
@@ -812,13 +778,13 @@ public:
   }
 
   void test_CNCSMonitors() {
+    std::cout << "test CNCS monitors\n" << std::flush;
     // Re-uses the workspace loaded in test_partial_spectra_loading to save a
     // load execution
     // This is a very simple test for performance issues. There's no real event
     // data, so this just check that the algorithm creates a consistent output
     // (monitors). Real/intensive testing happens in `LoadNexusMonitors` and
-    // system
-    // tests.
+    // system tests.
     const std::string mon_outws_name = wsSpecFilterAndEventMonitors + "_monitors";
     auto &ads = AnalysisDataService::Instance();
 
@@ -833,6 +799,7 @@ public:
   }
 
   void test_Load_And_CompressEvents() {
+    std::cout << "test load and compress events\n" << std::flush;
     constexpr std::size_t NUM_HIST{51200};
     const std::string filename{"CNCS_7860_event.nxs"};
 
@@ -887,6 +854,7 @@ public:
   }
 
   void test_Monitors() {
+    std::cout << "test CNCS compressed monitors\n" << std::flush;
     // Uses the workspace loaded in the last test to save a load execution
     std::string mon_outws_name = "cncs_compressed_monitors";
     auto &ads = AnalysisDataService::Instance();
@@ -916,6 +884,7 @@ public:
   }
 
   void test_Load_And_Filter_Everything() {
+    std::cout << "test ARCS sim filtering everything\n" << std::flush;
     // This test set the FilterByTimeStart value so that everything should be filtered
     // So we should end up with 0 events
     const std::string filename{"ARCS_sim_event.nxs"};
@@ -937,6 +906,7 @@ public:
   }
 
   void test_Load_And_CompressEvents_weighted() {
+    std::cout << "test ARCS sim event weighted\n" << std::flush;
     constexpr std::size_t NUM_HIST{117760};
     const std::string filename{"ARCS_sim_event.nxs"};
 
@@ -990,6 +960,7 @@ public:
   }
 
   void test_Load_And_CompressEvents_with_nperiod_data() {
+    std::cout << "test LARMOR compress with nperiods\n" << std::flush;
     constexpr std::size_t NUM_HIST{40960};
     const std::string filename{"LARMOR00003368.nxs"};
 
@@ -1041,6 +1012,7 @@ public:
   }
 
   void test_Load_And_CompressEvents_tolerance_0() {
+    std::cout << "test CNCS compress tol 0\n" << std::flush;
     // the is to verify that the compresssion works when the CompressTolerance=0
     // create compressed
     const std::string filename{"CNCS_7860_event.nxs"};
@@ -1071,6 +1043,7 @@ public:
   }
 
   void test_Load_And_FilterBadPulses() {
+    std::cout << "test CNCS filter bad pulses\n" << std::flush;
     // This will use ProcessBankData
     const std::string filename{"CNCS_7860_event.nxs"};
 
@@ -1121,6 +1094,7 @@ public:
   }
 
   void test_Load_And_FilterBadPulses_with_start_time_filter() {
+    std::cout << "test CNCS filter bad with start time\n" << std::flush;
     // This will use ProcessBankData
     // make sure the combination of bad pulse filter and start time filter work together
     const std::string filename{"CNCS_7860_event.nxs"};
@@ -1176,6 +1150,7 @@ public:
   }
 
   void test_Load_And_FilterBadPulses_and_compress() {
+    std::cout << "test CNCS filter bad pulses and compress\n" << std::flush;
     // This will use ProcessBankCompressed
     const std::string filename{"CNCS_7860_event.nxs"};
 
@@ -1240,6 +1215,7 @@ public:
   }
 
   void test_Load_And_FilterBadPulses_and_compress_and_start_time_filter() {
+    std::cout << "test CNCS filter bad compress and start time\n" << std::flush;
     // This will use ProcessBankCompressed
     const std::string filename{"CNCS_7860_event.nxs"};
 
@@ -1306,6 +1282,9 @@ public:
 
   void doTestSingleBank(bool SingleBankPixelsOnly, bool Precount, const std::string &BankName = "bank36",
                         bool willFail = false) {
+    std::cout << "test CNCS  single back with: " << SingleBankPixelsOnly << " " << Precount << " " << BankName << " "
+              << willFail << "\n"
+              << std::flush;
     Mantid::API::FrameworkManager::Instance();
     LoadEventNexus ld;
     std::string outws_name = "cncs";
@@ -1345,6 +1324,7 @@ public:
   void test_SingleBank_ThatDoesntExist() { doTestSingleBank(false, false, "bankDoesNotExist", true); }
 
   void test_SingleBank_with_no_events() {
+    std::cout << "test HYSA single bank no events\n" << std::flush;
     LoadEventNexus load;
     TS_ASSERT_THROWS_NOTHING(load.initialize());
     TS_ASSERT_THROWS_NOTHING(load.setPropertyValue("Filename", "HYSA_12509.nxs.h5"));
@@ -1361,6 +1341,7 @@ public:
   }
 
   void test_instrument_inside_nexus_file() {
+    std::cout << "test HYSA instrument inside nexus\n" << std::flush;
     LoadEventNexus load;
     TS_ASSERT_THROWS_NOTHING(load.initialize());
     TS_ASSERT_THROWS_NOTHING(load.setPropertyValue("Filename", "HYSA_12509.nxs.h5"));
@@ -1389,6 +1370,7 @@ public:
   }
 
   void test_instrument_and_default_param_loaded_when_inst_not_in_nexus_file() {
+    std::cout << "test CNCS load default param with no instrument\n" << std::flush;
     LoadEventNexus load;
     TS_ASSERT_THROWS_NOTHING(load.initialize());
     TS_ASSERT_THROWS_NOTHING(load.setPropertyValue("Filename", "CNCS_7860_event.nxs"));
@@ -1452,16 +1434,19 @@ public:
   }
 
   void test_start_and_end_time_filtered_loading_meta_data_only() {
+    std::cout << "test filtering start and end time only metadata\n" << std::flush;
     const bool metadataonly = true;
     do_test_filtering_start_and_end_filtered_loading(metadataonly);
   }
 
   void test_start_and_end_time_filtered_loading() {
+    std::cout << "test filtering start and end time not only metadata\n" << std::flush;
     const bool metadataonly = false;
     do_test_filtering_start_and_end_filtered_loading(metadataonly);
   }
 
   void testSimulatedFile() {
+    std::cout << "test simulated file ARCS\n" << std::flush;
     Mantid::API::FrameworkManager::Instance();
     LoadEventNexus ld;
     std::string wsname = "ARCS_sim";
@@ -1491,6 +1476,7 @@ public:
   }
 
   void test_extract_nperiod_data() {
+    std::cout << "test extract nperiod data\n" << std::flush;
     LoadEventNexus loader;
 
     loader.setChild(true);
@@ -1556,6 +1542,9 @@ public:
     // only one period has any data in it. It should load, but only one workspace instead
     // of two.
     // See https://github.com/mantidproject/mantid/issues/33729 for details
+
+    std::cout << "test LARMOR file with empty periods\n" << std::flush;
+
     LoadEventNexus loader;
     loader.initialize();
     loader.setPropertyValue("OutputWorkspace", "dummy");
@@ -1571,6 +1560,8 @@ public:
     // bank2: all event_id are out of range and should be ignored (91 events)
     // bank_error: all correct data but should be skipped because this bank is junk output (6052 events)
     // bank_unmapped: all junk data and shouldn't be loaded (91 events)
+
+    std::cout << "test CG3 bad event id\n" << std::flush;
 
     LoadEventNexus load;
     TS_ASSERT_THROWS_NOTHING(load.initialize());
@@ -1589,6 +1580,9 @@ public:
     // Some ISIS runs can be corrupted by instrument noise,
     // resulting in incorrect period numbers.
     // LoadEventNexus should fail in this case.
+
+    std::cout << "test SANS2D on corrupted run\n" << std::flush;
+
     LoadEventNexus loader;
 
     loader.setChild(true);
@@ -1601,6 +1595,8 @@ public:
   void test_load_ILL_no_triggers() {
     // ILL runs don't have any pulses, so in event mode, they are replaced in the event nexus by trigger signals.
     // But some of these nexuses don't have any triggers either, so they are modified to be allowed to be loaded.
+
+    std::cout << "test ILL no triggers\n" << std::flush;
 
     LoadEventNexus loader;
 
@@ -1630,6 +1626,8 @@ public:
   void test_load_ILL_triggers() {
     // ILL runs don't have any pulses, so in event mode, they are replaced in the event nexus by trigger signals.
 
+    std::cout << "test ILL triggers\n" << std::flush;
+
     LoadEventNexus loader;
 
     loader.initialize();
@@ -1657,6 +1655,9 @@ public:
   void test_load_event_nexus_ISIS_exc_inst() {
     // Test new format ISIS event data files which have some instrument information
     // but does not follow Mantid's NexusGeometry specifications
+
+    std::cout << "test load ISIS event data\n" << std::flush;
+
     const std::string file = "MAR28482.nxs";
     LoadEventNexus alg;
     alg.setChild(true);
@@ -1673,6 +1674,7 @@ public:
   }
 
   void test_monotonically_increasing_tofs() {
+    std::cout << "test load monotonically increasing TOFs\n" << std::flush;
     const std::string file = "CG2_monotonically_increasing_pulse_times.nxs.h5";
     const std::string wsName = "dummy_for_child";
     LoadEventNexus alg;
@@ -1700,6 +1702,8 @@ public:
   void test_no_events() {
     // this test was created for the strange case of an event file having no events anywhere
     // originally it was only an empty monitor but the test file was expanded
+
+    std::cout << "test load no events\n" << std::flush;
 
     const std::string filename = "CG3_22446_empty.nxs.h5";
     const std::string wsname = "CG3_empty";
@@ -1747,33 +1751,6 @@ private:
 
 class LoadEventNexusTestPerformance : public CxxTest::TestSuite {
 public:
-#ifdef _WIN32
-  bool windows = true;
-#else
-  bool windows = false;
-#endif // _WIN32
-  void testMultiprocessLoadPrecount() {
-    if (!windows) {
-      LoadEventNexus loader;
-      loader.initialize();
-      loader.setPropertyValue("Filename", "SANS2D00022048.nxs");
-      loader.setPropertyValue("OutputWorkspace", "ws");
-      loader.setPropertyValue("Loadtype", "Multiprocess (experimental)");
-      loader.setPropertyValue("Precount", std::to_string(true));
-      TS_ASSERT(loader.execute());
-    }
-  }
-  void testMultiprocessLoadProducerConsumer() {
-    if (!windows) {
-      LoadEventNexus loader;
-      loader.initialize();
-      loader.setPropertyValue("Filename", "SANS2D00022048.nxs");
-      loader.setPropertyValue("OutputWorkspace", "ws");
-      loader.setPropertyValue("Loadtype", "Multiprocess (experimental)");
-      loader.setPropertyValue("Precount", std::to_string(false));
-      TS_ASSERT(loader.execute());
-    }
-  }
   void testDefaultLoad() {
     LoadEventNexus loader;
     loader.initialize();

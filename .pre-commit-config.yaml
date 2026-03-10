@@ -9,28 +9,37 @@ ci:
 repos:
   # Run fast code improvement/checks before running PR specific helpers.
   - repo: https://github.com/pre-commit/pre-commit-hooks.git
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
         exclude: .patch$
       - id: check-added-large-files
         args: ['--maxkb=4096']
+      - id: check-merge-conflict
       - id: check-xml
       - id: check-yaml
         args: [--allow-multiple-documents]
         exclude: conda/recipes/mantid/meta.yaml|conda/recipes/mantid-developer/meta.yaml|conda/recipes/mantidqt/meta.yaml|conda/recipes/mantiddocs/meta.yaml|conda/recipes/mantidworkbench/meta.yaml
       - id: end-of-file-fixer
         exclude: .md5$|^external/|^tools/|Testing/Tools/cxxtest
-
+      - id: trailing-whitespace
+  - repo: https://github.com/ComPWA/taplo-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: taplo-format # format toml files
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v19.1.3 # updating to a new version should wait until maintenance
+    rev: v22.1.0
     hooks:
     - id: clang-format
       exclude: Testing/Tools/cxxtest|tools|qt/icons/resources/
 
   - repo: https://github.com/mantidproject/pre-commit-hooks.git
-    rev: 17c2842277953a4afcbca26bf84e8956f729e765
+    rev: 312eb3e59ed829275f3b87ece24a04f5345a7c6b
     hooks:
       - id: cmake-missing-pytest-files
         # Exclude sphinx / template file
@@ -45,7 +54,7 @@ repos:
     #- id: cmake-lint <- not ready yet
 
   - repo: https://github.com/rstcheck/rstcheck
-    rev: v6.2.4
+    rev: v6.2.5
     hooks:
       - id: rstcheck
         additional_dependencies: [sphinx]
@@ -58,11 +67,36 @@ repos:
           ^docs/source/techniques/.*
           )$
 
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+        - mdformat-gfm # github flavored markdown
+        - mdformat-myst # myst-parser
+        - mdformat-ruff # ruff format code snippets
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    rev: v0.15.4
     # ruff must appear before black in the list of hooks
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
         exclude: scripts/templates/reference/|Testing/Tools/cxxtest
+
+  - repo: local
+    hooks:
+      - id: pixi-deps
+        name: pixi-dependency-updater
+        language: python
+        entry: python tools/dependencies/pixi_dependency_updater.py
+        files: |
+          (?x)^(
+          ^conda/recipes/mantid-developer/recipe.yaml$|
+          ^conda/recipes/conda_build_config.yaml$|
+          ^pixi.toml$|
+          ^pixi.lock$
+          )$
+        additional_dependencies:
+          - pyyaml

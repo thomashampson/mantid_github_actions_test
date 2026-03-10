@@ -31,8 +31,7 @@ Importing this module starts the FrameworkManager instance.
 # std libs
 from collections import OrderedDict, namedtuple
 from contextlib import contextmanager
-import datetime
-from dateutil.parser import parse as parse_date
+from datetime import datetime
 import os
 import sys
 
@@ -50,10 +49,16 @@ from mantid.kernel.funcinspect import (
 
 # register matplotlib projection
 try:
-    from mantid import plots  # noqa
-    from mantid.plots._compatability import plotSpectrum, plotBin  # noqa
+    from mantid import plots
+    from mantid.plots._compatability import plotSpectrum, plotBin
 except ImportError:
-    pass  # matplotlib is unavailable
+
+    def notSupported(*args, **kwargs):
+        raise ModuleNotFoundError("Plotting is not supported by default. Please install matplotlib to enable plotting.")
+
+    plots = notSupported
+    plotSpectrum = notSupported
+    plotBin = notSupported
 
 from mantid.kernel._aliases import *
 from mantid.api._aliases import *
@@ -163,8 +168,7 @@ def Load(*args, **kwargs):
     # then raise a more helpful error than what we would get from an algorithm
     if lhs[0] == 0 and "OutputWorkspace" not in kwargs:
         raise RuntimeError(
-            "Unable to set output workspace name. Please either assign the output of "
-            "Load to a variable or use the OutputWorkspace keyword."
+            "Unable to set output workspace name. Please either assign the output of Load to a variable or use the OutputWorkspace keyword."
         )
 
     lhs_args = _get_args_from_lhs(lhs, algm)
@@ -246,7 +250,7 @@ def StartLiveData(*args, **kwargs):
     # Check for any properties that aren't known and warn they will not be used
     for key in list(final_keywords.keys()):
         if key not in algm:
-            logger.warning("You've passed a property (%s) to StartLiveData() " "that doesn't apply to this Instrument." % key)
+            logger.warning("You've passed a property (%s) to StartLiveData() that doesn't apply to this Instrument." % key)
             del final_keywords[key]
 
     set_properties(algm, **final_keywords)
@@ -450,7 +454,7 @@ def CutMD(*args, **kwargs):  # noqa: C901
     # Ensure the output names we were given are valid
     if handling_multiple_workspaces:
         if not isinstance(out_names, list):
-            raise RuntimeError("Multiple OutputWorkspaces must be given as a list when" " processing multiple InputWorkspaces.")
+            raise RuntimeError("Multiple OutputWorkspaces must be given as a list when processing multiple InputWorkspaces.")
     else:
         # We wrap in a list for our convenience. The user must not pass us one though.
         if not isinstance(out_names, list):
@@ -1004,7 +1008,7 @@ def _create_algorithm_function(name, version, algm_object):  # noqa: C901
                 deprecated = algm_object.aliasDeprecated()  # non-empty string when alias set to be deprecated
                 if deprecated:
                     try:
-                        parse_date(deprecated)
+                        datetime.fromisoformat(deprecated)
                     except ValueError:
                         deprecated = ""
                         logger.error(f"Alias deprecation date {deprecated} must be in ISO8601 format")
@@ -1037,7 +1041,7 @@ def _create_algorithm_function(name, version, algm_object):  # noqa: C901
 
                 # Check at runtime whether to throw upon alias deprecation.
                 if self._alias and self._alias.deprecated:
-                    deprecated = parse_date(self._alias.deprecated) < datetime.datetime.today()
+                    deprecated = datetime.fromisoformat(self._alias.deprecated) < datetime.today()
                     deprecated_action = ConfigService.Instance().get("algorithms.alias.deprecated", "Log").lower()
                     if deprecated and deprecated_action == "raise":
                         raise RuntimeError(f"Use of algorithm alias {self._alias.name} not allowed. Use {name} instead")
@@ -1340,7 +1344,7 @@ try:
         logger.information("Path to plugins manifest is empty. The python plugins will not be loaded.")
     elif not os.path.exists(plugins_manifest_path):
         logger.warning(
-            "The path to the python plugins manifest is invalid. The built in python plugins will " "not be loaded into the simpleapi."
+            "The path to the python plugins manifest is invalid. The built in python plugins will not be loaded into the simpleapi."
         )
     else:
         with open(plugins_manifest_path) as manifest:

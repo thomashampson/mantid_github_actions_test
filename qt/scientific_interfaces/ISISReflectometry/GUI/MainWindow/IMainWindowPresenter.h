@@ -31,7 +31,7 @@ public:
   virtual bool isProcessPartialGroupPrevented() const = 0;
   virtual bool isRoundChecked() const = 0;
   virtual int &getRoundPrecision() const = 0;
-  virtual boost::optional<int> roundPrecision() const = 0;
+  virtual std::optional<int> roundPrecision() const = 0;
   virtual bool isCloseEventPrevented() = 0;
   virtual bool isCloseBatchPrevented(int batchIndex) const = 0;
   virtual bool isOverwriteBatchPrevented(int tabIndex) const = 0;
@@ -48,6 +48,8 @@ public:
   virtual Mantid::Geometry::Instrument_const_sptr instrument() const = 0;
   virtual std::string instrumentName() const = 0;
   virtual bool discardChanges(std::string const &message) const = 0;
+  virtual std::string encodeBatchToStr(const std::vector<std::string> &jsonKey) const = 0;
+
   virtual ~IMainWindowPresenter() = default;
 };
 } // namespace ISISReflectometry

@@ -9,7 +9,6 @@
 #include "MantidAPI/FileProperty.h"
 #include "MantidAPI/ISpectrum.h"
 #include "MantidDataObjects/SpecialWorkspace2D.h"
-#include "MantidKernel/System.h"
 
 #include <Poco/DOM/AutoPtr.h>
 #include <Poco/DOM/DOMWriter.h>
@@ -62,6 +61,10 @@ void SaveMask::exec() {
   }
 
   std::string outxmlfilename = this->getPropertyValue("OutputFile");
+  if (!outxmlfilename.ends_with(".xml")) {
+    outxmlfilename += ".xml";
+    setPropertyValue("OutputFile", outxmlfilename);
+  }
 
   // 2. Convert Workspace to ...
   std::vector<detid_t> detid0s;

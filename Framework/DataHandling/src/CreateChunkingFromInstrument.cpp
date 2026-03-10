@@ -16,12 +16,10 @@
 #include "MantidKernel/ListValidator.h"
 #include "MantidKernel/OptionalBool.h"
 #include "MantidKernel/StringTokenizer.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 #include <algorithm>
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
 
 namespace Mantid::DataHandling {
 using namespace Mantid::API;
@@ -297,7 +295,7 @@ Instrument_const_sptr CreateChunkingFromInstrument::getInstrument() {
 
     // read information from the nexus file itself
     try {
-      NeXus::File nxsfile(filename);
+      Nexus::File nxsfile(filename);
 
       // get the run start time
       string start_time;
@@ -311,7 +309,7 @@ Instrument_const_sptr CreateChunkingFromInstrument::getInstrument() {
       nxsfile.closeGroup();
 
       // Test if IDF exists in file, move on quickly if not
-      nxsfile.openPath("instrument/instrument_xml");
+      nxsfile.openAddress("instrument/instrument_xml");
       nxsfile.close();
       auto loadInst = createChildAlgorithm("LoadIDFFromNexus", 0.0, 0.2);
       // Now execute the Child Algorithm. Catch and log any error, but don't
@@ -332,7 +330,7 @@ Instrument_const_sptr CreateChunkingFromInstrument::getInstrument() {
       else
         g_log.information("No IDF loaded from Nexus file.");
 
-    } catch (::NeXus::Exception &) {
+    } catch (Nexus::Exception const &) {
       g_log.information("No instrument definition found in " + filename + " at " + top_entry_name + "/instrument");
     }
   }
@@ -412,14 +410,14 @@ void CreateChunkingFromInstrument::exec() {
       throw std::runtime_error("Failed to find any banks in the instrument");
 
     // fill in the table workspace
-    for (auto &group : grouping) {
+    for (const auto &group : grouping) {
       stringstream banks;
       for (const auto &bank : group.second) {
         banks << bank << ",";
       }
       // remove the trailing comma
       string banksStr = banks.str();
-      banksStr = banksStr.substr(0, banksStr.size() - 1);
+      banksStr.pop_back();
 
       // add it to the table
       TableRow row = strategy->appendRow();

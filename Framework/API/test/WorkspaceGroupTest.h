@@ -12,7 +12,6 @@
 #include "MantidFrameworkTestHelpers/FakeObjects.h"
 #include "MantidKernel/Exception.h"
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
 #include "MantidKernel/WarningSuppressions.h"
 #include "PropertyManagerHelper.h"
@@ -29,6 +28,10 @@ using namespace Mantid::Kernel;
 class WorkspaceGroupTest_WorkspaceGroupObserver {
   Poco::NObserver<WorkspaceGroupTest_WorkspaceGroupObserver, Mantid::API::GroupUpdatedNotification>
       m_workspaceGroupUpdateObserver;
+
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  WorkspaceGroupTest_WorkspaceGroupObserver(const WorkspaceGroupTest_WorkspaceGroupObserver &) = delete;
+  WorkspaceGroupTest_WorkspaceGroupObserver &operator=(const WorkspaceGroupTest_WorkspaceGroupObserver &) = delete;
 
 public:
   bool received;
@@ -113,6 +116,24 @@ public:
                                   " -- ws5\n";
     group->sortMembersByName();
     TS_ASSERT_EQUALS(expected2, group->toString());
+    AnalysisDataService::Instance().clear();
+  }
+
+  void testReorderMembersWithIndices() {
+    WorkspaceGroup_sptr group = makeGroup();
+
+    group->reorderMembersWithIndices({2, 1, 0});
+    std::vector<std::string> testVector = {"ws2", "ws1", "ws0"};
+    TS_ASSERT_EQUALS(group->getNames(), testVector);
+
+    group->reorderMembersWithIndices({1, 2, 0});
+    testVector = {"ws1", "ws0", "ws2"};
+    TS_ASSERT_EQUALS(group->getNames(), testVector);
+
+    group->reorderMembersWithIndices({1, 0, 2});
+    testVector = {"ws0", "ws1", "ws2"};
+    TS_ASSERT_EQUALS(group->getNames(), testVector);
+
     AnalysisDataService::Instance().clear();
   }
 

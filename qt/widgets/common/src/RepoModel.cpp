@@ -47,7 +47,7 @@ const char *nofile_flag = "nofile";
 /// Executes the download from ScriptRepository. This function will be executed
 /// in a separate thread
 static QString download_thread(Mantid::API::ScriptRepository_sptr &pt, const std::string &path) {
-  QString result;
+  QString result("");
   try {
     pt->download(path);
   } catch (Mantid::API::ScriptRepoException &ex) {
@@ -213,7 +213,7 @@ QVariant RepoModel::data(const QModelIndex &index, int role) const {
   using namespace Mantid::API;
   if (!index.isValid())
     return QVariant();
-  auto *item = static_cast<RepoItem *>(index.internalPointer());
+  const auto *item = static_cast<RepoItem *>(index.internalPointer());
   try {
     const QString &path = item->path();
     Mantid::API::ScriptInfo inf;

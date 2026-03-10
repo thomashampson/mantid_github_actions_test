@@ -30,12 +30,7 @@ namespace {
  */
 bool constantIndirectEFixed(const Mantid::API::ExperimentInfo &info, const std::vector<Mantid::detid_t> &detIDs) {
   const auto e = info.getEFixed(detIDs[0]);
-  for (size_t i = 1; i < detIDs.size(); ++i) {
-    if (e != info.getEFixed(detIDs[i])) {
-      return false;
-    }
-  }
-  return true;
+  return std::all_of(detIDs.cbegin() + 1, detIDs.cend(), [&](const auto &detID) { return e == info.getEFixed(detID); });
 }
 
 constexpr double R = 1.0; // This will be the default L2 distance.
@@ -310,7 +305,7 @@ std::array<double, 4> SparseWorkspace::inverseDistanceWeights(const std::array<d
  *  @param distanceStep The distance between detector indices
  *  @return An interpolated histogram.
  */
-HistogramData::HistogramY SparseWorkspace::secondDerivative(const std::array<size_t, 3> indices,
+HistogramData::HistogramY SparseWorkspace::secondDerivative(const std::array<size_t, 3> &indices,
                                                             const double distanceStep) const {
   HistogramData::HistogramY avgSecondDeriv(blocksize());
 

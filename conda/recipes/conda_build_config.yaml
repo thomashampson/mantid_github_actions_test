@@ -1,50 +1,59 @@
-cdt_name:
-  - cos7
 c_compiler:
   - gcc                      # [linux]
   - clang                    # [osx]
-  - vs2019                   # [win]
-c_compiler_version:            # [unix]
-  - 18                         # [osx]
-  - 13                         # [linux]
+  - vs2022                   # [win]
+c_compiler_version:          # [unix]
+  - '18.*'                   # [osx]
+  - '13.*'                   # [linux]
 cxx_compiler:
   - gxx                      # [linux]
   - clangxx                  # [osx]
-  - vs2019                   # [win]
-cxx_compiler_version:          # [unix]
-  - 18                         # [osx]
-  - 13                         # [linux]
-llvm_openmp:                   # [osx]
-  - 18                         # [osx]
+  - vs2022                   # [win]
+cxx_compiler_version:        # [unix]
+  - '18.*'                   # [osx]
+  - '13.*'                   # [linux]
+llvm_openmp:                 # [osx]
+  - '18.*'                   # [osx]
+c_stdlib:                    # [linux]
+  - sysroot                  # [linux]
+c_stdlib_version:            # [linux]
+  - '2.17.*'                 # [linux]
 
 python:
-  - 3.10
+  - '3.11.*'
 
-libboost_devel:
-  - 1.84 # Aim to follow conda-forge
-
-libboost_python_devel:
-  - 1.84 # Aim to follow conda-forge
+# Aim to follow conda-forge
+libboost:
+  - '1.88.*'  # [win or linux]
+  - '1.86.*'  # [osx]
 
 cmake:
   - '>=3.21.0'
 
 # 1.10.0 Produces a warning in Framework/Geometry/src/Crystal/HKLFilter.cpp
 doxygen:
-  - 1.9.*
+  - '1.9.*'
 
 eigen:
-  - 3.4.*
+  - '3.4.*'
+
+hdf4:
+  - '4.2.*'
 
 hdf5: # this is to move to libcurl>=8.4
   - '>1.14.0,<1.15'
 
+gdk_pixbuf:
+  - '==2.42.12 hed59a49_0' # [win]
+
 graphviz:
   - '>=2.47.0'
 
-# this must match the version in the developer dependencies
-jemalloc:
-  - 5.2.0
+gmock:
+  - '==1.17.0'
+
+gtest:
+  - '==1.17.0'
 
 jsoncpp:
   - '>=1.9.4,<2'
@@ -52,109 +61,122 @@ jsoncpp:
 libglu:
   - '>=9.0'
 
-# Not a primary dependency, but pinning to avoid a couple of unit test failures
-mkl:
-  - 2024.1.0
+mantid_sphinx_theme:
+  - '>=0.1.0,<1'
 
+#v2.3.5 caused seg faults on Mantid conda versions and large numbers of tests failing
 muparser:
-  - '>=2.3.2'
+  - '>=2.3.2, <2.3.5'
 
-nexus:
-  - 4.4.*
-# We follow conda-forge and build with the lowest supported version of numpy for forward compatibility.
+mystparser:
+  - '>=5.0.0,<6'
+
+# Aim to build using the latest minor version, and rely on numpy's generous backward compatibility.
 numpy:
-  - 2.0.*
+  - '2.1.*'
 
 matplotlib:
-  - 3.9.*
+  - '3.9.*'
 
 mslice:
-  - '2.10'
+  - '2.14.*'
 
 ninja:
   - '>=1.10.2'
 
 # Use novtk version, otherwise a lot of extra packages are installed, including qt6-main, which can cause issues when launching on Windows
+# Fix: pin to 7.* to avoid issue with 7_9_1 (See: https://github.com/conda-forge/occt-feedstock/pull/124)
 occt:
-  - '=*=novtk*'
+  - '7.* novtk*'
 
 # Fix the version to avoid updates being pulled in automatically, which might change the Reflectometry ORSO file content or layout and cause tests to fail.
 orsopy:
-  - 1.2.1
+  - '==1.2.1'
 
-# 1.12.2 introduced an unguarded #define NOMINMAX which causes a compiler warning.
-# It's resolved on their devel branch but not yet included in a release, as of 1.12.5.
 poco:
-  - '1.12.1|>=1.12.6,!=1.14.0'
+  - '>=1.14'
 
 psutil:
   - '>=5.8.0'
 
-sphinx:
-  - '>=4.5.*'
+pydantic:
+  - '>=2.11.4,<3'
 
-sphinx_bootstrap_theme:
-  - 0.8.1
+# Version 3.3.0 introduces dependency warnings which are being triggered by matplotlib
+pyparsing:
+  - '<3.3.0'
+
+sphinx:
+  - '>=9.0,<10'
 
 scipy:
-  - '>=1.10.0'
+  - '>=1.16.0,<1.17'
 
 pip:
   - '>=21.0.1'
 
+pystog:
+  - '>=0.5.0'
+
 pyqt:
   - '>=5.15,<6'
 
-python_dateutil:
-  - '>=2.8.1'
+pyqt5_sip:
+  - '<12.13'
+
+# v0.45 and above addresses vtk compatibility issues by pinning in the pyvista feedstock.
+pyvista:
+  - '>=0.46'
 
 pyyaml:
   - '>=5.4.1'
 
 # Pins qt to a specific version to avoid gui rendering problems in certain versions
 qt_main:
-  - 5.15.8
+  - '5.15.*'
 
 # 5.4.2 crashes the jupyter console. 5.5.0 raises a TypeError when using tab completion.
 qtconsole:
   - '>5.5.0'
 
 qscintilla2:
-  - 2.13
+  - '2.13.*'
 
 # 2.4.2 fails workbench.test_mainwindow.test_mainwindow which uses isinstance()
 qtpy:
   - '>=2.4,!=2.4.2'
 
-tbb:
-  - 2021
+# We must pin this because it is known to be particularly unstable (especially in system tests).
+quasielasticbayes:
+  - '==0.3.0'
 
-texlive_core:
-  - '>=20180414'
+# There have previously been API breaking changes in patch version updates to quickBayes,
+# so pin this to the patch version number.
+quickbayes:
+  - '==1.0.2'
+
+tbb:
+  - '2021.*'
 
 toml:
   - '>=0.10.2'
 # Keep gsl a specific version to reduce changes in our fitting
 gsl:
-  - 2.7
+  - '2.8.*'
 
-# v0.3.23 causes a hang on osx for some systemtests, v0.3.24 causes a unit test failure that needs investigation, v0.3.25 causes a system test failure on linux, v0.3.28 causes unit test failures on osx and system test failures on linux.
+# v0.3.23 causes a hang on osx for some system tests, v0.3.24 causes a unit test failure that needs investigation, v0.3.25 causes a system test failure on linux, v0.3.28 causes unit test failures on osx and system test failures on linux, v0.3.29 causes failures on macOS and linux.
+# Just pin it to 0.3.27 for simplicity, rather than '!=0.3.23,!=0.3.24,!=0.3.25,!=0.3.28','!=0.3.29'
 libopenblas:
-  - '!=0.3.23,!=0.3.24,!=0.3.25, !=0.3.28'
+  - '==0.3.27'
 
+# currently pinning seekpath in mantid-developer and mantid to use v2.1.0 build 2
+# which does not require future https://github.com/conda-forge/seekpath-feedstock/pull/15/
+# please remove this comment and the pins in those recipes when euphonic and seekpath release new versions
 euphonic:
-  - '>=1.2.1,<2.0'
+  - '>=1.4.5,<2.0'
 
 librdkafka:
   - '>=1.6.0'
 
-# 6.8.0 causes issues in mantidqt CMake when cross compiling.
-sip:
-  - <=6.7.11
-
 versioningit:
   - '>=2.1'
-
-pin_run_as_build:
-    boost:
-      max_pin: x.x

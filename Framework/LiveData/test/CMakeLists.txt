@@ -10,14 +10,24 @@ if(CXXTEST_FOUND)
   set(TESTHELPER_SRCS KafkaTesting.h KafkaTestThreadHelper.h TestDataListener.cpp TestGroupDataListener.cpp)
 
   cxxtest_add_test(LiveDataTest ${TEST_FILES})
-  target_link_libraries(LiveDataTest PRIVATE Mantid::LiveData gmock)
+  target_link_libraries(LiveDataTest PRIVATE Mantid::LiveData)
   target_include_directories(LiveDataTest PRIVATE ../src/)
   add_framework_test_helpers(LiveDataTest)
+
+  if(TARGET GTest::gmock AND TARGET GTest::gtest)
+    target_link_libraries(LiveDataTest PRIVATE GTest::gmock GTest::gtest)
+  else()
+    target_link_libraries(LiveDataTest PRIVATE gmock gtest)
+  endif()
   add_dependencies(LiveDataTest DataHandling Algorithms MDAlgorithms)
   add_dependencies(FrameworkTests LiveDataTest)
   # Test data
-  add_dependencies(LiveDataTest StandardTestData)
+  add_dependencies(LiveDataTest UnitTestData)
 
   # Add to the 'FrameworkTests' group in VS
   set_property(TARGET LiveDataTest PROPERTY FOLDER "UnitTests")
+
+  # Run MonitorLiveDataTest in serial mode to avoid resource over-subscription problems when allowing ctest to use all
+  # cores.
+  set_tests_properties(LiveDataTest_MonitorLiveDataTest PROPERTIES RUN_SERIAL TRUE)
 endif()

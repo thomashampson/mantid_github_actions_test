@@ -14,7 +14,6 @@
 #include "MantidDataObjects/PeaksWorkspace.h"
 #include "MantidFrameworkTestHelpers/ComponentCreationHelper.h"
 #include "MantidGeometry/Instrument.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/Timer.h"
 #include "MantidKernel/V3D.h"
 #include <cxxtest/TestSuite.h>
@@ -42,9 +41,10 @@ public:
   /** Create the (blank) MDEW */
   static void createMDEW() {
     // ---- Start with empty MDEW ----
-    FrameworkManager::Instance().exec("CreateMDWorkspace", 14, "Dimensions", "3", "Extents", "-10,10,-10,10,-10,10",
-                                      "Names", "h,k,l", "Units", "-,-,-", "SplitInto", "5", "MaxRecursionDepth", "2",
-                                      "OutputWorkspace", "PeakIntensityVsRadiusTest_MDEWS");
+    FrameworkManager::Instance().exec("CreateMDWorkspace", 16, "Dimensions", "3", "Extents", "-10,10,-10,10,-10,10",
+                                      "Names", "h,k,l", "Units", "r.l.u.,r.l.u.,r.l.u.", "Frames", "HKL,HKL,HKL",
+                                      "SplitInto", "5", "MaxRecursionDepth", "2", "OutputWorkspace",
+                                      "PeakIntensityVsRadiusTest_MDEWS");
   }
 
   //-------------------------------------------------------------------------------

@@ -30,7 +30,7 @@ class FileFinderTest(unittest.TestCase):
         except Exception as e:
             if type(e).__name__ == "ArgumentError":
                 self.fail(
-                    "Expected findRuns to accept a list of strings and a bool as input." " {} error was raised with message {}".format(
+                    "Expected findRuns to accept a list of strings and a bool as input. {} error was raised with message {}".format(
                         type(e).__name__, str(e)
                     )
                 )
@@ -38,6 +38,16 @@ class FileFinderTest(unittest.TestCase):
             # Confirm that it works as above
             self.assertEqual(len(runs), 1)
             self.assertTrue(os.path.exists(runs[0]))
+
+    def test_multiple_different_runs(self):
+        runs = FileFinder.findRuns("HB2C_7000-7001,475936")
+        self.assertEqual(len(runs), 3)
+        for run in runs:
+            self.assertTrue(os.path.exists(run))
+
+        self.assertEqual(os.path.basename(runs[0]), "HB2C_7000.nxs.h5")
+        self.assertEqual(os.path.basename(runs[1]), "HB2C_7001.nxs.h5")
+        self.assertEqual(os.path.basename(runs[2]), "HB2C_475936.nxs.h5")
 
 
 if __name__ == "__main__":

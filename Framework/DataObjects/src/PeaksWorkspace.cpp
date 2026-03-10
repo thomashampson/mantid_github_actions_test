@@ -13,11 +13,7 @@
 #include "MantidKernel/IPropertyManager.h"
 #include "MantidKernel/Logger.h"
 #include "MantidKernel/UnitConversion.h"
-
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
+#include "MantidNexus/NexusFile.h"
 
 #include <cmath>
 
@@ -142,8 +138,8 @@ void PeaksWorkspace::removePeaks(std::vector<int> badPeaks) {
     return;
   // if index of peak is in badPeaks remove
   int ip = -1;
-  auto it = std::remove_if(m_peaks.begin(), m_peaks.end(), [&ip, badPeaks](Peak &pk) {
-    (void)pk;
+  auto it = std::remove_if(m_peaks.begin(), m_peaks.end(), [&ip, badPeaks](const Peak &pk) {
+    UNUSED_ARG(pk);
     ip++;
     return std::any_of(badPeaks.cbegin(), badPeaks.cend(), [ip](int badPeak) { return badPeak == ip; });
   });
@@ -156,7 +152,7 @@ void PeaksWorkspace::removePeaks(std::vector<int> badPeaks) {
  */
 void PeaksWorkspace::addPeak(const Geometry::IPeak &ipeak) {
   if (dynamic_cast<const Peak *>(&ipeak)) {
-    m_peaks.emplace_back((const Peak &)ipeak);
+    m_peaks.emplace_back(static_cast<const Peak &>(ipeak));
   } else {
     m_peaks.emplace_back(Peak(ipeak));
   }
@@ -183,8 +179,8 @@ void PeaksWorkspace::addPeak(Peak &&peak) { m_peaks.emplace_back(peak); }
  * @param peakNum :: index of the peak to get.
  * @return a reference to a Peak object.
  */
-Peak &PeaksWorkspace::getPeak(const int peakNum) {
-  if (peakNum >= static_cast<int>(m_peaks.size()) || peakNum < 0) {
+Peak &PeaksWorkspace::getPeak(size_t const peakNum) {
+  if (peakNum >= m_peaks.size()) {
     throw std::invalid_argument("PeaksWorkspace::getPeak(): peakNum is out of range.");
   }
   return m_peaks[peakNum];
@@ -195,8 +191,8 @@ Peak &PeaksWorkspace::getPeak(const int peakNum) {
  * @param peakNum :: index of the peak to get.
  * @return a reference to a Peak object.
  */
-const Peak &PeaksWorkspace::getPeak(const int peakNum) const {
-  if (peakNum >= static_cast<int>(m_peaks.size()) || peakNum < 0) {
+const Peak &PeaksWorkspace::getPeak(size_t const peakNum) const {
+  if (peakNum >= m_peaks.size()) {
     throw std::invalid_argument("PeaksWorkspace::getPeak(): peakNum is out of range.");
   }
   return m_peaks[peakNum];
@@ -313,8 +309,8 @@ std::vector<std::pair<std::string, std::string>> PeaksWorkspace::peakInfo(const 
   int seqNum = -1;
   bool hasOneRunNumber = true;
   int runNum = -1;
-  int NPeaks = getNumberPeaks();
   try {
+    int NPeaks = getNumberPeaks();
     double minDist = 10000000;
     for (int i = 0; i < NPeaks; i++) {
       Peak pk = getPeak(i);
@@ -649,7 +645,7 @@ std::shared_ptr<const Mantid::API::Column> PeaksWorkspace::getColumn(size_t inde
   return m_columns[index];
 }
 
-void PeaksWorkspace::saveNexus(::NeXus::File *file) const {
+void PeaksWorkspace::saveNexus(Nexus::File *file) const {
 
   // Number of Peaks
   const size_t np(m_peaks.size());
@@ -866,9 +862,7 @@ void PeaksWorkspace::saveNexus(::NeXus::File *file) const {
   file->putAttr("units", "Not known"); // Units may need changing when known
   file->closeData();
 
-  std::vector<int> qlab_dims;
-  qlab_dims.emplace_back(static_cast<int>(m_peaks.size()));
-  qlab_dims.emplace_back(3);
+  const Nexus::DimVector qlab_dims{m_peaks.size(), 3};
 
   // Integer HKL column
   file->writeData("column_19", intHKL, qlab_dims);
@@ -887,9 +881,7 @@ void PeaksWorkspace::saveNexus(::NeXus::File *file) const {
   file->closeData();
 
   // Goniometer Matrix Column
-  std::vector<int> array_dims;
-  array_dims.emplace_back(static_cast<int>(m_peaks.size()));
-  array_dims.emplace_back(9);
+  const Nexus::DimVector array_dims{m_peaks.size(), 9};
   file->writeData("column_15", goniometerMatrix, array_dims);
   file->openData("column_15");
   file->putAttr("name", "Goniometer Matrix");
@@ -898,11 +890,11 @@ void PeaksWorkspace::saveNexus(::NeXus::File *file) const {
   file->closeData();
 
   // Shape
-  std::vector<int64_t> dims;
+  Nexus::DimVector dims;
   dims.emplace_back(np);
   dims.emplace_back(static_cast<int>(maxShapeJSONLength));
   const std::string name = "column_16";
-  file->makeData(name, NeXus::CHAR, dims, false);
+  file->makeData(name, NXnumtype::CHAR, dims, false);
   file->openData(name);
 
   auto toNexus = new char[maxShapeJSONLength * np];
@@ -914,7 +906,7 @@ void PeaksWorkspace::saveNexus(::NeXus::File *file) const {
       toNexus[ii * maxShapeJSONLength + ic] = ' ';
   }
 
-  file->putData((void *)(toNexus));
+  file->putData(toNexus);
 
   delete[] toNexus;
   file->putAttr("units", "Not known"); // Units may need changing when known
@@ -966,8 +958,8 @@ namespace Mantid::Kernel {
 template <>
 DLLExport Mantid::DataObjects::PeaksWorkspace_sptr
 IPropertyManager::getValue<Mantid::DataObjects::PeaksWorkspace_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::DataObjects::PeaksWorkspace_sptr> *>(getPointerToProperty(name));
-  if (prop) {
+  if (const auto *prop =
+          dynamic_cast<PropertyWithValue<Mantid::DataObjects::PeaksWorkspace_sptr> *>(getPointerToProperty(name))) {
     return *prop;
   } else {
     std::string message =
@@ -979,8 +971,8 @@ IPropertyManager::getValue<Mantid::DataObjects::PeaksWorkspace_sptr>(const std::
 template <>
 DLLExport Mantid::DataObjects::PeaksWorkspace_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::PeaksWorkspace_const_sptr>(const std::string &name) const {
-  auto *prop = dynamic_cast<PropertyWithValue<Mantid::DataObjects::PeaksWorkspace_sptr> *>(getPointerToProperty(name));
-  if (prop) {
+  if (const auto *prop =
+          dynamic_cast<PropertyWithValue<Mantid::DataObjects::PeaksWorkspace_sptr> *>(getPointerToProperty(name))) {
     return prop->operator()();
   } else {
     std::string message =

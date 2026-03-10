@@ -12,10 +12,11 @@
 #include "MantidGeometry/Instrument/ParComponentFactory.h"
 #include "MantidGeometry/Instrument/ParameterFactory.h"
 #include "MantidKernel/Cache.h"
+#include "MantidKernel/Logger.h"
 #include "MantidKernel/MultiThreaded.h"
+#include "MantidNexus/NexusFile.h"
 #include <boost/algorithm/string.hpp>
 #include <cstring>
-#include <nexus/NeXusFile.hpp>
 
 #ifdef _WIN32
 #define strcasecmp _stricmp
@@ -1012,7 +1013,7 @@ void ParameterMap::copyFromParameterMap(const IComponent *oldComp, const ICompon
  * @param file :: open NeXus file
  * @param group :: name of the group to create
  */
-void ParameterMap::saveNexus(::NeXus::File *file, const std::string &group) const {
+void ParameterMap::saveNexus(Nexus::File *file, const std::string &group) const {
   file->makeGroup(group, "NXnote", true);
   file->putAttr("version", 1);
   file->writeData("author", "");

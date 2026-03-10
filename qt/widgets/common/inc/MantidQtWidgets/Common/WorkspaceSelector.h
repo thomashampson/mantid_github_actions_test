@@ -64,7 +64,11 @@ public:
   /// Destructor
   ~WorkspaceSelector() override;
 
-  QStringList getWorkspaceTypes() const;
+  // delete copy operations - Poco::NObserver contains std::atomic which is not copyable
+  WorkspaceSelector(const WorkspaceSelector &) = delete;
+  WorkspaceSelector &operator=(const WorkspaceSelector &) = delete;
+
+  const QStringList &getWorkspaceTypes() const;
   void setWorkspaceTypes(const QStringList &types);
   bool showHiddenWorkspaces() const;
   void showHiddenWorkspaces(bool show);
@@ -74,11 +78,11 @@ public:
   void setOptional(bool optional);
   bool isSorted() const;
   void setSorted(bool sorted);
-  QStringList getSuffixes() const;
+  const QStringList &getSuffixes() const;
   void setSuffixes(const QStringList &suffix);
   void setLowerBinLimit(int numberOfBins);
   void setUpperBinLimit(int numberOfBins);
-  QString getValidatingAlgorithm() const;
+  const QString &getValidatingAlgorithm() const;
   void setValidatingAlgorithm(const QString &algName);
   bool isValid() const;
   void refresh();

@@ -72,7 +72,7 @@ InstrumentVisitor::InstrumentVisitor(std::shared_ptr<const Instrument> instrumen
       m_children(std::make_shared<std::vector<std::vector<size_t>>>()),
       m_detectorRanges(std::make_shared<std::vector<std::pair<size_t, size_t>>>()),
       m_componentRanges(std::make_shared<std::vector<std::pair<size_t, size_t>>>()),
-      m_componentIdToIndexMap(std::make_shared<std::unordered_map<Mantid::Geometry::IComponent *, size_t>>()),
+      m_componentIdToIndexMap(std::make_shared<std::unordered_map<Mantid::Geometry::IComponent const *, size_t>>()),
       m_detectorIdToIndexMap(makeDetIdToIndexMap(*m_orderedDetectorIds)),
       m_positions(std::make_shared<std::vector<Eigen::Vector3d>>()),
       m_detectorPositions(std::make_shared<std::vector<Eigen::Vector3d>>(m_orderedDetectorIds->size())),
@@ -155,10 +155,9 @@ size_t InstrumentVisitor::registerComponentAssembly(const ICompAssembly &assembl
   const size_t componentStop = m_assemblySortedComponentIndices->size();
 
   m_detectorRanges->emplace_back(detectorStart, detectorStop);
-  m_componentRanges->emplace_back(std::make_pair(componentStart, componentStop));
+  m_componentRanges->emplace_back(componentStart, componentStop);
 
-  // Now that we know what the index of the parent is we can apply it to the
-  // children
+  // Now that we know what the index of the parent is we can apply it to the children
   for (const auto &child : children) {
     (*m_parentComponentIndices)[child] = componentIndex;
   }
@@ -357,7 +356,7 @@ size_t InstrumentVisitor::size() const { return m_componentIds->size(); }
 
 bool InstrumentVisitor::isEmpty() const { return size() == 0; }
 
-std::shared_ptr<const std::unordered_map<Mantid::Geometry::IComponent *, size_t>>
+std::shared_ptr<const std::unordered_map<Mantid::Geometry::IComponent const *, size_t>>
 InstrumentVisitor::componentIdToIndexMap() const {
   return m_componentIdToIndexMap;
 }

@@ -418,7 +418,6 @@ EventList &EventList::operator+=(const std::vector<Types::Event::TofEvent> &more
   switch (this->eventType) {
   case TOF:
     // Simply push the events
-    this->events->reserve(this->events->size() + more_events.size());
     this->events->insert(this->events->end(), more_events.cbegin(), more_events.cend());
     break;
 
@@ -473,7 +472,6 @@ EventList &EventList::operator+=(const std::vector<WeightedEvent> &more_events) 
 
   case WEIGHTED:
     // Append the two lists
-    this->weightedEvents->reserve(this->weightedEvents->size() + more_events.size());
     this->weightedEvents->insert(weightedEvents->end(), more_events.cbegin(), more_events.cend());
     break;
 
@@ -507,7 +505,6 @@ EventList &EventList::operator+=(const std::vector<WeightedEventNoTime> &more_ev
 
   case WEIGHTED_NOTIME:
     // Simple appending of the two lists
-    this->weightedEventsNoTime->reserve(this->weightedEventsNoTime->size() + more_events.size());
     this->weightedEventsNoTime->insert(weightedEventsNoTime->end(), more_events.cbegin(), more_events.cend());
     break;
   }
@@ -2669,13 +2666,19 @@ std::optional<size_t> EventList::findLogBin(const MantidVec &X, const double tof
  * @param tof :: TOF of the event we are trying to bin
  * @param n_bin :: starting estiamted bin number
  */
-std::optional<size_t> EventList::findExactBin(const MantidVec &X, const double tof, size_t n_bin) {
-  if (tof < X[n_bin])
-    n_bin--;
-  else if (tof >= X[n_bin + 1])
-    n_bin++;
+size_t EventList::findExactBin(const MantidVec &X, const double tof, const size_t n_bin) {
+  // is tof slower than suggested bin
+  auto tof_of_bin = X.cbegin() + n_bin; // boundary suggested
+  if (tof < *tof_of_bin)
+    return std::move(n_bin - 1);
 
-  return n_bin;
+  // is tof higher than suggested bin
+  ++tof_of_bin; // move to next boundary
+  if (tof >= *tof_of_bin)
+    return std::move(n_bin + 1);
+
+  // tof is in the bin
+  return std::move(n_bin);
 }
 
 // --------------------------------------------------------------------------

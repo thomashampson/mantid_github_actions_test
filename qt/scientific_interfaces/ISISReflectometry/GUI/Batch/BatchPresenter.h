@@ -59,7 +59,7 @@ public:
 
   // IBatchPresenter overrides
   void acceptMainPresenter(IMainWindowPresenter *mainPresenter) override;
-  void initInstrumentList(const std::string &selectedInstrument = "") override;
+  std::string initInstrumentList(const std::string &selectedInstrument = "") override;
   void notifyPauseReductionRequested() override;
   void notifyResumeReductionRequested() override;
   void notifyResumeAutoreductionRequested() override;
@@ -95,7 +95,10 @@ public:
   int percentComplete() const override;
   std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps> rowProcessingProperties() const override;
   void notifyPreviewApplyRequested() override;
-  bool hasROIDetectorIDsForPreviewRow() const override;
+  std::map<ROIType, ProcessingInstructions> getMatchingProcessingInstructionsForPreviewRow() const override;
+  std::optional<ProcessingInstructions> getMatchingROIDetectorIDsForPreviewRow() const override;
+  std::string getBatchState(const std::vector<std::string> &jsonKey) const override;
+  std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps> rowProcessingPropertiesDefault() const override;
 
   // WorkspaceObserver overrides
   void postDeleteHandle(const std::string &wsName) override;

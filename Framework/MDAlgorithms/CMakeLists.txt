@@ -8,7 +8,6 @@ set(SRC_FILES
     src/BinaryOperationMD.cpp
     src/BooleanBinaryOperationMD.cpp
     src/CalculateCoverageDGS.cpp
-    src/CentroidPeaksMD.cpp
     src/CentroidPeaksMD2.cpp
     src/ChangeQConvention.cpp
     src/CloneMDWorkspace.cpp
@@ -37,6 +36,7 @@ set(SRC_FILES
     src/CreateMDHistoWorkspace.cpp
     src/CreateMDWorkspace.cpp
     src/CutMD.cpp
+    src/DebyeWallerFactorCorrectionMD.cpp
     src/DgsScatteredTransmissionCorrectionMD.cpp
     src/DisplayNormalizationSetter.cpp
     src/DivideMD.cpp
@@ -85,6 +85,7 @@ set(SRC_FILES
     src/MDTransfQ3D.cpp
     src/MDWSDescription.cpp
     src/MDWSTransform.cpp
+    src/MagneticFormFactorCorrectionMD.cpp
     src/MaskMD.cpp
     src/MergeMD.cpp
     src/MergeMDFiles.cpp
@@ -96,6 +97,7 @@ set(SRC_FILES
     src/PolarizationAngleCorrectionMD.cpp
     src/PowerMD.cpp
     src/PreprocessDetectorsToMD.cpp
+    src/QTransform.cpp
     src/QueryMDWorkspace.cpp
     src/RecalculateTrajectoriesExtents.cpp
     src/ReplicateMD.cpp
@@ -108,6 +110,7 @@ set(SRC_FILES
     src/SliceMD.cpp
     src/SlicingAlgorithm.cpp
     src/SmoothMD.cpp
+    src/SpectralMomentMD.cpp
     src/ThresholdMD.cpp
     src/TransformMD.cpp
     src/TransposeMD.cpp
@@ -127,7 +130,6 @@ set(INC_FILES
     inc/MantidMDAlgorithms/BinaryOperationMD.h
     inc/MantidMDAlgorithms/BooleanBinaryOperationMD.h
     inc/MantidMDAlgorithms/CalculateCoverageDGS.h
-    inc/MantidMDAlgorithms/CentroidPeaksMD.h
     inc/MantidMDAlgorithms/CentroidPeaksMD2.h
     inc/MantidMDAlgorithms/ChangeQConvention.h
     inc/MantidMDAlgorithms/CloneMDWorkspace.h
@@ -153,6 +155,7 @@ set(INC_FILES
     inc/MantidMDAlgorithms/CreateMDHistoWorkspace.h
     inc/MantidMDAlgorithms/CreateMDWorkspace.h
     inc/MantidMDAlgorithms/CutMD.h
+    inc/MantidMDAlgorithms/DebyeWallerFactorCorrectionMD.h
     inc/MantidMDAlgorithms/DgsScatteredTransmissionCorrectionMD.h
     inc/MantidMDAlgorithms/DisplayNormalizationSetter.h
     inc/MantidMDAlgorithms/DivideMD.h
@@ -205,6 +208,7 @@ set(INC_FILES
     inc/MantidMDAlgorithms/MDTransfQ3D.h
     inc/MantidMDAlgorithms/MDWSDescription.h
     inc/MantidMDAlgorithms/MDWSTransform.h
+    inc/MantidMDAlgorithms/MagneticFormFactorCorrectionMD.h
     inc/MantidMDAlgorithms/MaskMD.h
     inc/MantidMDAlgorithms/MergeMD.h
     inc/MantidMDAlgorithms/MergeMDFiles.h
@@ -216,6 +220,7 @@ set(INC_FILES
     inc/MantidMDAlgorithms/PolarizationAngleCorrectionMD.h
     inc/MantidMDAlgorithms/PowerMD.h
     inc/MantidMDAlgorithms/PreprocessDetectorsToMD.h
+    inc/MantidMDAlgorithms/QTransform.h
     inc/MantidMDAlgorithms/QueryMDWorkspace.h
     inc/MantidMDAlgorithms/RecalculateTrajectoriesExtents.h
     inc/MantidMDAlgorithms/ReplicateMD.h
@@ -228,6 +233,7 @@ set(INC_FILES
     inc/MantidMDAlgorithms/SliceMD.h
     inc/MantidMDAlgorithms/SlicingAlgorithm.h
     inc/MantidMDAlgorithms/SmoothMD.h
+    inc/MantidMDAlgorithms/SpectralMomentMD.h
     inc/MantidMDAlgorithms/ThresholdMD.h
     inc/MantidMDAlgorithms/TransformMD.h
     inc/MantidMDAlgorithms/TransposeMD.h
@@ -248,7 +254,6 @@ set(TEST_FILES
     BooleanBinaryOperationMDTest.h
     CalculateCoverageDGSTest.h
     CentroidPeaksMD2Test.h
-    CentroidPeaksMDTest.h
     ChangeQConventionTest.h
     CloneMDWorkspaceTest.h
     CompactMDTest.h
@@ -274,6 +279,7 @@ set(TEST_FILES
     CreateMDTest.h
     CreateMDWorkspaceTest.h
     CutMDTest.h
+    DebyeWallerFactorCorrectionMDTest.h
     DgsScatteredTransmissionCorrectionMDTest.h
     DisplayNormalizationSetterTest.h
     DivideMDTest.h
@@ -318,6 +324,7 @@ set(TEST_FILES
     MDTransfQ3DTest.h
     MDWSDescriptionTest.h
     MDWSTransfTest.h
+    MagneticFormFactorCorrectionMDTest.h
     MaskMDTest.h
     MergeMDFilesTest.h
     MergeMDTest.h
@@ -329,6 +336,7 @@ set(TEST_FILES
     PolarizationAngleCorrectionMDTest.h
     PowerMDTest.h
     PreprocessDetectorsToMDTest.h
+    QTransformTest.h
     QueryMDWorkspaceTest.h
     RecalculateTrajectoriesExtentsTest.h
     ReplicateMDTest.h
@@ -341,6 +349,7 @@ set(TEST_FILES
     SliceMDTest.h
     SlicingAlgorithmTest.h
     SmoothMDTest.h
+    SpectralMomentMDTest.h
     ThresholdMDTest.h
     TransformMDTest.h
     TransposeMDTest.h
@@ -358,11 +367,15 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Use a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidMDAlgorithms/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(MDAlgorithms ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::MDAlgorithms ALIAS MDAlgorithms)
+
+# Use a precompiled header
+target_precompile_headers(
+  MDAlgorithms PRIVATE <MantidAPI/Algorithm.h> <MantidDataObjects/EventWorkspace.h>
+  <MantidDataObjects/MDEventWorkspace.h> <MantidKernel/Exception.h>
+)
 
 target_include_directories(
   MDAlgorithms PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

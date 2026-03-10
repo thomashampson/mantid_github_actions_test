@@ -23,16 +23,18 @@
 #include "MantidGeometry/MDGeometry/QSample.h"
 #include "MantidKernel/Strings.h"
 #include "MantidMDAlgorithms/LoadMD.h"
+#include "MantidNexus/H5Util.h"
+#include <H5Cpp.h>
 
 #include <cxxtest/TestSuite.h>
-
-#include <hdf5.h>
 
 using namespace Mantid;
 using namespace Mantid::DataObjects;
 using namespace Mantid::MDAlgorithms;
 using namespace Mantid::API;
 using namespace Mantid::Kernel;
+using namespace Mantid::Nexus;
+using namespace H5;
 
 class LoadMDTest : public CxxTest::TestSuite {
 public:
@@ -184,8 +186,12 @@ public:
     // ------ Make a ExperimentInfo entry ------------
     ExperimentInfo_sptr ei(new ExperimentInfo());
     ei->mutableRun().setProtonCharge(1.234);
+    ei->mutableRun().addLogData(new Mantid::Kernel::PropertyWithValue<int>("x", 1));
     // TODO: Add instrument
     ws1->addExperimentInfo(ei);
+
+    // check that there are logs before saving
+    TS_ASSERT(!ws1->getExperimentInfo(1)->run().getLogData().empty());
 
     // -------- Save it ---------------
     SaveMD2 saver;
@@ -196,8 +202,8 @@ public:
 
     // Retrieve the full path; delete any pre-existing file
     std::string filename = saver.getPropertyValue("Filename");
-    if (Poco::File(filename).exists())
-      Poco::File(filename).remove();
+    if (std::filesystem::exists(filename))
+      std::filesystem::remove(filename);
 
     TS_ASSERT_THROWS_NOTHING(saver.execute(););
     TS_ASSERT(saver.isExecuted());
@@ -225,6 +231,9 @@ public:
     if (!iws)
       return;
 
+    // check that the logs also loaded
+    TS_ASSERT(!iws->getExperimentInfo(1)->run().getLogData().empty())
+
     // Perform the full comparison
     auto ws = std::dynamic_pointer_cast<MDEventWorkspace<MDLeanEvent<nd>, nd>>(iws);
     do_compare_MDEW(ws, ws1, BoxStructureOnly);
@@ -251,8 +260,8 @@ public:
     if (deleteWorkspace) {
       ws->clearFileBacked(false);
       AnalysisDataService::Instance().remove(outWSName);
-      if (Poco::File(filename).exists())
-        Poco::File(filename).remove();
+      if (std::filesystem::exists(filename))
+        std::filesystem::remove(filename);
     }
   }
 
@@ -327,7 +336,7 @@ public:
     if (!loader)
       return;
 
-    ::NeXus::File *file = loader->getFile();
+    Nexus::File *file = loader->getFile();
     TSM_ASSERT_LESS_THAN("The event_data field in the file must be at least 10002 long.", 10002,
                          file->getInfo().dims[0]);
 
@@ -408,8 +417,8 @@ public:
     TS_ASSERT_THROWS_NOTHING(saver.setPropertyValue("Filename", "LoadMDTest2.nxs"));
     // clean up possible rubbish from the previous runs
     std::string fullName = saver.getPropertyValue("Filename");
-    if (Poco::File(fullName).exists())
-      Poco::File(fullName).remove();
+    if (std::filesystem::exists(fullName))
+      std::filesystem::remove(fullName);
 
     TS_ASSERT_THROWS_NOTHING(saver.execute(););
     TS_ASSERT(saver.isExecuted());
@@ -438,8 +447,8 @@ public:
 
     AnalysisDataService::Instance().remove(outWSName);
     try {
-      if (Poco::File(filename).exists())
-        Poco::File(filename).remove();
+      if (std::filesystem::exists(filename))
+        std::filesystem::remove(filename);
     } catch (...) { /* ignore windows error */
     }
   }
@@ -481,8 +490,8 @@ public:
       TS_ASSERT_EQUALS(ws->getIsMaskedAt(i), newWS->getIsMaskedAt(i));
     }
 
-    if (Poco::File(filename).exists())
-      Poco::File(filename).remove();
+    if (std::filesystem::exists(filename))
+      std::filesystem::remove(filename);
   }
 
   /** Run SaveMD2 with the MDHistoWorkspace */
@@ -522,8 +531,8 @@ public:
       TS_ASSERT_EQUALS(ws->getIsMaskedAt(i), newWS->getIsMaskedAt(i));
     }
 
-    if (Poco::File(filename).exists())
-      Poco::File(filename).remove();
+    if (std::filesystem::exists(filename))
+      std::filesystem::remove(filename);
   }
 
   void test_histo1D() {
@@ -618,7 +627,7 @@ public:
   }
 
   Mantid::API::IMDWorkspace_sptr testSaveAndLoadWorkspace(const Mantid::API::IMDWorkspace_sptr &inputWS,
-                                                          const char *rootGroup, const bool rmCoordField = false) {
+                                                          std::string rootGroup, const bool rmCoordField = false) {
     const std::string fileName = "SaveMDSpecialCoordinatesTest.nxs";
     SaveMD2 saveAlg;
     saveAlg.setChild(true);
@@ -630,19 +639,8 @@ public:
     std::string this_fileName = saveAlg.getProperty("Filename");
 
     if (rmCoordField) {
-      // Remove the coordinate_system entry so it falls back on the log. NeXus
-      // can't do this
-      // so use the HDF5 API directly
-      auto fid = H5Fopen(this_fileName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
-      auto gid = H5Gopen(fid, rootGroup, H5P_DEFAULT);
-      if (gid > 0) {
-        H5Ldelete(gid, "coordinate_system", H5P_DEFAULT);
-        H5Gclose(gid);
-      } else {
-        TS_FAIL("Cannot open MDEventWorkspace group. Test file has unexpected "
-                "structure.");
-      }
-      H5Fclose(fid);
+      H5File h5file(this_fileName.c_str(), H5F_ACC_RDWR, Mantid::Nexus::H5Util::defaultFileAcc());
+      H5Util::deleteObjectLink(h5file, rootGroup + "/coordinate_system");
     }
 
     LoadMD loadAlg;
@@ -655,8 +653,8 @@ public:
     loadAlg.execute();
     TS_ASSERT(loadAlg.isExecuted());
 
-    if (Poco::File(this_fileName).exists()) {
-      Poco::File(this_fileName).remove();
+    if (std::filesystem::exists(this_fileName)) {
+      std::filesystem::remove(this_fileName);
     }
 
     return loadAlg.getProperty("OutputWorkspace");
@@ -703,8 +701,8 @@ public:
     TS_ASSERT_EQUALS(affMat[0][1], 1.0);
     TS_ASSERT_EQUALS(affMat[2][0], 1.0);
 
-    if (Poco::File(this_filename).exists()) {
-      Poco::File(this_filename).remove();
+    if (std::filesystem::exists(this_filename)) {
+      std::filesystem::remove(this_filename);
     }
 
     AnalysisDataService::Instance().remove("SaveMDAffineTest_ws");
@@ -768,8 +766,8 @@ public:
     // Only LoadMD should be in the history
     TS_ASSERT_EQUALS(newWSnh->getHistory().size(), 1);
 
-    if (Poco::File(this_filename).exists()) {
-      Poco::File(this_filename).remove();
+    if (std::filesystem::exists(this_filename)) {
+      std::filesystem::remove(this_filename);
     }
 
     AnalysisDataService::Instance().remove("HistoryEvTest_ws");
@@ -815,8 +813,8 @@ public:
                       histoNormalization);
 
     // Clean up
-    if (Poco::File(this_filename).exists()) {
-      Poco::File(this_filename).remove();
+    if (std::filesystem::exists(this_filename)) {
+      std::filesystem::remove(this_filename);
     }
 
     AnalysisDataService::Instance().remove("SaveMDEventNormalizationFlagTest_ws");
@@ -949,6 +947,10 @@ public:
   }
 
   void test_loading_MD_with_missing_parameter_map() {
+    // NOTE if changes are made to Nexus::File::getAttr that create an error
+    // then this test will be one of the places the error appears
+    std::cout << "Test Loading MD with missing parameter map\n" << std::flush;
+
     // Arrange
     std::string filename("md_missing_paramater_map.nxs");
     std::string outWSName("LoadMD_md_missing_paramater_map");
@@ -984,6 +986,7 @@ public:
     if (iws) {
       AnalysisDataService::Instance().remove(outWSName);
     }
+    std::cout << "finished loading missing parameter map\n" << std::flush;
   }
 
   void test_simple_file() {

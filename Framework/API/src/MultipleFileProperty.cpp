@@ -12,12 +12,11 @@
 #include "MantidKernel/MultiFileValidator.h"
 #include "MantidKernel/Property.h"
 #include "MantidKernel/PropertyHelper.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/VectorHelper.h"
 
-#include <Poco/Path.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/regex.hpp>
+#include <filesystem>
 
 #include <algorithm>
 #include <cctype>
@@ -195,10 +194,10 @@ std::string MultipleFileProperty::setValueAsSingleFile(const std::string &propVa
     return SUCCESS;
   }
 
-  // Use a slave FileProperty to do the job for us.
-  FileProperty slaveFileProp("Slave", "", FileProperty::Load, m_exts, Direction::Input);
+  // Use a temporary single FileProperty to do the job for us using this name
+  FileProperty singleFileProperty(this->name(), "", FileProperty::Load, m_exts, Direction::Input);
 
-  std::string error = slaveFileProp.setValue(propValue);
+  std::string error = singleFileProperty.setValue(propValue);
 
   if (!error.empty())
     return error;
@@ -206,7 +205,7 @@ std::string MultipleFileProperty::setValueAsSingleFile(const std::string &propVa
   // Store.
   std::vector<std::vector<std::string>> foundFiles;
   try {
-    toValue(slaveFileProp(), foundFiles, "", "");
+    toValue(singleFileProperty(), foundFiles, "", "");
     PropertyWithValue<std::vector<std::vector<std::string>>>::operator=(foundFiles);
   } catch (std::invalid_argument &except) {
     g_log.debug() << "Could not set property " << name() << ": " << except.what();
@@ -321,13 +320,13 @@ std::string MultipleFileProperty::setValueAsMultipleFiles(const std::string &pro
   for (const auto &unresolvedFileName : flattenedAllUnresolvedFileNames) {
     try {
       // Check for an extension.
-      Poco::Path path(unresolvedFileName);
-      if (!path.getExtension().empty()) {
-        defaultExt = "." + path.getExtension();
+      std::filesystem::path path(unresolvedFileName);
+      if (path.has_extension()) {
+        defaultExt = path.extension().string();
         break;
       }
 
-    } catch (Poco::Exception &) {
+    } catch (const std::exception &) {
       // Safe to ignore?  Need a better understanding of the circumstances under
       // which this throws.
     }
@@ -348,10 +347,10 @@ std::string MultipleFileProperty::setValueAsMultipleFiles(const std::string &pro
 
       try {
         // Check for an extension.
-        Poco::Path path(unresolvedFileName);
+        std::filesystem::path path(unresolvedFileName);
 
-        useDefaultExt = path.getExtension().empty();
-      } catch (Poco::Exception &) {
+        useDefaultExt = !path.has_extension();
+      } catch (const std::exception &) {
         // Just shove the problematic filename straight into FileProperty and
         // see if we have any luck.
         useDefaultExt = false;
@@ -375,14 +374,14 @@ std::string MultipleFileProperty::setValueAsMultipleFiles(const std::string &pro
         if (!defaultExt.empty()) {
           auto run = FileFinder::Instance().findRun(unresolvedFileName, std::vector<std::string>(1, defaultExt));
           if (run)
-            fullyResolvedFile = run.result();
+            fullyResolvedFile = run.result().string();
           else
             errors += run.errors();
 
         } else {
           auto run = FileFinder::Instance().findRun(unresolvedFileName, m_exts);
           if (run)
-            fullyResolvedFile = run.result();
+            fullyResolvedFile = run.result().string();
           else
             errors += run.errors();
         }

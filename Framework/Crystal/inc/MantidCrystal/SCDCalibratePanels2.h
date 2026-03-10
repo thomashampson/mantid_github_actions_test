@@ -117,11 +117,12 @@ private:
                       std::shared_ptr<Geometry::Instrument> &instrument, double T0);
 
   /// Save the calibration table to a CSV file
-  void saveCalibrationTable(const std::string &FileName, Mantid::API::ITableWorkspace_sptr &tws);
+  void saveCalibrationTable(const std::string &FileName, Mantid::API::ITableWorkspace_sptr const &tws);
 
   /// Profile related functions
   void profileL1(Mantid::API::IPeaksWorkspace_sptr &pws, Mantid::API::IPeaksWorkspace_sptr pws_original);
-  void profileBanks(Mantid::API::IPeaksWorkspace_sptr &pws, const Mantid::API::IPeaksWorkspace_sptr &pws_original);
+  void profileBanks(Mantid::API::IPeaksWorkspace_sptr const &pws,
+                    const Mantid::API::IPeaksWorkspace_sptr &pws_original);
   void profileT0(Mantid::API::IPeaksWorkspace_sptr &pws, Mantid::API::IPeaksWorkspace_sptr pws_original);
   void profileL1T0(Mantid::API::IPeaksWorkspace_sptr &pws, Mantid::API::IPeaksWorkspace_sptr pws_original);
 
@@ -131,8 +132,7 @@ private:
                                                                const Geometry::ParameterMap &pmap);
 
   /// unique vars for a given instance of calibration
-  double m_a, m_b, m_c, m_alpha, m_beta, m_gamma;
-  double m_T0 = 0.0;
+  double m_a = 0.0, m_b = 0.0, m_c = 0.0, m_alpha = 0.0, m_beta = 0.0, m_gamma = 0.0, m_T0 = 0.0;
   bool LOGCHILDALG{true};
   int maxFitIterations{500};
   const int MINIMUM_PEAKS_PER_BANK{6};

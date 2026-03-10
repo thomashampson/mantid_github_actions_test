@@ -14,8 +14,8 @@
 #include "MantidDataHandling/LoadTOFRawNexus.h"
 #include "MantidKernel/BoundedValidator.h"
 #include "MantidKernel/ListValidator.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/VisibleWhenProperty.h"
+
 #include <Poco/DOM/AutoPtr.h>
 #include <Poco/DOM/DOMParser.h>
 #include <Poco/DOM/Document.h>
@@ -23,10 +23,9 @@
 #include <Poco/DOM/NodeFilter.h>
 #include <Poco/DOM/NodeIterator.h>
 #include <Poco/DOM/NodeList.h>
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <Poco/SAX/InputSource.h>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 
 using namespace Mantid::Kernel;
@@ -64,6 +63,9 @@ int LoadPreNexus::confidence(Kernel::FileDescriptor &descriptor) const {
   else
     return 0;
 }
+
+/// Default constructor
+LoadPreNexus::LoadPreNexus() : m_outputWorkspace() { deprecatedDate("2025-04-10"); }
 
 /// @copydoc Mantid::API::Algorithm::init()
 void LoadPreNexus::init() {
@@ -195,10 +197,10 @@ void LoadPreNexus::parseRuninfo(const string &runinfo, string &dataDir, vector<s
   eventFilenames.clear();
 
   // Create a Poco Path object for runinfo filename
-  Poco::Path runinfoPath(runinfo, Poco::Path::PATH_GUESS);
+  std::filesystem::path runinfoPath(runinfo);
   // Now lets get the directory
-  Poco::Path dirPath(runinfoPath.parent());
-  dataDir = dirPath.absolute().toString();
+  std::filesystem::path dirPath(runinfoPath.parent_path());
+  dataDir = std::filesystem::absolute(dirPath).string() + "/";
   g_log.debug() << "Data directory \"" << dataDir << "\"\n";
 
   std::ifstream in(runinfo.c_str());
@@ -241,7 +243,7 @@ void LoadPreNexus::parseRuninfo(const string &runinfo, string &dataDir, vector<s
     g_log.debug() << "Found 1 event file: \"" << eventFilenames[0] << "\"\n";
   } else {
     g_log.debug() << "Found " << eventFilenames.size() << " event files:";
-    for (auto &eventFilename : eventFilenames) {
+    for (const auto &eventFilename : eventFilenames) {
       g_log.debug() << "\"" << eventFilename << "\" ";
     }
     g_log.debug() << "\n";
@@ -260,7 +262,10 @@ void LoadPreNexus::runLoadNexusLogs(const string &runinfo, const string &dataDir
                                     const double prog_stop) {
   // determine the name of the file "inst_run"
   string shortName = runinfo.substr(runinfo.find_last_of("/\\") + 1);
-  shortName = shortName.substr(0, shortName.find("_runinfo.xml"));
+  const string runInfoFileExt = "_runinfo.xml";
+  if (const auto &pos = shortName.find(runInfoFileExt); pos != string::npos) {
+    shortName.resize(pos);
+  }
   g_log.debug() << "SHORTNAME = \"" << shortName << "\"\n";
 
   // put together a list of possible locations
@@ -274,8 +279,9 @@ void LoadPreNexus::runLoadNexusLogs(const string &runinfo, const string &dataDir
 
   // run the algorithm
   bool loadedLogs = false;
-  for (auto &possibility : possibilities) {
-    if (Poco::File(possibility).exists()) {
+  for (const auto &possibility : possibilities) {
+    // cppcheck-suppress useStlAlgorithm
+    if (std::filesystem::exists(possibility)) {
       g_log.information() << "Loading logs from \"" << possibility << "\"\n";
       auto alg = createChildAlgorithm("LoadNexusLogs", prog_start, prog_stop);
       alg->setProperty("Workspace", m_outputWorkspace);

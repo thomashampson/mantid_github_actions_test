@@ -7,6 +7,8 @@
 
 from typing import Dict, Optional
 
+import numpy as np
+
 from mantid.api import AlgorithmFactory, PythonAlgorithm, Progress
 from mantid.api import WorkspaceFactory, AnalysisDataService
 
@@ -14,6 +16,7 @@ from mantid.api import WorkspaceFactory, AnalysisDataService
 from mantid.simpleapi import ConvertUnits, GroupWorkspaces
 import abins
 from abins.abinsalgorithm import AbinsAlgorithm
+from abins.atominfo import AtomInfo
 from abins.logging import get_logger, Logger
 
 
@@ -83,7 +86,9 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
         prog_reporter.report("Input data from the user has been collected.")
 
         # 2) read ab initio data
-        ab_initio_data = abins.AbinsData.from_calculation_data(self._vibrational_or_phonon_data_file, self._ab_initio_program)
+        ab_initio_data = abins.AbinsData.from_calculation_data(
+            self._vibrational_or_phonon_data_file, self._ab_initio_program, cache_directory=self._cache_directory
+        )
         prog_reporter.report("Vibrational/phonon data has been read.")
 
         # 3) calculate S
@@ -122,9 +127,10 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
             instrument=self._instrument,
             quantum_order_num=quantum_order_num,
             autoconvolution_max=autoconvolution_max,
+            cache_directory=self._cache_directory,
         )
         s_calculator.progress_reporter = prog_reporter
-        s_data = s_calculator.get_formatted_data()
+        spectra = s_calculator.get_formatted_data()
 
         # Hold reporter at 80% for this message
         prog_reporter.resetNumSteps(1, 0.8, 0.80000001)
@@ -143,11 +149,17 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
 
         workspaces.extend(
             self.create_workspaces(
-                atoms_symbols=atom_symbols, s_data=s_data, atoms_data=atoms_data, max_quantum_order=self._max_event_order
+                atoms_symbols=atom_symbols,
+                spectra=spectra,
+                max_quantum_order=self._max_event_order,
             )
         )
         workspaces.extend(
-            self.create_workspaces(atom_numbers=atom_numbers, s_data=s_data, atoms_data=atoms_data, max_quantum_order=self._max_event_order)
+            self.create_workspaces(
+                atom_numbers=atom_numbers,
+                spectra=spectra,
+                max_quantum_order=self._max_event_order,
+            )
         )
         prog_reporter.report("Workspaces with partial dynamical structure factors have been constructed.")
 
@@ -170,14 +182,13 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
         self.setProperty("OutputWorkspace", self._out_ws_name)
         prog_reporter.report("Group workspace with all required  dynamical structure factors has been constructed.")
 
-    def _fill_s_workspace(self, s_points=None, workspace=None, protons_number=None, nucleons_number=None):
+    def _fill_s_workspace(self, *, s_points: np.ndarray, workspace: str, species: AtomInfo | None = None) -> None:
         """
         Puts S into workspace(s).
 
         :param s_points: dynamical factor for the given atom
-        :param workspace:  workspace to be filled with S
-        :param protons_number: number of protons in the given type fo atom
-        :param nucleons_number: number of nucleons in the given type of atom
+        :param workspace: workspace to be filled with S
+        :param species: Element/isotope data
         """
 
         from abins.constants import FUNDAMENTALS, ONE_DIMENSIONAL_INSTRUMENTS, ONE_DIMENSIONAL_SPECTRUM
@@ -187,15 +198,11 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
 
         # only FUNDAMENTALS [data is 2d with one row]
         if s_points.shape[0] == FUNDAMENTALS:
-            self._fill_s_1d_workspace(
-                s_points=s_points[0], workspace=workspace, protons_number=protons_number, nucleons_number=nucleons_number
-            )
+            self._fill_s_1d_workspace(s_points=s_points[0], workspace=workspace, species=species)
 
         # total workspaces [data is 1d vector]
         elif len(s_points.shape) == ONE_DIMENSIONAL_SPECTRUM:
-            self._fill_s_1d_workspace(
-                s_points=s_points, workspace=workspace, protons_number=protons_number, nucleons_number=nucleons_number
-            )
+            self._fill_s_1d_workspace(s_points=s_points, workspace=workspace, species=species)
 
         # quantum order events (fundamentals  or  overtones + combinations for the given order)
         # [data is 2d table of S with a row for each quantum order]
@@ -207,13 +214,11 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
                 wrk_name = f"{workspace}_quantum_event_{n + 1}"
                 partial_wrk_names.append(wrk_name)
 
-                self._fill_s_1d_workspace(
-                    s_points=s_points[n], workspace=wrk_name, protons_number=protons_number, nucleons_number=nucleons_number
-                )
+                self._fill_s_1d_workspace(s_points=s_points[n], workspace=wrk_name, species=species)
 
             GroupWorkspaces(InputWorkspaces=partial_wrk_names, OutputWorkspace=workspace)
 
-    def _fill_s_1d_workspace(self, s_points=None, workspace=None, protons_number=None, nucleons_number=None):
+    def _fill_s_1d_workspace(self, s_points=None, workspace=None, species: AtomInfo | None = None):
         """
         Puts 1D S into workspace.
         :param protons_number: number of protons in the given type of atom
@@ -221,10 +226,8 @@ class Abins(AbinsAlgorithm, PythonAlgorithm):
         :param s_points: dynamical factor for the given atom
         :param workspace: workspace to be filled with S
         """
-        if protons_number is not None:
-            s_points = s_points * self.get_cross_section(
-                scattering=self._scale_by_cross_section, protons_number=protons_number, nucleons_number=nucleons_number
-            )
+        if species is not None:
+            s_points = s_points * self.get_cross_section(scattering=self._scale_by_cross_section, species=species)
         dim = 1
         length = s_points.size
 

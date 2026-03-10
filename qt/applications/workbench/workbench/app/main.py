@@ -12,7 +12,7 @@ from mantid import __version__ as mtd_version
 import warnings
 
 
-def main():
+def main(args=None):
     # setup command line arguments
     parser = argparse.ArgumentParser(description="Mantid Workbench")
     parser.add_argument("script", nargs="?")
@@ -44,8 +44,12 @@ def main():
     except ImportError:
         pass  # silently skip this
 
+    # Avoid warning about frozen modules coming from the jupyter debugger on launch
+    # https://stackoverflow.com/questions/75114841/debugger-warning-from-ipython-frozen-modules
+    os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
+
     # parse the command line options
-    options = parser.parse_args()
+    options = parser.parse_args(args=args)
 
     if options.error_on_warning:
         warnings.simplefilter("error")  # Change the filter in this process
@@ -54,7 +58,7 @@ def main():
     if options.profile:
         output_path = os.path.abspath(os.path.expanduser(options.profile))
         if not os.path.exists(os.path.dirname(output_path)):
-            raise ValueError("Invalid path given for profile output. " "Please specify and existing directory and filename.")
+            raise ValueError("Invalid path given for profile output. Please specify and existing directory and filename.")
         if options.yappi:
             _enable_yappi_profiling(output_path, options)
         else:

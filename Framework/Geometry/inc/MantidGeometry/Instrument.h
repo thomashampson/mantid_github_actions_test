@@ -9,11 +9,11 @@
 #include "MantidGeometry/DllConfig.h"
 #include "MantidGeometry/IDetector.h"
 #include "MantidGeometry/Instrument/CompAssembly.h"
-#include "MantidGeometry/Instrument/ObjComponent.h"
+#include "MantidGeometry/Instrument/GridDetector.h"
 #include "MantidGeometry/Instrument/RectangularDetector.h"
 #include "MantidGeometry/Instrument_fwd.h"
 
-#include "MantidKernel/DateAndTime.h"
+#include "MantidTypes/Core/DateAndTime.h"
 
 #include <map>
 #include <queue>
@@ -32,6 +32,7 @@ class DetectorInfo;
 class XMLInstrumentParameter;
 class ParameterMap;
 class ReferenceFrame;
+class InstrumentVisitor;
 /// Convenience typedef
 using InstrumentParameterCache =
     std::map<std::pair<std::string, const IComponent *>, std::shared_ptr<XMLInstrumentParameter>>;
@@ -116,6 +117,7 @@ public:
 
   void getDetectorsInBank(std::vector<IDetector_const_sptr> &dets, const IComponent &comp) const;
   void getDetectorsInBank(std::vector<IDetector_const_sptr> &dets, const std::string &bankName) const;
+  std::set<detid_t> getDetectorIDsInBank(const std::string &bankName) const;
 
   /// Returns a list containing the detector ids of monitors
   std::vector<detid_t> getMonitors() const;
@@ -144,14 +146,14 @@ public:
   /// Get the default type of the instrument view. The possible values are:
   /// 3D, CYLINDRICAL_X, CYLINDRICAL_Y, CYLINDRICAL_Z, SPHERICAL_X, SPHERICAL_Y,
   /// SPHERICAL_Z
-  std::string getDefaultView() const { return m_defaultView; }
+  const std::string &getDefaultView() const { return m_defaultView; }
   /// Set the default type of the instrument view. The possible values are:
   /// 3D, CYLINDRICAL_X, CYLINDRICAL_Y, CYLINDRICAL_Z, SPHERICAL_X, SPHERICAL_Y,
   /// SPHERICAL_Z
   void setDefaultView(const std::string &type);
   /// Retrieves from which side the instrument to be viewed from when the
   /// instrument viewer first starts, possibilities are "Z+, Z-, X+, ..."
-  std::string getDefaultAxis() const { return m_defaultViewAxis; }
+  const std::string &getDefaultAxis() const { return m_defaultViewAxis; }
   /// Retrieves from which side the instrument to be viewed from when the
   /// instrument viewer first starts, possibilities are "Z+, Z-, X+, ..."
   void setDefaultViewAxis(const std::string &axis) { m_defaultViewAxis = axis; }
@@ -185,8 +187,8 @@ public:
 
   void getInstrumentParameters(double &l1, Kernel::V3D &beamline, double &beamline_norm, Kernel::V3D &samplePos) const;
 
-  void saveNexus(::NeXus::File *file, const std::string &group) const;
-  void loadNexus(::NeXus::File *file, const std::string &group);
+  void saveNexus(Nexus::File *file, const std::string &group) const;
+  void loadNexus(Nexus::File *file, const std::string &group);
 
   void setFilename(const std::string &filename);
   const std::string &getFilename() const;
@@ -205,7 +207,10 @@ public:
   /// @return Full if all detectors are rect., Partial if some, None if none
   ContainsState containsRectDetectors() const;
 
-  std::vector<RectangularDetector_const_sptr> findRectDetectors() const;
+  std::vector<RectangularDetector_const_sptr> findRectDetectors() const {
+    return findDetectorsOfType<RectangularDetector>();
+  }
+  std::vector<GridDetector_const_sptr> findGridDetectors() const { return findDetectorsOfType<GridDetector>(); }
 
   bool isMonitorViaIndex(const size_t index) const;
   size_t detectorIndex(const detid_t detID) const;
@@ -213,21 +218,44 @@ public:
 
   bool isEmptyInstrument() const;
 
-  /// Add a component to the instrument
-  virtual int add(IComponent *component) override;
-
   void parseTreeAndCacheBeamline();
   std::pair<std::unique_ptr<ComponentInfo>, std::unique_ptr<DetectorInfo>>
   makeBeamline(ParameterMap &pmap, const ParameterMap *source = nullptr) const;
 
+  friend InstrumentVisitor;
+
 private:
   /// Save information about a set of detectors to Nexus
-  void saveDetectorSetInfoToNexus(::NeXus::File *file, const std::vector<detid_t> &detIDs) const;
+  void saveDetectorSetInfoToNexus(Nexus::File *file, const std::vector<detid_t> &detIDs) const;
 
   bool validateComponentProperties(IComponent_const_sptr component) const;
 
   void addInstrumentChildrenToQueue(std::queue<IComponent_const_sptr> &queue) const;
   bool addAssemblyChildrenToQueue(std::queue<IComponent_const_sptr> &queue, IComponent_const_sptr component) const;
+  template <typename T> std::vector<std::shared_ptr<const T>> findDetectorsOfType() const {
+    std::queue<IComponent_const_sptr> compQueue; // Search queue
+    addInstrumentChildrenToQueue(compQueue);
+
+    std::vector<std::shared_ptr<const T>> detectors;
+
+    IComponent_const_sptr comp;
+
+    while (!compQueue.empty()) {
+      comp = compQueue.front();
+      compQueue.pop();
+
+      if (!validateComponentProperties(comp))
+        continue;
+
+      if (auto const detector = std::dynamic_pointer_cast<const T>(comp)) {
+        detectors.push_back(detector);
+      } else {
+        // If component is a ComponentAssembly, we add its children to the queue to check if they're type T
+        addAssemblyChildrenToQueue(compQueue, comp);
+      }
+    }
+    return detectors;
+  }
 
   /// Private copy assignment operator
   Instrument &operator=(const Instrument &);
@@ -244,11 +272,11 @@ private:
 
   /// Purpose to hold copy of source component. For now assumed to be just one
   /// component
-  const IComponent *m_sourceCache;
+  const IComponent *m_sourceCache = nullptr;
 
   /// Purpose to hold copy of samplePos component. For now assumed to be just
   /// one component
-  const IComponent *m_sampleCache;
+  const IComponent *m_sampleCache = nullptr;
 
   /// To store info about the parameters defined in IDF. Indexed according to
   /// logfile-IDs, which equals logfile filename minus the run number and file

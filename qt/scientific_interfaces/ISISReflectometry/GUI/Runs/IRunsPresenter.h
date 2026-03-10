@@ -24,7 +24,7 @@ class IRunsPresenter {
 public:
   virtual ~IRunsPresenter() = default;
   virtual void acceptMainPresenter(IBatchPresenter *mainPresenter) = 0;
-  virtual void initInstrumentList(const std::string &selectedInstrument = "") = 0;
+  virtual std::string initInstrumentList(const std::string &selectedInstrument = "") = 0;
   virtual RunsTable const &runsTable() const = 0;
   virtual RunsTable &mutableRunsTable() = 0;
 
@@ -32,8 +32,8 @@ public:
   virtual void notifyResumeReductionRequested() = 0;
   virtual void notifyPauseReductionRequested() = 0;
   virtual void notifyRowStateChanged() = 0;
-  virtual void notifyRowStateChanged(boost::optional<Item const &> item) = 0;
-  virtual void notifyRowModelChanged(boost::optional<Item const &> item) = 0;
+  virtual void notifyRowStateChanged(std::optional<std::reference_wrapper<Item const>> item) = 0;
+  virtual void notifyRowModelChanged(std::optional<std::reference_wrapper<Item const>> item) = 0;
   virtual void notifyRowModelChanged() = 0;
   virtual void notifyBatchLoaded() = 0;
 

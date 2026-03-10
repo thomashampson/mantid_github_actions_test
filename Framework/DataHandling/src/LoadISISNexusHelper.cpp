@@ -7,6 +7,7 @@
 #include "MantidDataHandling/LoadISISNexusHelper.h"
 #include "MantidAPI/Run.h"
 #include "MantidAPI/Sample.h"
+#include "MantidNexus/NexusClasses.h"
 namespace {
 static constexpr std::size_t RUN_TIME_STRING_LENGTH = 19;
 } // namespace
@@ -14,7 +15,7 @@ static constexpr std::size_t RUN_TIME_STRING_LENGTH = 19;
 namespace Mantid::DataHandling::LoadISISNexusHelper {
 
 using namespace API;
-using namespace NeXus;
+using namespace Nexus;
 
 /**
  * Find total number of spectra in the nexus file
@@ -65,7 +66,7 @@ std::tuple<NXInt, NXInt> findDetectorIDsAndSpectrumNumber(const NXEntry &entry, 
     // This is typical of a Muon Nexus file, as stated in the Nexus V2
     // specification.
     NXInt udet = spectrum_index;
-    NXInt spec = spectrum_index;
+    NXInt spec = std::move(spectrum_index);
     return std::make_tuple(udet, spec);
   }
 }

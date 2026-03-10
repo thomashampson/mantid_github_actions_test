@@ -17,6 +17,7 @@ from sans.state.StateObjects.StateConvertToQ import StateConvertToQ
 from sans.state.StateObjects.StateMaskDetectors import get_mask_builder
 from sans.state.StateObjects.StateMoveDetectors import get_move_builder
 from sans.state.StateObjects.StateNormalizeToMonitor import get_normalize_to_monitor_builder
+from sans.state.StateObjects.StatePolarization import StatePolarization
 from sans.state.StateObjects.StateReductionMode import StateReductionMode
 from sans.state.StateObjects.StateSave import StateSave
 from sans.state.StateObjects.StateScale import StateScale
@@ -58,7 +59,7 @@ class ParsedDictConverter(IStateParser):
         if not self._cached_result:
             self._cached_result = self._get_input_dict()
             # Ensure we always have a dict
-            self._cached_result = self._cached_result if self._cached_result else {}
+            self._cached_result = self._cached_result or {}
         return self._cached_result
 
     @abc.abstractmethod
@@ -423,9 +424,9 @@ class ParsedDictConverter(IStateParser):
                     entry_lab.append(single_vertical_strip_mask.entry)
                 else:
                     raise RuntimeError(
-                        "UserFileStateDirector: The vertical single strip mask {0} has an unknown "
-                        "detector {1} associated"
-                        " with it.".format(single_vertical_strip_mask.entry, single_vertical_strip_mask.detector_type)
+                        "UserFileStateDirector: The vertical single strip mask {0} has an unknown detector {1} associated with it.".format(
+                            single_vertical_strip_mask.entry, single_vertical_strip_mask.detector_type
+                        )
                     )
             if entry_hab:
                 state_builder.set_HAB_single_vertical_strip_mask(entry_hab)
@@ -450,9 +451,9 @@ class ParsedDictConverter(IStateParser):
                     stop_lab.append(range_vertical_strip_mask.stop)
                 else:
                     raise RuntimeError(
-                        "UserFileStateDirector: The vertical range strip mask {0} has an unknown "
-                        "detector {1} associated "
-                        "with it.".format(range_vertical_strip_mask.entry, range_vertical_strip_mask.detector_type)
+                        "UserFileStateDirector: The vertical range strip mask {0} has an unknown detector {1} associated with it.".format(
+                            range_vertical_strip_mask.entry, range_vertical_strip_mask.detector_type
+                        )
                     )
             if start_hab:
                 state_builder.set_HAB_range_vertical_strip_start(start_hab)
@@ -504,9 +505,9 @@ class ParsedDictConverter(IStateParser):
                     stop_lab.append(range_horizontal_strip_mask.stop)
                 else:
                     raise RuntimeError(
-                        "UserFileStateDirector: The vertical range strip mask {0} has an unknown "
-                        "detector {1} associated "
-                        "with it.".format(range_horizontal_strip_mask.entry, range_horizontal_strip_mask.detector_type)
+                        "UserFileStateDirector: The vertical range strip mask {0} has an unknown detector {1} associated with it.".format(
+                            range_horizontal_strip_mask.entry, range_horizontal_strip_mask.detector_type
+                        )
                     )
             if start_hab:
                 state_builder.set_HAB_range_horizontal_strip_start(start_hab)
@@ -602,6 +603,8 @@ class ParsedDictConverter(IStateParser):
             state_builder.set_phi_min(angle.min)
             state_builder.set_phi_max(angle.max)
             state_builder.set_use_mask_phi_mirror(angle.use_mirror)
+            state_builder.set_phi_range(angle.phi_range)
+            state_builder.set_use_phi_range(len(angle.phi_range) != 0)
 
         # ------------------------------------------------------------
         # 15. Maskfiles
@@ -972,7 +975,7 @@ class ParsedDictConverter(IStateParser):
         if SetId.SCALES in self._input_dict:
             scales = self._input_dict[SetId.SCALES]
             scales = scales[-1]
-            state.scale = scales.s
+            state.rear_scale = scales.s
 
         # We can also have settings for the sample geometry (Note that at the moment this is not settable via the
         # user file nor the command line interface
@@ -1062,6 +1065,9 @@ class ParsedDictConverter(IStateParser):
 
         _set_wavelength_limits(state, self._input_dict)
         return state
+
+    def get_state_polarization(self) -> StatePolarization:
+        return self._all_states.polarization if self._all_states else StatePolarization()
 
     def _set_single_entry(self, state_obj, attr_name, tag, apply_to_value=None):
         """

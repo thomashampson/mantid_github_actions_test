@@ -7,8 +7,6 @@
 #  This file is part of the mantidqt package
 #
 #
-import __future__
-import ast
 import warnings
 
 try:
@@ -19,8 +17,6 @@ except ImportError:
     builtins = __main__.__builtins__
 import copy
 import os
-from io import BytesIO
-from lib2to3.pgen2.tokenize import detect_encoding
 
 from qtpy.QtCore import QObject, Signal
 from qtpy.QtWidgets import QApplication
@@ -36,47 +32,8 @@ EMPTY_FILENAME_ID = "<string>"
 FILE_ATTR = "__file__"
 
 
-def _get_imported_from_future(code_str):
-    """
-    Parse the given code and return a list of names that are imported
-    from __future__.
-    :param code_str: The code to parse
-    :return list: List of names that are imported from __future__
-    """
-    future_imports = []
-    try:
-        code_str = code_str.encode(detect_encoding(BytesIO(code_str.encode()).readline)[0])
-    except UnicodeEncodeError:  # Script contains unicode symbol. Cannot run detect_encoding as it requires ascii.
-        code_str = code_str.encode("utf-8")
-    for node in ast.walk(ast.parse(code_str)):
-        if isinstance(node, ast.ImportFrom):
-            if node.module == "__future__":
-                future_imports.extend([import_alias.name for import_alias in node.names])
-                break
-    return future_imports
-
-
-def get_future_import_compiler_flags(code_str):
-    """
-    Get the compiler flags that can be passed to `compile` that
-    correspond to the __future__ imports inside the given code.
-
-    :param code_str: The code being executed, containing __future__ imports
-    :return int: The 'bitwise or' union of compiler flags
-    """
-    flags = 0
-    for f_import_str in _get_imported_from_future(code_str):
-        try:
-            future_import = getattr(__future__, f_import_str)
-            flags |= future_import.compiler_flag
-        except AttributeError:
-            # Just pass and let the ImportError be raised on script execution
-            pass
-    return flags
-
-
 def hide_warnings_in_script_editor():
-    warnings.filterwarnings("ignore", message="Starting a Matplotlib GUI outside of the main thread will " "likely fail.")
+    warnings.filterwarnings("ignore", message="Starting a Matplotlib GUI outside of the main thread will likely fail.")
 
 
 class PythonCodeExecution(QObject):
@@ -146,7 +103,7 @@ class PythonCodeExecution(QObject):
             filename = EMPTY_FILENAME_ID
 
         self.globals_ns[FILE_ATTR] = filename
-        flags = get_future_import_compiler_flags(code_str)
+        flags: int = 0  # bitwise or of compiler flags
         with AddedToSysPath([os.path.dirname(filename)]):
             executor = CodeExecution(self._editor)
             hide_warnings_in_script_editor()

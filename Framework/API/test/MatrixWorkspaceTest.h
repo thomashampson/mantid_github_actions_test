@@ -402,6 +402,31 @@ public:
     ws->setTitle("");
   }
 
+  void testGetSetPlotType() {
+    // test default
+    TS_ASSERT_EQUALS(ws->getPlotType(), "plot");
+
+    // test invalid is rejected
+    TS_ASSERT_THROWS(ws->setPlotType("invalid"), const std::invalid_argument &);
+    TS_ASSERT_EQUALS(ws->getPlotType(), "plot");
+
+    // test valid is accepted
+    ws->setPlotType("marker");
+    TS_ASSERT_EQUALS(ws->getPlotType(), "marker");
+  }
+
+  void testGetSetMarkerStyle() {
+    // test default
+    TS_ASSERT_EQUALS(ws->getMarkerStyle(), "vline");
+
+    TS_ASSERT_THROWS(ws->setMarkerStyle("invalid"), const std::invalid_argument &);
+    TS_ASSERT_EQUALS(ws->getMarkerStyle(), "vline");
+
+    // test set
+    ws->setMarkerStyle("square");
+    TS_ASSERT_EQUALS(ws->getMarkerStyle(), "square");
+  }
+
   void testGetSetComment() {
     TS_ASSERT_EQUALS(ws->getComment(), "");
     ws->setComment("commenting");

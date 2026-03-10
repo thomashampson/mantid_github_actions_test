@@ -10,27 +10,19 @@
 #include "MantidAPI/ITableWorkspace.h"
 #include "MantidAPI/TableRow.h"
 #include "MantidAPI/WorkspaceFactory.h"
-#include "MantidDataHandling/LoadEventNexus.h"
 #include "MantidDataHandling/LoadPreNexus.h"
 #include "MantidDataHandling/LoadRawHelper.h"
 #include "MantidDataHandling/LoadTOFRawNexus.h"
 #include "MantidKernel/BinaryFile.h"
 #include "MantidKernel/BoundedValidator.h"
-#include "MantidKernel/System.h"
-#include "MantidKernel/VisibleWhenProperty.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
-// clang-format off
-#include <nexus/NeXusFile.hpp>
-#include <nexus/NeXusException.hpp>
-// clang-format on
-
-#include <Poco/File.h>
 #include <exception>
-#include <fstream>
+#include <filesystem>
 #include <set>
 #include <vector>
 
-using namespace ::NeXus;
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
 using std::map;
@@ -121,8 +113,8 @@ void DetermineChunking::exec() {
     return;
   }
 
-  Poco::File fileinfo(filename);
-  const double fileSizeGiB = static_cast<double>(fileinfo.getSize()) * BYTES_TO_GiB;
+  std::filesystem::path fileinfo(filename);
+  const double fileSizeGiB = static_cast<double>(std::filesystem::file_size(fileinfo)) * BYTES_TO_GiB;
 
   // don't bother opening the file if its size is "small"
   // note that prenexus "_runinfo.xml" files don't represent what
@@ -138,8 +130,9 @@ void DetermineChunking::exec() {
     string dataDir;
     LoadPreNexus lp;
     lp.parseRuninfo(filename, dataDir, eventFilenames);
+    std::filesystem::path dataPath(dataDir);
     for (const auto &eventFilename : eventFilenames) {
-      BinaryFile<DasEvent> eventfile(dataDir + eventFilename);
+      BinaryFile<DasEvent> eventfile(dataPath / eventFilename);
       // Factor of 2 for compression
       wkspSizeGiB += static_cast<double>(eventfile.getNumElements()) * 48.0 * BYTES_TO_GiB;
     }
@@ -148,7 +141,7 @@ void DetermineChunking::exec() {
   else if (fileType == EVENT_NEXUS_FILE) {
 
     // top level file information
-    ::NeXus::File file(filename);
+    Nexus::File file(filename);
     std::string m_top_entry_name = setTopEntryName(filename);
 
     // Start with the base entry
@@ -160,15 +153,15 @@ void DetermineChunking::exec() {
     std::string classType = "NXevent_data";
     size_t total_events = 0;
     for (; it != entries.end(); ++it) {
-      std::string entry_name(it->first);
-      std::string entry_class(it->second);
+      const std::string entry_class(it->second);
       if (entry_class == classType) {
         if (!isEmpty(maxChunk)) {
           try {
+            const std::string entry_name(it->first);
             // Get total number of events for each bank
             file.openGroup(entry_name, entry_class);
             file.openData("total_counts");
-            if (file.getInfo().type == NX_UINT64) {
+            if (file.getInfo().type == NXnumtype::UINT64) {
               std::vector<uint64_t> bank_events;
               file.getData(bank_events);
               total_events += bank_events[0];
@@ -179,7 +172,7 @@ void DetermineChunking::exec() {
             }
             file.closeData();
             file.closeGroup();
-          } catch (::NeXus::Exception &) {
+          } catch (Nexus::Exception const &) {
             g_log.error() << "Unable to find total counts to determine "
                              "chunking strategy.\n";
           }
@@ -258,7 +251,7 @@ std::string DetermineChunking::setTopEntryName(const std::string &filename) {
   using string_map_t = std::map<std::string, std::string>;
   try {
     string_map_t::const_iterator it;
-    ::NeXus::File file = ::NeXus::File(filename);
+    Nexus::File file = Nexus::File(filename);
     string_map_t entries = file.getEntries();
 
     // Choose the first entry as the default

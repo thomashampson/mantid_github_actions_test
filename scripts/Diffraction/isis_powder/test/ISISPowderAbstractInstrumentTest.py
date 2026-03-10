@@ -79,7 +79,7 @@ class ISISPowderAbstractInstrumentTest(unittest.TestCase):
 
     def _setup_output_focused_runs_test(self, mock_get_run_details, mock_get_mode, mock_output_ws, mock_keep_unit):
         mock_inst = self._setup_mock_inst(calibration_dir="ignored", output_dir="ignored", yaml_file_path="ISISPowderRunDetailsTest.yaml")
-        mock_run_details = create_autospec(run_details._RunDetails)
+        mock_run_details = create_autospec(run_details._RunDetails, instance=True)
         runs = ["123", "124"]
         run_string = "-".join(runs)
         mock_run_details.output_string = run_string
@@ -124,7 +124,7 @@ class ISISPowderAbstractInstrumentTest(unittest.TestCase):
             try:
                 os.rmdir(folder)
             except OSError as exc:
-                warnings.warn('Could not remove folder at "{}"\n' "Error message:\n{}".format(folder, exc))
+                warnings.warn('Could not remove folder at "{}"\nError message:\n{}'.format(folder, exc))
 
     def test_generate_out_file_paths_standard_inst_prefix(self):
         mock_inst, run_details, out_dir = self._setup_for_generate_out_file_paths(

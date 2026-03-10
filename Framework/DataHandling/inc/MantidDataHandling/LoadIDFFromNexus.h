@@ -14,7 +14,7 @@
 
 namespace Mantid {
 namespace DataHandling {
-/** @class LoadIDFFromNexus LoadInstrumentFromNexus.h
+/** @class LoadIDFFromNexus LoadIDFFromNexus.h
 DataHandling/LoadIDFFromNexus.h
 
 Load an IDF from a Nexus file, if found there.
@@ -58,7 +58,7 @@ public:
 
   /// Load the parameters from Nexus file if possible, else from parameter file,
   /// into workspace
-  void LoadParameters(::NeXus::File *nxfile, const API::MatrixWorkspace_sptr &localWorkspace);
+  void LoadParameters(Nexus::File *nxfile, const API::MatrixWorkspace_sptr &localWorkspace);
 
   /// Algorithm's version for identification overriding a virtual method
   int version() const override { return 1; }

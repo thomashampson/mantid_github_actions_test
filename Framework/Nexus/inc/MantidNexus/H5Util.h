@@ -8,6 +8,7 @@
 
 #include "MantidNexus/DllConfig.h"
 
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
@@ -18,22 +19,29 @@ class DataSpace;
 class DataSet;
 class DSetCreatPropList;
 class DataType;
+class FileAccPropList;
 class Group;
 class H5File;
 class H5Object;
 } // namespace H5
 
 namespace Mantid {
-namespace NeXus {
+namespace Nexus {
 namespace H5Util {
 /** H5Util : TODO: DESCRIPTION
  */
 
+/** Controls whether narrowing is allowed within type coercion. */
+enum class Narrowing : bool { Allow = true, Prevent = false };
+
+/** Default file access is H5F_CLOSE_STRONG. This should be set consistently for all access of a file. */
+MANTID_NEXUS_DLL H5::FileAccPropList defaultFileAcc();
+
+/** Determine if a given file can be opened with HDF5 using the CORRECT file access level (H5F_CLOSE_STRONG)*/
+MANTID_NEXUS_DLL bool isHdf5(std::string const &filename);
+
 /// Create a 1D data-space to hold data of length.
 MANTID_NEXUS_DLL H5::DataSpace getDataSpace(const size_t length);
-
-/// Create a 1D data-space that will hold the supplied vector.
-template <typename NumT> H5::DataSpace getDataSpace(const std::vector<NumT> &data);
 
 /// Convert a primitive type to the appropriate H5::DataType.
 template <typename NumT> H5::DataType getType();
@@ -71,39 +79,47 @@ void writeScalarDataSetWithStrAttributes(H5::Group &group, const std::string &na
 
 template <typename NumT> void writeArray1D(H5::Group &group, const std::string &name, const std::vector<NumT> &values);
 
-MANTID_NEXUS_DLL std::string readString(H5::H5File &file, const std::string &path);
+MANTID_NEXUS_DLL std::string readString(H5::H5File &file, const std::string &address);
 
-MANTID_NEXUS_DLL std::string readString(H5::Group &group, const std::string &name);
+MANTID_NEXUS_DLL std::string readString(const H5::Group &group, const std::string &name);
 
 MANTID_NEXUS_DLL std::string readString(const H5::DataSet &dataset);
 
 MANTID_NEXUS_DLL std::vector<std::string> readStringVector(H5::Group &, const std::string &);
+
+MANTID_NEXUS_DLL std::vector<std::string> readStringVector(H5::DataSet &);
 
 MANTID_NEXUS_DLL bool hasAttribute(const H5::H5Object &object, const char *attributeName);
 
 MANTID_NEXUS_DLL void readStringAttribute(const H5::H5Object &object, const std::string &attributeName,
                                           std::string &output);
 
-template <typename NumT> NumT readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
+template <typename NumT, Narrowing narrow = Narrowing::Allow>
+NumT readNumAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 
-template <typename NumT>
+template <typename NumT, Narrowing narrow = Narrowing::Allow>
 std::vector<NumT> readNumArrayAttributeCoerce(const H5::H5Object &object, const std::string &attributeName);
 
-template <typename NumT>
+template <typename NumT, Narrowing narrow = Narrowing::Allow>
 void readArray1DCoerce(const H5::Group &group, const std::string &name, std::vector<NumT> &output);
-template <typename NumT> std::vector<NumT> readArray1DCoerce(const H5::Group &group, const std::string &name);
 
-template <typename NumT> void readArray1DCoerce(const H5::DataSet &dataset, std::vector<NumT> &output);
+template <typename NumT, Narrowing narrow = Narrowing::Allow>
+std::vector<NumT> readArray1DCoerce(const H5::Group &group, const std::string &name);
+
+template <typename NumT, Narrowing narrow = Narrowing::Allow>
+void readArray1DCoerce(const H5::DataSet &dataset, std::vector<NumT> &output,
+                       const size_t length = std::numeric_limits<size_t>::max(),
+                       const size_t offset = static_cast<size_t>(0));
 
 /// Test if a group already exists within an HDF5 file or parent group.
-MANTID_NEXUS_DLL bool groupExists(H5::H5Object &h5, const std::string &groupPath);
+MANTID_NEXUS_DLL bool groupExists(H5::H5Object const &h5, const std::string &groupAddress);
 
 /// Test if an attribute is present and has a specific string value for an HDF5 group or dataset.
-MANTID_NEXUS_DLL bool keyHasValue(H5::H5Object &h5, const std::string &key, const std::string &value);
+MANTID_NEXUS_DLL bool keyHasValue(H5::H5Object const &h5, const std::string &key, const std::string &value);
 
 /// Copy a group and all of its contents, between the same or different HDF5 files or groups.
-MANTID_NEXUS_DLL void copyGroup(H5::H5Object &dest, const std::string &destGroupPath, H5::H5Object &src,
-                                const std::string &srcGroupPath);
+MANTID_NEXUS_DLL void copyGroup(H5::H5Object &dest, const std::string &destGroupAddress, H5::H5Object &src,
+                                const std::string &srcGroupAddress);
 
 /**
  * Delete a target link for a group or dataset from a parent group.
@@ -112,5 +128,5 @@ MANTID_NEXUS_DLL void copyGroup(H5::H5Object &dest, const std::string &destGroup
 MANTID_NEXUS_DLL void deleteObjectLink(H5::H5Object &h5, const std::string &target);
 
 } // namespace H5Util
-} // namespace NeXus
+} // namespace Nexus
 } // namespace Mantid

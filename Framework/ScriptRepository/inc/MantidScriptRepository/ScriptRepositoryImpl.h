@@ -100,16 +100,18 @@ public:
   /* Return true if there is a local repository installed*/
   bool isValid() override;
 
+  bool checkLocalInstallIsPresent();
+
   std::vector<std::string> check4Update() override;
 
   void setIgnorePatterns(const std::string &patterns) override;
 
-  std::string ignorePatterns() override;
+  std::string ignorePatterns() final;
 
   int setAutoUpdate(const std::string &input_path, bool option = true) override;
 
   /// @deprecated Should avoid this, it is not in the design file.
-  std::string localRepository() const { return local_repository; }
+  const std::string &localRepository() const { return local_repository; }
 
   virtual void doDownloadFile(const std::string &url_file, const std::string &local_file_path = "");
   // convenient method to allow to perform the unit tests on remove files.
@@ -161,7 +163,7 @@ private:
   void updateRepositoryJson(const std::string &, const RepositoryEntry &);
 
   /// flag that indicate a valid repository
-  bool valid;
+  bool m_valid;
 
   std::string ignoreregex;
 

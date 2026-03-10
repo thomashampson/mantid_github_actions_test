@@ -65,8 +65,6 @@
 # commands to lowercase Added licensing info Version 1.0 (1/8/08) Fixed CXXTEST_INCLUDE_DIRS so it will work properly
 # Eliminated superfluous CXXTEST_FOUND assignment Cleaned up and added more documentation
 
-include(PrecompiledHeaderCommands)
-
 # =============================================================
 # CXXTEST_ADD_TEST (public macro to add unit tests)
 # =============================================================
@@ -127,10 +125,6 @@ macro(CXXTEST_ADD_TEST _cxxtest_testname)
     add_dependencies(cppcheck ${_cxxtest_testname}Sources)
   endif()
 
-  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeader.h)
-    enable_precompiled_headers(PrecompiledHeader.h _cxxtest_cpp_files)
-  endif()
-
   # define the test executable and exclude it from the all target The TESTHELPER_SRCS variable can be set outside the
   # macro and used to pass in test helper classes
   add_executable(${_cxxtest_testname} EXCLUDE_FROM_ALL ${_cxxtest_cpp_files} ${_cxxtest_h_files} ${TESTHELPER_SRCS})
@@ -160,7 +154,7 @@ PYTHONHOME=${_python_home}"
                                                     $<TARGET_FILE:${_cxxtest_testname}> ${_suitename}
     )
 
-    set_tests_properties(${_cxxtest_separate_name} PROPERTIES TIMEOUT ${TESTING_TIMEOUT})
+    set_tests_properties(${_cxxtest_separate_name} PROPERTIES TIMEOUT ${TESTING_TIMEOUT} LABELS "UnitTest")
     if(WIN32)
       set_property(
         TEST ${_cxxtest_separate_name}

@@ -22,6 +22,8 @@
 #include "MantidGeometry/MDGeometry/MDFrame.h"
 #include "MantidIndexing/GlobalSpectrumIndex.h"
 #include "MantidIndexing/IndexInfo.h"
+#include "MantidKernel/ConfigService.h"
+#include "MantidKernel/ListValidator.h"
 #include "MantidKernel/MDUnit.h"
 #include "MantidKernel/MultiThreaded.h"
 #include "MantidKernel/Strings.h"
@@ -38,6 +40,7 @@
 #include <numeric>
 #include <utility>
 
+using Mantid::Kernel::StringListValidator;
 using Mantid::Kernel::TimeSeriesProperty;
 using Mantid::Types::Core::DateAndTime;
 
@@ -109,12 +112,13 @@ const std::string MatrixWorkspace::yDimensionId = "yDimension";
 
 /// Default constructor
 MatrixWorkspace::MatrixWorkspace()
-    : IMDWorkspace(), ExperimentInfo(), m_axes(), m_isInitialized(false), m_YUnit(), m_YUnitLabel(), m_masks() {}
+    : IMDWorkspace(), ExperimentInfo(), m_axes(), m_isInitialized(false), m_YUnit(), m_YUnitLabel(), m_masks(),
+      m_marker_size(6.) {}
 
 MatrixWorkspace::MatrixWorkspace(const MatrixWorkspace &other)
     : IMDWorkspace(other), ExperimentInfo(other), m_indexInfo(std::make_unique<Indexing::IndexInfo>(other.indexInfo())),
       m_isInitialized(other.m_isInitialized), m_YUnit(other.m_YUnit), m_YUnitLabel(other.m_YUnitLabel),
-      m_masks(other.m_masks), m_indexInfoNeedsUpdate(false) {
+      m_masks(other.m_masks), m_indexInfoNeedsUpdate(false), m_marker_size(6.) {
   m_axes.resize(other.m_axes.size());
   for (size_t i = 0; i < m_axes.size(); ++i)
     m_axes[i] = std::unique_ptr<Axis>(other.m_axes[i]->clone(this));
@@ -321,6 +325,86 @@ const std::string MatrixWorkspace::getTitle() const {
     return Workspace::getTitle();
 }
 
+/** Set the plot type of the workspace
+ *
+ * @param t :: The plot type. Must be one of: ["plot", "marker", "histogram", "errorbar_x", "errorbar_y", "errorbar_xy"]
+ */
+void MatrixWorkspace::setPlotType(const std::string &t) {
+  Run &run = mutableRun();
+  StringListValidator v(validPlotTypes);
+
+  if (v.isValid(t) == "") {
+    run.addProperty("plot_type", t, true);
+  } else {
+    std::string validValues = std::accumulate(
+        validPlotTypes.begin() + 1, validPlotTypes.end(), validPlotTypes.front(),
+        [](const std::string &valuesString, const std::string &plotType) { return valuesString + ", " + plotType; });
+    throw std::invalid_argument("Invalid plot type '" + t + "'. Must be one of: " + validValues);
+  }
+}
+
+/** Get the plot type
+ *
+ * @return The plot type
+ */
+std::string MatrixWorkspace::getPlotType() const {
+  std::string plotType;
+  if (run().hasProperty("plot_type")) {
+    plotType = run().getProperty("plot_type")->value();
+  } else {
+    plotType = "plot";
+  }
+  return plotType;
+}
+
+/**
+ * set marker type
+ *
+ * @param markerType :: The Marker Type
+ */
+void MatrixWorkspace::setMarkerStyle(const std::string &markerType) {
+  StringListValidator v(validMarkerStyles);
+
+  if (v.isValid(markerType) == "") {
+    m_marker = markerType;
+  } else {
+    std::string validValues =
+        std::accumulate(validMarkerStyles.begin() + 1, validMarkerStyles.end(), validMarkerStyles.front(),
+                        [](const std::string &valuesString, const std::string &markerStyle) {
+                          return valuesString + ", " + markerStyle;
+                        });
+    throw std::invalid_argument("Invalid marker type '" + markerType + "'. Must be one of: " + validValues);
+  }
+}
+
+/**
+ * get the marker type
+ *
+ * @return std::string :: the marker type
+ */
+std::string MatrixWorkspace::getMarkerStyle() const {
+  if (m_marker.empty())
+    return Kernel::ConfigService::Instance().getString("plots.markerworkspace.MarkerStyle");
+  else
+    return m_marker;
+}
+
+/**
+ * Set the marker size for plotting
+ *
+ * @param size :: size of the marker
+ */
+void MatrixWorkspace::setMarkerSize(const float size) {
+  if (size > 0)
+    m_marker_size = size;
+}
+/**
+ * Get the marker size for plotting
+ *
+ * @return int :: marker size
+ */
+float MatrixWorkspace::getMarkerSize() const { return m_marker_size; }
+
 void MatrixWorkspace::updateSpectraUsing(const SpectrumDetectorMapping &map) {
   for (size_t j = 0; j < getNumberHistograms(); ++j) {
     auto &spec = getSpectrum(j);
@@ -352,9 +436,10 @@ void MatrixWorkspace::rebuildSpectraMapping(const bool includeMonitors, const sp
     return;
   }
 
-  std::vector<detid_t> pixelIDs = this->getInstrument()->getDetectorIDs(!includeMonitors);
+  const std::vector<detid_t> pixelIDs = this->getInstrument()->getDetectorIDs(!includeMonitors);
 
   try {
+    const size_t NUM_HIST = this->getNumberHistograms();
     size_t index = 0;
     std::vector<detid_t>::const_iterator iend = pixelIDs.end();
     for (std::vector<detid_t>::const_iterator it = pixelIDs.begin(); it != iend; ++it) {
@@ -362,7 +447,7 @@ void MatrixWorkspace::rebuildSpectraMapping(const bool includeMonitors, const sp
       const detid_t detId = *it;
       const auto specNo = specnum_t(index + specNumOffset);
 
-      if (index < this->getNumberHistograms()) {
+      if (index < NUM_HIST) {
         auto &spec = getSpectrum(index);
         spec.setSpectrumNo(specNo);
         spec.setDetectorID(detId);
@@ -761,6 +846,17 @@ void MatrixWorkspace::getIntegratedSpectra(std::vector<double> &out, const doubl
   }
 }
 
+std::vector<double> MatrixWorkspace::getIntegratedCountsForWorkspaceIndices(const std::vector<size_t> &workspaceIndices,
+                                                                            const double minX, const double maxX,
+                                                                            const bool entireRange) const {
+  std::vector<double> integratedSpectra;
+  getIntegratedSpectra(integratedSpectra, minX, maxX, entireRange);
+  std::vector<double> detectorCounts;
+  std::transform(workspaceIndices.cbegin(), workspaceIndices.cend(), std::back_inserter(detectorCounts),
+                 [&](const auto &wsIndex) { return integratedSpectra[wsIndex]; });
+  return detectorCounts;
+}
+
 /** Get the effective detector for the given spectrum
 *  @param  workspaceIndex The workspace index for which the detector is required
 *  @return A single detector object representing the detector(s) contributing
@@ -928,9 +1024,6 @@ bool MatrixWorkspace::isCommonLogBins() const {
  * @return int
  */
 size_t MatrixWorkspace::numberOfAxis() const { return m_axes.size(); }
-
-/// Returns the units of the data in the workspace
-std::string MatrixWorkspace::YUnit() const { return m_YUnit; }
 
 /// Sets a new unit for the data (Y axis) in the workspace
 void MatrixWorkspace::setYUnit(const std::string &newUnit) { m_YUnit = newUnit; }
@@ -1255,8 +1348,18 @@ std::shared_ptr<MatrixWorkspace> MatrixWorkspace::monitorWorkspace() const { ret
  * @return bytes used.
  */
 size_t MatrixWorkspace::getMemorySize() const {
-  // 3 doubles per histogram bin.
-  return 3 * size() * sizeof(double) + run().getMemorySize();
+  const size_t runMemSize = run().getMemorySize();
+  if (this->isRaggedWorkspace()) {
+    const auto numHist = this->getNumberHistograms();
+    size_t total{0};
+    for (size_t i = 0; i < numHist; ++i) {
+      total += this->getSpectrum(i).getMemorySize();
+    }
+    return total + runMemSize;
+  } else {
+    // 3 doubles per histogram bin.
+    return 3 * size() * sizeof(double) + runMemSize;
+  }
 }
 
 /** Returns the memory used (in bytes) by the X axes, handling ragged bins.
@@ -2065,7 +2168,9 @@ void MatrixWorkspace::buildDefaultSpectrumDefinitions() {
 
 void MatrixWorkspace::rebuildDetectorIDGroupings() {
   const auto &detInfo = detectorInfo();
+  const auto detInfo_scanCount = detInfo.scanCount(); // cache value outside of the loop
   const auto &allDetIDs = detInfo.detectorIDs();
+  const auto allDetIDs_size = allDetIDs.size(); // cache value outside of the loop
   const auto &specDefs = m_indexInfo->spectrumDefinitions();
   const auto indexInfoSize = static_cast<int64_t>(m_indexInfo->size());
   enum class ErrorCode { None, InvalidDetIndex, InvalidTimeIndex };
@@ -2079,10 +2184,9 @@ void MatrixWorkspace::rebuildDetectorIDGroupings() {
     std::set<detid_t> detIDs;
     for (const auto &index : (*specDefs)[i]) {
       const size_t detIndex = index.first;
-      const size_t timeIndex = index.second;
-      if (detIndex >= allDetIDs.size()) {
+      if (detIndex >= allDetIDs_size) {
         errorValue = ErrorCode::InvalidDetIndex;
-      } else if (timeIndex >= detInfo.scanCount()) {
+      } else if (index.second >= detInfo_scanCount) { // timeIndex is second
         errorValue = ErrorCode::InvalidTimeIndex;
       } else {
         detIDs.insert(allDetIDs[detIndex]);

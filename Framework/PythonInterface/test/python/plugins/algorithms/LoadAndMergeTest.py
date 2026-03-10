@@ -39,6 +39,21 @@ class LoadAndMergeTest(unittest.TestCase):
         self.assertEqual(out1.name(), "out1")
         self.assertTrue(isinstance(out1, MatrixWorkspace))
 
+    def test_single_run_load_ads(self):
+        out1 = LoadAndMerge(Filename="170257")
+        ads_ws = mtd[out1.name()]
+        self.assertTrue(ads_ws)
+        self.assertEqual(ads_ws.name(), "out1")
+        self.assertTrue(isinstance(ads_ws, MatrixWorkspace))
+
+    def test_single_run_load_no_ads(self):
+        out1 = LoadAndMerge(Filename="170257", StoreInADS=False)
+        with self.assertRaisesRegex(KeyError, ".*does not exist."):
+            _ = mtd["out1"]
+        self.assertTrue(out1)
+        self.assertEqual(out1.name(), "")
+        self.assertTrue(isinstance(out1, MatrixWorkspace))
+
     def test_many_runs_summed(self):
         out2 = LoadAndMerge(Filename="170257+170258", LoaderName="LoadILLIndirect")
         self.assertTrue(out2)
@@ -145,7 +160,7 @@ class LoadAndMergeTest(unittest.TestCase):
         self.assertEqual(mtd["__out"].getItem(1).name(), "__170300_170302")
 
     def test_non_ill_load(self):
-        out7 = LoadAndMerge(Filename="IRS26173,26174.RAW")
+        out7 = LoadAndMerge(Filename="IRS26173,26174.raw")
         self.assertTrue(out7)
         self.assertTrue(isinstance(out7, WorkspaceGroup))
         self.assertEqual(out7.getNumberOfEntries(), 2)

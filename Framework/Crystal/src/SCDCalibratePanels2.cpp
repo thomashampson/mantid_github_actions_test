@@ -1265,6 +1265,7 @@ void SCDCalibratePanels2::saveXmlFile(const std::string &FileName,
       bankName.append("/sixteenpack");
 
     std::shared_ptr<const IComponent> bank = instrument->getComponentByName(bankName);
+    auto bankFullName = bank->getFullName();
 
     Quat relRot = bank->getRelativeRot();
     std::vector<double> relRotAngles = relRot.getEulerAngles("XYZ");
@@ -1300,7 +1301,7 @@ void SCDCalibratePanels2::saveXmlFile(const std::string &FileName,
     bank_sx.put("<xmlattr>.name", "scalex");
     bank_sy.put("<xmlattr>.name", "scaley");
 
-    bank_root.put("<xmlattr>.name", bankName);
+    bank_root.put("<xmlattr>.name", bankFullName); // avoid future expensive search in the instrument's tree
 
     // configure structure
     bank_dx.add_child("value", bank_dx_val);
@@ -1382,7 +1383,8 @@ void SCDCalibratePanels2::saveIsawDetCal(const std::string &filename,
  * @param FileName
  * @param tws
  */
-void SCDCalibratePanels2::saveCalibrationTable(const std::string &FileName, Mantid::API::ITableWorkspace_sptr &tws) {
+void SCDCalibratePanels2::saveCalibrationTable(const std::string &FileName,
+                                               Mantid::API::ITableWorkspace_sptr const &tws) {
   auto alg = createChildAlgorithm("SaveAscii");
   alg->setProperty("InputWorkspace", tws);
   alg->setProperty("Filename", FileName);
@@ -1480,7 +1482,7 @@ void SCDCalibratePanels2::profileL1(Mantid::API::IPeaksWorkspace_sptr &pws,
  * @param pws
  * @param pws_original
  */
-void SCDCalibratePanels2::profileBanks(Mantid::API::IPeaksWorkspace_sptr &pws,
+void SCDCalibratePanels2::profileBanks(Mantid::API::IPeaksWorkspace_sptr const &pws,
                                        const Mantid::API::IPeaksWorkspace_sptr &pws_original) {
   g_log.notice() << "START of profiling all banks along six degree of freedom\n";
 

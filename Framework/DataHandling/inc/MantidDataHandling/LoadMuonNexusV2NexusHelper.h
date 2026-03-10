@@ -9,9 +9,10 @@
 #include "MantidAPI/Workspace_fwd.h"
 #include "MantidDataObjects/Workspace2D_fwd.h"
 #include "MantidGeometry/IDTypes.h"
-#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusClasses_fwd.h"
 
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace Mantid {
@@ -25,10 +26,10 @@ struct SampleInformation {
 
 class LoadMuonNexusV2NexusHelper {
 public:
-  LoadMuonNexusV2NexusHelper(const NeXus::NXEntry &entry);
+  LoadMuonNexusV2NexusHelper(const Nexus::NXEntry &entry);
 
   // Loads the good frame data from the nexus file
-  NeXus::NXInt loadGoodFramesDataFromNexus(bool isFileMultiPeriod);
+  Nexus::NXInt loadGoodFramesDataFromNexus(bool isFileMultiPeriod);
   // Loads the grouping data from the nexus file
   std::optional<std::vector<detid_t>> loadDetectorGroupingFromNexus(const std::vector<detid_t> &loadedDetectors,
                                                                     bool isFileMultiPeriod, int periodNumber);
@@ -59,7 +60,7 @@ public:
   std::string getPeriodTotalCounts() const;
 
 private:
-  const NeXus::NXEntry &m_entry;
+  const Nexus::NXEntry &m_entry;
 };
 } // namespace DataHandling
 } // namespace Mantid

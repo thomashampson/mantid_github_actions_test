@@ -14,6 +14,8 @@
 #include "MantidKernel/Strings.h"
 #include "MantidKernel/TimeSeriesProperty.h"
 
+#include <algorithm>
+#include <iterator>
 #include <unordered_map>
 
 namespace Mantid {
@@ -28,7 +30,7 @@ namespace Kernel {
  */
 Property::Property(std::string name, const std::type_info &type, const unsigned int &direction)
     : m_name(std::move(name)), m_documentation(""), m_typeinfo(&type), m_direction(direction), m_units(""), m_group(""),
-      m_remember(true), m_autotrim(true), m_disableReplaceWSButton(false) {
+      m_remember(true), m_autotrim(true), m_disableReplaceWSButton(false), m_isDynamicDefault(false) {
   if (m_name.empty()) {
     throw std::invalid_argument("An empty property name is not permitted");
   }
@@ -43,12 +45,13 @@ Property::Property(std::string name, const std::type_info &type, const unsigned 
 Property::Property(const Property &right)
     : m_name(right.m_name), m_documentation(right.m_documentation), m_typeinfo(right.m_typeinfo),
       m_direction(right.m_direction), m_units(right.m_units), m_group(right.m_group), m_remember(right.m_remember),
-      m_autotrim(right.m_autotrim), m_disableReplaceWSButton(right.m_disableReplaceWSButton) {
-  if (m_name.empty()) {
+      m_autotrim(right.m_autotrim), m_disableReplaceWSButton(right.m_disableReplaceWSButton),
+      m_isDynamicDefault(right.m_isDynamicDefault) {
+  if (m_name.empty())
     throw std::invalid_argument("An empty property name is not permitted");
-  }
-  if (right.m_settings)
-    m_settings.reset(right.m_settings->clone());
+
+  std::transform(right.m_settings.begin(), right.m_settings.end(), std::back_inserter(m_settings),
+                 [](auto const &settings) { return std::unique_ptr<IPropertySettings const>(settings->clone()); });
 }
 
 /// Virtual destructor
@@ -58,6 +61,16 @@ Property::~Property() = default;
  *  @return The name of the property
  */
 const std::string &Property::name() const { return m_name; }
+
+/** Set the property's name
+ *  @param name :: The name of the property
+ */
+void Property::setName(const std::string &name) {
+  if (name.empty()) {
+    throw std::invalid_argument("An empty property name is not permitted");
+  }
+  m_name = name;
+}
 
 /** Get the property's documentation string
  *  @return The documentation string
@@ -89,18 +102,20 @@ std::string Property::isValid() const {
  * Takes ownership of the given object
  * @param settings A pointer to an object specifying the settings type
  */
-void Property::setSettings(std::unique_ptr<IPropertySettings> settings) { m_settings = std::move(settings); }
+void Property::setSettings(std::unique_ptr<IPropertySettings const> settings) {
+  m_settings.emplace_back(std::move(settings));
+}
 
 /**
  *
- * @return the PropertySettings for this property
+ * @return the vector of PropertySettings for this property
  */
-IPropertySettings *Property::getSettings() { return m_settings.get(); }
+std::vector<std::unique_ptr<IPropertySettings const>> const &Property::getSettings() const { return m_settings; }
 
 /**
- * Deletes the PropertySettings object contained
+ * Clear the vector of PropertySettings for this property
  */
-void Property::clearSettings() { m_settings.reset(nullptr); }
+void Property::clearSettings() { m_settings.clear(); }
 
 /**
  * Whether to remember this property input
@@ -217,7 +232,6 @@ class MaskWorkspace;
 class SpecialWorkspace2D;
 class Workspace2D;
 class TableWorkspace;
-class SpecialWorkspace2D;
 class SplittersWorkspace;
 } // namespace DataObjects
 
@@ -360,6 +374,18 @@ bool Property::disableReplaceWSButton() const { return m_disableReplaceWSButton;
  * @param disable The option to disable or not
  */
 void Property::setDisableReplaceWSButton(const bool &disable) { m_disableReplaceWSButton = disable; }
+
+/**
+ * Returns a flag indicating that the property's value has been set programmatically,
+ * for example, if the property has a default value which depends on the value of an upstream property.
+ */
+bool Property::isDynamicDefault() const { return m_isDynamicDefault; }
+
+/**
+ * Set or clear the flag indicating whether or not the property's value has been set programmatically.
+ */
+void Property::setIsDynamicDefault(const bool &flag) { m_isDynamicDefault = flag; }
+
 } // namespace Kernel
 
 } // namespace Mantid

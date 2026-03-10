@@ -10,13 +10,14 @@
 #include "MantidDataObjects/BoxControllerNeXusIO.h"
 #include "MantidDataObjects/MDBoxBase.h"
 #include "MantidDataObjects/MDEventFactory.h"
+#include "MantidDataObjects/MDEventWorkspace.h"
 #include "MantidKernel/CPUTimer.h"
 #include "MantidKernel/Strings.h"
-#include "MantidKernel/System.h"
 #include "MantidKernel/VectorHelper.h"
+#include "MantidNexus/NexusFile.h"
 
-#include <Poco/File.h>
 #include <boost/scoped_ptr.hpp>
+#include <filesystem>
 
 using namespace Mantid::Kernel;
 using namespace Mantid::API;
@@ -305,10 +306,8 @@ void MergeMDFiles::finalizeOutput(const std::string &outputFile) {
     // create or open WS group and put there additional information about WS and
     // its dimensions
     bool old_data_there;
-    // clang-format off
-    boost::scoped_ptr< ::NeXus::File> file(MDBoxFlatTree::createOrOpenMDWSgroup(
-        outputFile, m_nDims, m_MDEventType, false, old_data_there));
-    // clang-format on
+    boost::scoped_ptr<Nexus::File> file(
+        MDBoxFlatTree::createOrOpenMDWSgroup(outputFile, m_nDims, m_MDEventType, false, old_data_there));
     this->progress(0.94, "Saving ws history and dimensions");
     MDBoxFlatTree::saveWSGenericInfo(file.get(), m_OutIWS);
     // Save each ExperimentInfo to a spot in the file
@@ -351,7 +350,7 @@ void MergeMDFiles::exec() {
   m_fileBasedTargetWS = false;
   if (!outputFile.empty()) {
     m_fileBasedTargetWS = true;
-    if (Poco::File(outputFile).exists())
+    if (std::filesystem::exists(outputFile))
       throw std::invalid_argument(" File " + outputFile +
                                   " already exists. Can not use existing file "
                                   "as the target to MergeMD files.\n" +

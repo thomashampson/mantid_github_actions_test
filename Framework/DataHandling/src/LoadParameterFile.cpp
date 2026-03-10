@@ -20,7 +20,8 @@
 #include <Poco/DOM/NodeFilter.h>
 #include <Poco/DOM/NodeIterator.h>
 #include <Poco/DOM/NodeList.h>
-#include <Poco/File.h>
+#include <chrono>
+#include <filesystem>
 
 using Mantid::Geometry::InstrumentDefinitionParser;
 using Poco::XML::AutoPtr;
@@ -86,6 +87,8 @@ void LoadParameterFile::exec() {
   Progress prog(this, 0.0, 1.0, 100);
 
   prog.report("Parsing XML");
+
+  const auto parseStartTime = std::chrono::high_resolution_clock::now();
   // If we've been given an XML string parse that instead
   if (!parameterXMLProperty->isDefault()) {
     try {
@@ -99,22 +102,22 @@ void LoadParameterFile::exec() {
   } else {
     try {
       // First see if the file exists
-      Poco::File ipfFile(filename);
-      if (!ipfFile.exists()) {
-        Poco::Path filePath(filename);
-        filename = Poco::Path(Kernel::ConfigService::Instance().getInstrumentDirectory())
-                       .makeDirectory()
-                       .setFileName(filePath.getFileName())
-                       .toString();
+      std::filesystem::path ipfFile(filename);
+      if (!std::filesystem::exists(ipfFile)) {
+        std::filesystem::path filePath(filename);
+        filename =
+            (std::filesystem::path(Kernel::ConfigService::Instance().getInstrumentDirectory()) / filePath.filename())
+                .string();
       }
       g_log.information() << "Parsing from XML file: " << filename << '\n';
       pDoc = pParser.parse(filename);
     } catch (Poco::Exception &exc) {
       throw Kernel::Exception::FileError(exc.displayText() + ". Unable to parse File:", filename);
     } catch (...) {
-      throw Kernel::Exception::FileError("Unable to parse File:", filename);
+      throw Kernel::Exception::FileError("Unable to parse File:", std::move(filename));
     }
   }
+  addTimer("xmlParsing", parseStartTime, std::chrono::high_resolution_clock::now());
 
   // Get pointer to root element
   Element *pRootElem = pDoc->documentElement();
@@ -122,13 +125,17 @@ void LoadParameterFile::exec() {
     throw Kernel::Exception::InstrumentDefinitionError("No root element in XML Parameter file", filename);
   }
 
-  // Set all parameters that specified in all component-link elements of
-  // pRootElem
+  // Set all parameters that specified in all component-link elements of pRootElem
+  const auto linkStartTime = std::chrono::high_resolution_clock::now();
   InstrumentDefinitionParser loadInstr;
   loadInstr.setComponentLinks(instrument, pRootElem, &prog, localWorkspace->getWorkspaceStartDate());
+  addTimer("setComponentLinks", linkStartTime, std::chrono::high_resolution_clock::now());
 
   // populate parameter map of workspace
+  const auto populateStartTime = std::chrono::high_resolution_clock::now();
   localWorkspace->populateInstrumentParameters();
+  addTimer("populateInstrumentParameters", populateStartTime, std::chrono::high_resolution_clock::now());
+
   if (!filename.empty()) {
     localWorkspace->instrumentParameters().addParameterFilename(filename);
   }

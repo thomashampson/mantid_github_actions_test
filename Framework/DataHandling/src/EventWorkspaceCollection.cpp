@@ -6,13 +6,14 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #include "MantidDataHandling/EventWorkspaceCollection.h"
 #include "MantidAPI/Axis.h"
+#include "MantidAPI/ISISRunLogs.h"
 #include "MantidAPI/Run.h"
 #include "MantidAPI/Sample.h"
-#include "MantidDataHandling/ISISRunLogs.h"
 #include "MantidDataObjects/EventWorkspace.h"
 #include "MantidDataObjects/WorkspaceCreation.h"
 #include "MantidGeometry/Instrument.h"
 #include "MantidIndexing/IndexInfo.h"
+#include "MantidKernel/Logger.h"
 #include "MantidKernel/UnitFactory.h"
 
 #include <algorithm>
@@ -28,6 +29,9 @@ using namespace Mantid::Kernel;
 using namespace Mantid::API;
 
 namespace {
+
+// Logger for this class
+auto g_log = Kernel::Logger("EventWorkspaceCollection");
 
 /**
  * Copy all logData properties from the 'from' workspace to the 'to'
@@ -91,7 +95,16 @@ void EventWorkspaceCollection::setNPeriods(size_t nPeriods, std::unique_ptr<cons
     m_WsVec[i] = createEmptyEventWorkspace();
     m_WsVec[i]->copyExperimentInfoFrom(temp.get());
     if (addBoolTimeSeries) {
-      logCreator.addPeriodLogs(periodNumber, m_WsVec[i]->mutableRun());
+      try {
+        logCreator.addPeriodLogs(periodNumber, m_WsVec[i]->mutableRun());
+      } catch (const std::runtime_error &e) {
+        // The addition of period related logs may result in runtime errors, for instance, if the log
+        // filter contains two entries with identical times as duplicated entries will be removed:
+        // "Cannot guess ending value from a TimeSeriesProperty that contains only a single time"
+        // Under these circumstances, it is advisable to omit the period-related logs.
+
+        g_log.warning(e.what());
+      }
     }
     copyLogs(temp,
              m_WsVec[i]); // Copy all logs from dummy workspace to period workspaces.
@@ -115,7 +128,7 @@ API::Workspace_sptr EventWorkspaceCollection::combinedWorkspace() {
     final = getSingleHeldWorkspace();
   } else {
     auto wsg = std::make_shared<API::WorkspaceGroup>();
-    for (auto &ws : m_WsVec) {
+    for (const auto &ws : m_WsVec) {
       wsg->addWorkspace(ws);
     }
     final = wsg;

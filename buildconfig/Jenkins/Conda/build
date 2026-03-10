@@ -14,7 +14,6 @@
 #   8. ENABLE_DOC_TESTS: whether or not to build the test data for doc tests
 #   9. ENABLE_COVERITY: enables the coverity scan static analysis
 #   10. EXTRA_CMAKE_FLAGS: Extra flags to pass directly to cmake, enclose in "".
-#   11. BUILD_THREADS: Pass the number of threads that can be used to build with
 
 WORKSPACE=$1
 CMAKE_PRESET=$2
@@ -26,23 +25,39 @@ ENABLE_SYSTEM_TESTS=$7
 ENABLE_DOC_TESTS=$8
 ENABLE_COVERITY=$9
 EXTRA_CMAKE_FLAGS=${10}
-BUILD_THREADS=${11}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_MIRROR="$("${SCRIPT_DIR}/../data_mirrors")"
 
 # Only pass MANTID_DATA_STORE to CMake if present in the environment otherwise rely on CMake default
 if [[ -n "${MANTID_DATA_STORE}" ]]; then
     MANTID_DATA_STORE_CMAKE="-DMANTID_DATA_STORE=${MANTID_DATA_STORE}"
 fi
 
-BUILD_OPTIONS="-j$BUILD_THREADS"
 if [[ $OSTYPE == "msys"* ]]; then
-    BUILD_OPTIONS="$BUILD_OPTIONS --config Release"
+    eval "$($WORKSPACE/buildconfig/Jenkins/Conda/vcvarsall.sh x64 -vcvars_ver=14.38.17.8)"
+fi
+
+if [[ ${JOB_NAME} == *pull_requests* ]]; then
+    EXTRA_CMAKE_FLAGS+=" -DPR_JOB=True"
+fi
+
+if [[ $ENABLE_SYSTEM_TESTS == true ]]; then
+    EXTRA_CMAKE_FLAGS+=" -DMPI_BUILD=ON"
 fi
 
 # Run CMake using preset and variables
-cmake --preset=${CMAKE_PRESET} ${MANTID_DATA_STORE_CMAKE} ${EXTRA_CMAKE_FLAGS} $WORKSPACE
+cmake --preset=${CMAKE_PRESET} \
+      ${MANTID_DATA_STORE_CMAKE} -DDATA_STORE_MIRROR=${DATA_MIRROR} \
+      ${EXTRA_CMAKE_FLAGS} $WORKSPACE
 
 # Run the actual builds for the code, unit tests, and system tests.
 cd $WORKSPACE/build
+
+# Remove this following switch to ninja. Currently only used on Windows.
+BUILD_OPTIONS=""
+if [ ! -f build.ninja ]; then
+    BUILD_OPTIONS="-j20 --config Release"
+fi
 
 if [[ $ENABLE_COVERITY == true ]]; then
     conda install -y jq curl
@@ -64,16 +79,18 @@ if [[ $ENABLE_BUILD_CODE == true ]]; then
     cmake --build . $BUILD_OPTIONS
 fi
 
-if [[ $ENABLE_UNIT_TESTS == true ]]; then
-    cmake --build . --target AllTests $BUILD_OPTIONS
-fi
-
+# create a collection of targets to run all at once during main build
 if [[ $ENABLE_UNIT_TESTS == true || $ENABLE_SYSTEM_TESTS == true || $ENABLE_DOC_TESTS == true ]]; then
-    cmake --build . --target StandardTestData $BUILD_OPTIONS
-fi
+    TARGET_BUILD_AND_DOWNLOAD="$TARGET_BUILD_AND_DOWNLOAD StandardTestData"
+    if [[ $ENABLE_UNIT_TESTS == true ]]; then
+	TARGET_BUILD_AND_DOWNLOAD="$TARGET_BUILD_AND_DOWNLOAD AllTests"
+    fi
+    if [[ $ENABLE_SYSTEM_TESTS == true ]]; then
+	TARGET_BUILD_AND_DOWNLOAD="$TARGET_BUILD_AND_DOWNLOAD SystemTestData"
+    fi
 
-if [[ $ENABLE_SYSTEM_TESTS == true ]]; then
-    cmake --build . --target SystemTestData $BUILD_OPTIONS
+    # compile and download data
+    cmake --build . --target $TARGET_BUILD_AND_DOWNLOAD $BUILD_OPTIONS
 fi
 
 # Build docs

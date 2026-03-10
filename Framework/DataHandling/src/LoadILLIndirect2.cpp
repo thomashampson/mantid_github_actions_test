@@ -19,19 +19,20 @@
 #include "MantidKernel/ConfigService.h"
 #include "MantidKernel/ListValidator.h"
 #include "MantidKernel/UnitFactory.h"
+#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
-#include <Poco/Path.h>
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <cmath>
-#include <nexus/napi.h>
 
 namespace Mantid::DataHandling {
 
 using namespace Kernel;
 using namespace API;
-using namespace NeXus;
+using namespace Nexus;
 
 // Register the algorithm into the AlgorithmFactory
 DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadILLIndirect2)
@@ -58,16 +59,16 @@ const std::string LoadILLIndirect2::category() const { return "DataHandling\\Nex
  * @returns An integer specifying the confidence level. 0 indicates it will not
  * be used
  */
-int LoadILLIndirect2::confidence(Kernel::NexusDescriptor &descriptor) const {
+int LoadILLIndirect2::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
 
   // fields existent only at the ILL
-  if (descriptor.pathExists("/entry0/wavelength")               // ILL
-      && descriptor.pathExists("/entry0/experiment_identifier") // ILL
-      && descriptor.pathExists("/entry0/mode")                  // ILL
-      && ((descriptor.pathExists("/entry0/instrument/Doppler/mirror_sense") &&
-           descriptor.pathExists("/entry0/dataSD/SingleD_data")) // IN16B new
-          || (descriptor.pathExists("/entry0/instrument/Doppler/doppler_frequency") &&
-              descriptor.pathExists("/entry0/dataSD/dataSD")) // IN16B old
+  if (descriptor.isEntry("/entry0/wavelength")               // ILL
+      && descriptor.isEntry("/entry0/experiment_identifier") // ILL
+      && descriptor.isEntry("/entry0/mode")                  // ILL
+      && ((descriptor.isEntry("/entry0/instrument/Doppler/mirror_sense") &&
+           descriptor.isEntry("/entry0/dataSD/SingleD_data")) // IN16B new
+          || (descriptor.isEntry("/entry0/instrument/Doppler/doppler_frequency") &&
+              descriptor.isEntry("/entry0/dataSD/dataSD")) // IN16B old
           )) {
     return 80;
   } else {
@@ -104,15 +105,15 @@ void LoadILLIndirect2::exec() {
   Progress progress(this, 0., 1., progressSteps);
 
   // open the root node
-  NeXus::NXRoot dataRoot(filenameData);
+  Nexus::NXRoot dataRoot(filenameData);
   NXEntry firstEntry = dataRoot.openFirstEntry();
 
   // Load Data details (number of tubes, channels, mode, etc)
   loadDataDetails(firstEntry);
   progress.report("Loaded metadata");
 
-  const std::string instrumentPath = LoadHelper::findInstrumentNexusPath(firstEntry);
-  setInstrumentName(firstEntry, instrumentPath);
+  const std::string instrumentAddress = LoadHelper::findInstrumentNexusAddress(firstEntry);
+  setInstrumentName(firstEntry, instrumentAddress);
 
   initWorkSpace();
   progress.report("Initialised the workspace");
@@ -144,21 +145,21 @@ void LoadILLIndirect2::exec() {
 /**
  * Set member variable with the instrument name
  * @param firstEntry : nexus entry
- * @param instrumentNamePath : nexus path to instrument name
+ * @param instrumentNameAddress : nexus address to instrument name
  */
-void LoadILLIndirect2::setInstrumentName(const NeXus::NXEntry &firstEntry, const std::string &instrumentNamePath) {
-  if (instrumentNamePath.empty()) {
+void LoadILLIndirect2::setInstrumentName(const Nexus::NXEntry &firstEntry, const std::string &instrumentNameAddress) {
+  if (instrumentNameAddress.empty()) {
     std::string message("Cannot set the instrument name from the Nexus file!");
     g_log.error(message);
     throw std::runtime_error(message);
   }
-  m_instrumentName = LoadHelper::getStringFromNexusPath(firstEntry, instrumentNamePath + "/name");
+  m_instrumentName = LoadHelper::getStringFromNexusAddress(firstEntry, instrumentNameAddress + "/name");
   boost::to_upper(m_instrumentName); // "IN16b" in file, keep it upper case.
   g_log.debug() << "Instrument name set to: " + m_instrumentName << '\n';
 }
 
-std::string LoadILLIndirect2::getDataPath(const NeXus::NXEntry &entry) {
-  NeXus::NXClass instrument = entry.openNXGroup("instrument");
+std::string LoadILLIndirect2::getDataAddress(const Nexus::NXEntry &entry) {
+  Nexus::NXClass instrument = entry.openNXGroup("instrument");
   if (m_loadOption == "Diffractometer") {
 
     if (instrument.containsGroup("DiffDet")) {
@@ -178,10 +179,10 @@ std::string LoadILLIndirect2::getDataPath(const NeXus::NXEntry &entry) {
  * Load Data details (number of tubes, channels, etc)
  * @param entry First entry of nexus file
  */
-void LoadILLIndirect2::loadDataDetails(NeXus::NXEntry &entry) {
+void LoadILLIndirect2::loadDataDetails(const Nexus::NXEntry &entry) {
 
   // read in the data
-  auto data = LoadHelper::getIntDataset(entry, getDataPath(entry));
+  auto data = LoadHelper::getIntDataset(entry, getDataAddress(entry));
 
   m_numberOfTubes = static_cast<size_t>(data.dim0());
   m_numberOfPixelsPerTube = static_cast<size_t>(data.dim1());
@@ -199,7 +200,7 @@ void LoadILLIndirect2::loadDataDetails(NeXus::NXEntry &entry) {
   if (m_loadOption == "Spectrometer") {
     auto dataSD = LoadHelper::getIntDataset(entry, "dataSD");
 
-    for (int i = 0; i < dataSD.dim0(); ++i) {
+    for (Nexus::dimsize_t i = 0; i < dataSD.dim0(); ++i) {
       try {
         std::string entryNameFlagSD = boost::str(boost::format("instrument/SingleD/tubes%i_function") % (i + 1));
         NXFloat flagSD = entry.openNXFloat(entryNameFlagSD);
@@ -207,11 +208,11 @@ void LoadILLIndirect2::loadDataDetails(NeXus::NXEntry &entry) {
 
         if (flagSD[0] == 1.0) // is enabled
         {
-          m_activeSDIndices.insert(i);
+          m_activeSDIndices.insert(static_cast<detid_t>(i));
         }
       } catch (...) {
         // if the flags are not present in the file (e.g. old format), load all
-        m_activeSDIndices.insert(i);
+        m_activeSDIndices.insert(static_cast<detid_t>(i));
       }
     }
     m_numberOfSimpleDetectors = m_activeSDIndices.size();
@@ -251,7 +252,7 @@ void LoadILLIndirect2::initWorkSpace() {
  * Load data found in nexus file in general, indirect mode.
  * @param entry :: The Nexus entry
  */
-void LoadILLIndirect2::loadDataIntoWorkspace(NeXus::NXEntry &entry) {
+void LoadILLIndirect2::loadDataIntoWorkspace(const Nexus::NXEntry &entry) {
 
   // First, let's create common X-axis
   std::vector<double> xAxis(m_numberOfChannels + 1);
@@ -273,7 +274,7 @@ void LoadILLIndirect2::loadDataIntoWorkspace(NeXus::NXEntry &entry) {
   int offset = static_cast<int>(m_numberOfTubes * m_numberOfPixelsPerTube + m_numberOfMonitors);
   auto dataSD = LoadHelper::getIntDataset(entry, "dataSD");
   dataSD.load();
-  std::set<int> sdIndices;
+  std::set<detid_t> sdIndices;
   std::transform(m_activeSDIndices.cbegin(), m_activeSDIndices.cend(), std::inserter(sdIndices, sdIndices.begin()),
                  [offset](const auto &index) { return index + offset; });
   LoadHelper::fillStaticWorkspace(m_localWorkspace, dataSD, xAxis, offset, false, std::vector<int>(), sdIndices);
@@ -284,13 +285,13 @@ void LoadILLIndirect2::loadDataIntoWorkspace(NeXus::NXEntry &entry) {
  * Load IN16B diffraction data from the Nexus file when requested.
  * @param entry
  */
-void LoadILLIndirect2::loadDiffractionData(NeXus::NXEntry &entry) {
-  NeXus::NXClass instrument = entry.openNXGroup("instrument");
+void LoadILLIndirect2::loadDiffractionData(Nexus::NXEntry &entry) {
+  Nexus::NXClass instrument = entry.openNXGroup("instrument");
 
   // first, determine version
   bool newVersion = instrument.containsDataSet("version");
 
-  auto data = LoadHelper::getIntDataset(entry, getDataPath(entry));
+  auto data = LoadHelper::getIntDataset(entry, getDataAddress(entry));
   data.load();
 
   auto dataMon = LoadHelper::getIntDataset(entry, "monitor/data");
@@ -334,17 +335,17 @@ void LoadILLIndirect2::loadDiffractionData(NeXus::NXEntry &entry) {
  * @param nexusfilename
  */
 void LoadILLIndirect2::loadNexusEntriesIntoProperties(const std::string &nexusfilename) {
-
   API::Run &runDetails = m_localWorkspace->mutableRun();
-  NXhandle nxfileID;
-  NXstatus stat = NXopen(nexusfilename.c_str(), NXACC_READ, &nxfileID);
-  if (stat == NX_ERROR) {
-    g_log.debug() << "convertNexusToProperties: Error loading " << nexusfilename;
+
+  try {
+    Nexus::File nxfileID(nexusfilename, NXaccess::READ);
+    LoadHelper::addNexusFieldsToWsRun(nxfileID, runDetails);
+  } catch (Nexus::Exception const &e) {
+    g_log.debug() << "convertNexusToProperties: Error loading  \"" << nexusfilename << "\" in read mode: " << e.what()
+                  << "\n";
     throw Kernel::Exception::FileError("Unable to open File:", nexusfilename);
   }
-  LoadHelper::addNexusFieldsToWsRun(nxfileID, runDetails);
   runDetails.addProperty("Facility", std::string("ILL"));
-  NXclose(&nxfileID);
 }
 
 /**
@@ -388,7 +389,7 @@ void LoadILLIndirect2::moveComponent(const std::string &componentName, double tw
  * They are moved according to some values in the nexus file.
  * @param entry : the nexus entry
  */
-void LoadILLIndirect2::moveSingleDetectors(const NeXus::NXEntry &entry) {
+void LoadILLIndirect2::moveSingleDetectors(const Nexus::NXEntry &entry) {
   std::string prefix("single_tube_");
   int index = 1;
   for (auto i : m_activeSDIndices) {

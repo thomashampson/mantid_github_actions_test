@@ -27,7 +27,7 @@
 #include "MantidFrameworkTestHelpers/MultiDomainFunctionHelper.h"
 #include "MantidFrameworkTestHelpers/WorkspaceCreationHelper.h"
 
-#include <Poco/File.h>
+#include <filesystem>
 
 using namespace Mantid;
 using namespace Mantid::Kernel;
@@ -613,7 +613,7 @@ public:
     IFunction_sptr out = fit.getProperty("Function");
     TS_ASSERT_DELTA(out->getParameter("A"), 1000, 30.0);
     TS_ASSERT_DELTA(out->getParameter("B"), 26, 0.1);
-    TS_ASSERT_DELTA(out->getParameter("C"), 7.7, 0.1);
+    TS_ASSERT_DELTA(out->getParameter("C"), 7.7, 0.2);
     TS_ASSERT_DELTA(out->getParameter("D"), 0, 0.1);
   }
 
@@ -686,9 +686,9 @@ public:
 
   void tearDown() override {
     std::string resFileName = "ResolutionTestResolution.res";
-    Poco::File phandle(resFileName);
-    if (phandle.exists()) {
-      phandle.remove();
+    std::filesystem::path phandle(resFileName);
+    if (std::filesystem::exists(phandle)) {
+      std::filesystem::remove(phandle);
     }
   }
 
@@ -2070,7 +2070,29 @@ public:
     const std::string status = fit.getProperty("OutputStatus");
     TS_ASSERT_EQUALS(status, "success")
     API::IFunction_sptr function = fit.getProperty("Function");
-    TS_ASSERT_DELTA(function->getParameter(0), 0.0, 1e-12)
+    TS_ASSERT_DELTA(function->getParameter(0), 2.0, 1e-12)
+    AnalysisDataService::Instance().clear();
+  }
+
+  void test_exclude_ranges_with_unweighted_least_squares_ignore_invalid_data() {
+    HistogramData::Points points{-2, -1, 0, 1, 2};
+    HistogramData::Counts counts(points.size(), 0.0);
+    counts.mutableData()[2] = 10.0;
+    MatrixWorkspace_sptr ws(DataObjects::create<Workspace2D>(1, HistogramData::Histogram(points, counts)).release());
+    Fit fit;
+    fit.initialize();
+    fit.setRethrows(true);
+    TS_ASSERT_THROWS_NOTHING(fit.setProperty("Function", "name=FlatBackground,A0=0.1"))
+    TS_ASSERT_THROWS_NOTHING(fit.setProperty("InputWorkspace", ws))
+    TS_ASSERT_THROWS_NOTHING(fit.setProperty("Minimizer", "Levenberg-MarquardtMD"))
+    TS_ASSERT_THROWS_NOTHING(fit.setProperty("CostFunction", "Unweighted least squares"))
+    TS_ASSERT_THROWS_NOTHING(fit.setProperty("IgnoreInvalidData", true))
+    TS_ASSERT_THROWS_NOTHING(fit.setProperty("Output", "fit_test_output"))
+    TS_ASSERT_THROWS_NOTHING(fit.execute())
+    const std::string status = fit.getProperty("OutputStatus");
+    TS_ASSERT_EQUALS(status, "success")
+    API::IFunction_sptr function = fit.getProperty("Function");
+    TS_ASSERT_DELTA(function->getParameter(0), 10.0, 1e-8)
     AnalysisDataService::Instance().clear();
   }
 

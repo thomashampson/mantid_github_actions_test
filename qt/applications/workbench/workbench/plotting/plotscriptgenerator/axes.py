@@ -18,7 +18,7 @@ from workbench.plotting.plotscriptgenerator.utils import convert_value_to_arg_st
 BASE_AXIS_LABEL_COMMAND = "set_{}label({})"
 BASE_AXIS_LIM_COMMAND = "set_{}lim({})"
 BASE_SET_TITLE_COMMAND = "set_title({})"
-BASE_AXIS_SCALE_COMMAND = "set_{}scale('{}')"
+BASE_AXIS_SCALE_COMMAND = "set_{}scale('{}'{})"
 BASE_SET_FACECOLOR_COMMAND = "set_facecolor('{}')"
 
 TICK_FORMATTER_CLASSES = {
@@ -69,9 +69,10 @@ def generate_set_title_command(ax):
 def generate_axis_scale_commands(ax):
     commands = []
     for axis in ["x", "y"]:
-        scale = getattr(ax, "get_{}scale".format(axis))()
+        scale = getattr(ax, f"get_{axis}scale")()
         if scale != "linear":
-            commands.append(BASE_AXIS_SCALE_COMMAND.format(axis, scale))
+            linthresh_str = f", linthresh={getattr(ax, f'get_{axis}axis')().get_transform().linthresh}" if scale == "symlog" else ""
+            commands.append(BASE_AXIS_SCALE_COMMAND.format(axis, scale, linthresh_str))
     return commands
 
 
@@ -112,8 +113,8 @@ def generate_tick_commands(ax):
                 commands.append("minorticks_on()")
 
             if isinstance(getattr(ax.xaxis, f"{tick_type}Ticks"), list) and len(getattr(ax.xaxis, f"{tick_type}Ticks")) > 0:
-                commands.append(f"tick_params(axis='x', which='{tick_type}', **" f"{generate_tick_params_kwargs(ax.xaxis, tick_type)})")
-                commands.append(f"tick_params(axis='y', which='{tick_type}', **" f"{generate_tick_params_kwargs(ax.yaxis, tick_type)})")
+                commands.append(f"tick_params(axis='x', which='{tick_type}', **{generate_tick_params_kwargs(ax.xaxis, tick_type)})")
+                commands.append(f"tick_params(axis='y', which='{tick_type}', **{generate_tick_params_kwargs(ax.yaxis, tick_type)})")
                 # add the custom show_minor_gridlines attribute so that it can be controlled by qt
                 if (
                     tick_type == "minor"

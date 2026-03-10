@@ -54,6 +54,8 @@ set(SRC_FILES
     src/WorkspaceCreation.cpp
     src/WorkspaceProperty.cpp
     src/WorkspaceSingleValue.cpp
+    src/PeakShapeDetectorBin.cpp
+    src/PeakShapeDetectorBinFactory.cpp
 )
 
 set(INC_FILES
@@ -80,24 +82,24 @@ set(INC_FILES
     inc/MantidDataObjects/GroupingWorkspace.h
     inc/MantidDataObjects/Histogram1D.h
     inc/MantidDataObjects/MDBin.h
-    inc/MantidDataObjects/MDBin.tcc
+    inc/MantidDataObjects/MDBin.hxx
     inc/MantidDataObjects/MDBox.h
-    inc/MantidDataObjects/MDBox.tcc
+    inc/MantidDataObjects/MDBox.hxx
     inc/MantidDataObjects/MDBoxBase.h
-    inc/MantidDataObjects/MDBoxBase.tcc
+    inc/MantidDataObjects/MDBoxBase.hxx
     inc/MantidDataObjects/MDBoxFlatTree.h
     inc/MantidDataObjects/MDBoxIterator.h
-    inc/MantidDataObjects/MDBoxIterator.tcc
+    inc/MantidDataObjects/MDBoxIterator.hxx
     inc/MantidDataObjects/MDBoxSaveable.h
     inc/MantidDataObjects/MDDimensionStats.h
     inc/MantidDataObjects/MDEvent.h
     inc/MantidDataObjects/MDEventFactory.h
     inc/MantidDataObjects/MDEventInserter.h
     inc/MantidDataObjects/MDEventWorkspace.h
-    inc/MantidDataObjects/MDEventWorkspace.tcc
+    inc/MantidDataObjects/MDEventWorkspace.hxx
     inc/MantidDataObjects/MDFramesToSpecialCoordinateSystem.h
     inc/MantidDataObjects/MDGridBox.h
-    inc/MantidDataObjects/MDGridBox.tcc
+    inc/MantidDataObjects/MDGridBox.hxx
     inc/MantidDataObjects/MDHistoWorkspace.h
     inc/MantidDataObjects/MDHistoWorkspaceIterator.h
     inc/MantidDataObjects/MDLeanEvent.h
@@ -115,6 +117,7 @@ set(INC_FILES
     inc/MantidDataObjects/PeakNoShapeFactory.h
     inc/MantidDataObjects/PeakShapeBase.h
     inc/MantidDataObjects/PeakShapeEllipsoid.h
+    inc/MantidDataObjects/PeakShapeEllipsoid_fwd.h
     inc/MantidDataObjects/PeakShapeEllipsoidFactory.h
     inc/MantidDataObjects/PeakShapeFactory.h
     inc/MantidDataObjects/PeakShapeSpherical.h
@@ -138,6 +141,8 @@ set(INC_FILES
     inc/MantidDataObjects/Workspace2D_fwd.h
     inc/MantidDataObjects/WorkspaceCreation.h
     inc/MantidDataObjects/WorkspaceSingleValue.h
+    inc/MantidDataObjects/PeakShapeDetectorBin.h
+    inc/MantidDataObjects/PeakShapeDetectorBinFactory.h
 )
 
 set(TEST_FILES
@@ -205,6 +210,8 @@ set(TEST_FILES
     WorkspaceSingleValueTest.h
     WorkspaceValidatorsTest.h
     MortonIndex/BitInterleavingTest.h
+    PeakShapeDetectorBinTest.h
+    PeakShapeDetectorBinFactoryTest.h
 )
 
 if(COVERAGE)
@@ -213,11 +220,12 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Use a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidDataObjects/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(DataObjects ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::DataObjects ALIAS DataObjects)
+
+# Use a precompiled header
+target_precompile_headers(DataObjects PRIVATE <MantidAPI/Algorithm.h>)
 
 target_include_directories(
   DataObjects PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

@@ -11,9 +11,9 @@
 #include "MantidAPI/IFileLoader.h"
 #include "MantidDataHandling/DllConfig.h"
 #include "MantidKernel/DateAndTime.h"
-#include "MantidKernel/NexusDescriptor.h"
 #include "MantidKernel/V3D.h"
-#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusClasses_fwd.h"
+#include "MantidNexus/NexusDescriptorLazy.h"
 
 namespace Mantid {
 namespace DataHandling {
@@ -22,14 +22,14 @@ namespace DataHandling {
 
   @date 15/05/17
 */
-class MANTID_DATAHANDLING_DLL LoadILLDiffraction : public API::IFileLoader<Kernel::NexusDescriptor> {
+class MANTID_DATAHANDLING_DLL LoadILLDiffraction : public API::IFileLoader<Nexus::NexusDescriptorLazy> {
 public:
   const std::string name() const override;
   int version() const override;
   const std::vector<std::string> seeAlso() const override { return {"LoadNexus"}; }
   const std::string category() const override;
   const std::string summary() const override;
-  int confidence(Kernel::NexusDescriptor &descriptor) const override;
+  int confidence(Nexus::NexusDescriptorLazy &descriptor) const override;
   LoadILLDiffraction();
 
 private:
@@ -55,22 +55,22 @@ private:
 
   void calculateRelativeRotations(std::vector<double> &instrumentAngles, const Kernel::V3D &firstTubePosition);
 
-  void fillDataScanMetaData(const NeXus::NXDouble &);
-  void fillMovingInstrumentScan(const NeXus::NXInt &, const NeXus::NXDouble &);
-  void fillStaticInstrumentScan(const NeXus::NXInt &, const NeXus::NXDouble &, const double &);
+  void fillDataScanMetaData(const Nexus::NXDouble &);
+  void fillMovingInstrumentScan(const Nexus::NXInt &, const Nexus::NXDouble &);
+  void fillStaticInstrumentScan(const Nexus::NXInt &, const Nexus::NXDouble &, const double &);
 
-  std::vector<Types::Core::DateAndTime> getAbsoluteTimes(const NeXus::NXDouble &) const;
-  std::vector<double> getAxis(const NeXus::NXDouble &) const;
-  std::vector<double> getDurations(const NeXus::NXDouble &) const;
-  std::vector<double> getMonitor(const NeXus::NXDouble &) const;
+  std::vector<Types::Core::DateAndTime> getAbsoluteTimes(const Nexus::NXDouble &) const;
+  std::vector<double> getAxis(const Nexus::NXDouble &) const;
+  std::vector<double> getDurations(const Nexus::NXDouble &) const;
+  std::vector<double> getMonitor(const Nexus::NXDouble &) const;
   std::string getInstrumentFilePath(const std::string &) const;
   Kernel::V3D getReferenceComponentPosition(const API::MatrixWorkspace_sptr &instrumentWorkspace);
 
-  std::vector<double> getScannedVaribleByPropertyName(const NeXus::NXDouble &scan,
+  std::vector<double> getScannedVaribleByPropertyName(const Nexus::NXDouble &scan,
                                                       const std::string &propertyName) const;
 
   void initStaticWorkspace();
-  void initMovingWorkspace(const NeXus::NXDouble &scan);
+  void initMovingWorkspace(const Nexus::NXDouble &scan);
 
   void loadDataScan();
   void loadMetaData();

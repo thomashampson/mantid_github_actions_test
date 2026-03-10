@@ -101,6 +101,7 @@ BANNED_FILES = [
     "poldi2014n019874.hdf",
     "poldi2014n019881.hdf",
     "poldi2015n000977.hdf",
+    "poldi2025n012174.hdf",
     "USER_SANS2D_143ZC_2p4_4m_M4_Knowles_12mm.txt",
     "USER_LARMOR_151B_LarmorTeam_80tubes_BenchRot1p4_M4_r3699.txt",
     "USER_SANS2D_154E_2p4_4m_M3_Xpress_8mm_SampleChanger.txt",
@@ -127,6 +128,7 @@ BANNED_FILES = [
     "BioSANS_exp61_scan0004_0001_Iq.txt",
     "test_data_Iq.txt",
     "BioSANS_test_data_Iq.txt",
+    "VULCAN_218062.nxs.h5",  # 1GB file for AlignAndFocusPowderSlim
 ]
 
 EXPECTED_EXT = ".expected"
@@ -150,6 +152,7 @@ BANNED_REGEXP = [
     r".*\.h5",
     r".*\.p2d",
     r".*\.cfg",
+    r".*\.tar",
 ]
 
 BANNED_DIRS = ["DocTest", "UnitTest", "reference"]
@@ -180,7 +183,7 @@ def useFile(direc, filename):
 
     # list of banned files by regexp
     for regexp in BANNED_REGEXP:
-        if re.match(regexp, filename, re.I) is not None:
+        if re.match(regexp, filename, re.IGNORECASE) is not None:
             return False, filename
 
     filename = os.path.join(direc, filename)
@@ -230,7 +233,7 @@ class LoadLotsOfFiles(systemtesting.MantidSystemTest):
         failed = []  # still run all of the tests
         for test in tests:
             test = test.strip()
-            result = eval(test)
+            result = eval(test)  # noqa: S307
             if not result:
                 failed.append((test, result))
         if len(failed) > 0:
@@ -329,6 +332,3 @@ class LoadLotsOfFiles(systemtesting.MantidSystemTest):
             raise RuntimeError("Failed to load %d of %d files" % (len(failed), len(files)))
         else:
             print("Successfully loaded %d files" % len(files))
-
-    def excludeInPullRequests(self):
-        return True

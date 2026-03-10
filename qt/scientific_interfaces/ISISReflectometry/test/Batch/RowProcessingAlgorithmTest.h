@@ -272,7 +272,7 @@ public:
                    BackgroundSubtraction(false, BackgroundSubtractionType::AveragePixelFit, 3,
                                          CostFunctionType::UnweightedLeastSquares),
                    makePolarizationCorrections(), makeFloodCorrections(), makeTransmissionStitchOptions(),
-                   makeStitchOptions(), makeLookupTableWithTwoAnglesAndWildcard());
+                   makeStitchOptions(), makeLookupTableWithTwoAnglesAndWildcard(), false);
     auto model = Batch(experiment, m_instrument, m_runsTable, m_slicing);
     auto row = makeRowWithOptionsCellFilled(2.3, ReductionOptionsMap{{"SubtractBackground", "1"}});
     auto result = RowProcessing::createAlgorithmRuntimeProps(model, row);
@@ -323,7 +323,7 @@ private:
   PreviewRow makePreviewRow(double theta = 0.1, const std::string &processingInstructions = "10-11",
                             const std::string &backgroundProcessingInstructions = "",
                             const std::string &transmissionProcessingInstructions = "",
-                            const boost::optional<ProcessingInstructions> &roiDetectorIDs = boost::none) {
+                            const std::optional<ProcessingInstructions> &roiDetectorIDs = std::nullopt) {
     auto previewRow = PreviewRow({"12345"});
     previewRow.setTheta(theta);
     previewRow.setProcessingInstructions(ROIType::Signal, processingInstructions);

@@ -20,10 +20,10 @@
 #include "MantidGeometry/Instrument/ObjComponent.h"
 #include "MantidHistogramData/LinearGenerator.h"
 #include "MantidKernel/UnitFactory.h"
+#include "MantidNexus/NexusFile.h"
 
-#include <Poco/File.h>
 #include <boost/lexical_cast.hpp>
-#include <nexus/NeXusFile.hpp>
+#include <filesystem>
 #include <vector>
 
 using namespace Mantid::DataHandling;
@@ -50,7 +50,7 @@ static const int NUMRANDOM = 7;
 static const int DETECTS[NUMRANDOM] = {4101, 4804, 1323, 1101, 3805, 1323, 3832};
 
 namespace SmallTestDatFile {
-const int NDETECTS = 6;
+const Mantid::detid_t NDETECTS = 6;
 }
 
 namespace {
@@ -71,7 +71,7 @@ void writeSmallDatFile(const std::string &filename) {
           "    w_y         w_z         f_x         f_y         f_z         a_x "
           "        a_y         a_z        det_1       det_2       det_3       "
           "det4\n";
-  for (int detector = 0; detector < SmallTestDatFile::NDETECTS; ++detector) {
+  for (std::size_t detector = 0; detector < SmallTestDatFile::NDETECTS; ++detector) {
     file << detector << "\t" << delta[detector] << "\t" << det_l2[detector] << "\t" << code[detector] << "\t"
          << det_theta[detector] << "\t" << det_phi[detector] << "\t" << NOTUSED << "\t" << NOTUSED << "\t" << NOTUSED
          << "\t" << NOTUSED << "\t" << NOTUSED << "\t" << NOTUSED << "\t" << NOTUSED << "\t" << NOTUSED << "\t"
@@ -81,8 +81,8 @@ void writeSmallDatFile(const std::string &filename) {
   file.close();
 }
 
-void writeDetNXSfile(const std::string &filename, const int nDets) {
-  ::NeXus::File nxsfile(filename, NXACC_CREATE5);
+void writeDetNXSfile(const std::string &filename, const std::size_t nDets) {
+  Mantid::Nexus::File nxsfile(filename, NXaccess::CREATE5);
   nxsfile.makeGroup("detectors.dat", "NXEntry", true);
   nxsfile.putAttr("version", "1.0");
 
@@ -97,8 +97,8 @@ void writeDetNXSfile(const std::string &filename, const int nDets) {
 
   int limit(6);
   int ic(0);
-  for (int i = 0; i < nDets; i++) {
-    detID[2 * i] = i;
+  for (std::size_t i = 0; i < nDets; i++) {
+    detID[2 * i] = static_cast<Mantid::detid_t>(i);
     detID[2 * i + 1] = boost::lexical_cast<int>(code[ic]);
     timeOffsets[2 * i] = boost::lexical_cast<float>(delta[ic]);
     timeOffsets[2 * i + 1] = 0;
@@ -128,48 +128,46 @@ void writeDetNXSfile(const std::string &filename, const int nDets) {
       ic = 0;
   }
 
-  std::vector<int> array_dims(2);
-  array_dims[0] = nDets;
-  array_dims[1] = 2;
+  Mantid::Nexus::DimVector array_dims{nDets, 2};
 
-  nxsfile.makeData("detID", ::NeXus::INT32, array_dims, true);
+  nxsfile.makeData("detID", NXnumtype::INT32, array_dims, true);
   nxsfile.putAttr("description", "DetectorID, DetectorType");
   nxsfile.putData(&detID[0]);
   nxsfile.closeData();
 
-  nxsfile.makeData("timeOffsets", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("timeOffsets", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "DelayTime, DeadTime");
   nxsfile.putData(&timeOffsets[0]);
   nxsfile.closeData();
 
-  nxsfile.makeData("detPressureAndWall", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("detPressureAndWall", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "He3_pressure_Bar, WallThicknes_m");
   nxsfile.putData(&detStruct[0]);
   nxsfile.closeData();
 
   array_dims[1] = 3;
-  nxsfile.makeData("detSphericalCoord", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("detSphericalCoord", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "L2, Theta, Psi");
   nxsfile.putData(&detCoord[0]);
   nxsfile.closeData();
 
-  nxsfile.makeData("detTrueSize", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("detTrueSize", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "W_x, W_y, W_z");
   nxsfile.putData(&detTrueSize[0]);
   nxsfile.closeData();
 
-  nxsfile.makeData("detFalseSize", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("detFalseSize", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "F_x, F_y, F_z");
   nxsfile.putData(&detFalseSize[0]);
   nxsfile.closeData();
 
-  nxsfile.makeData("detOrientation", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("detOrientation", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "a_x, a_y, a_z");
   nxsfile.putData(&detOrient[0]);
   nxsfile.closeData();
 
   array_dims[1] = 1;
-  nxsfile.makeData("detTubeIndex", ::NeXus::FLOAT32, array_dims, true);
+  nxsfile.makeData("detTubeIndex", NXnumtype::FLOAT32, array_dims, true);
   nxsfile.putAttr("description", "detTubeIndex");
   nxsfile.putData(&detTubeIndex[0]);
   nxsfile.closeData();
@@ -249,8 +247,8 @@ public:
   }
 
   ~LoadDetectorInfoTest() override {
-    Poco::File(m_DatFile).remove();
-    Poco::File(m_NXSFile).remove();
+    std::filesystem::remove(m_DatFile);
+    std::filesystem::remove(m_NXSFile);
   }
 
   void testLoadDat() { loadDatFileTestHelper(m_DatFile); }
@@ -262,7 +260,7 @@ public:
 
     makeTestWorkspace(SmallTestDatFile::NDETECTS, NBINS, m_InoutWS);
     loadDetInfo.setPropertyValue("Workspace", m_InoutWS);
-    loadDetInfo.setPropertyValue("DataFilename", "argus0026287.nxs");
+    loadDetInfo.setPropertyValue("DataFilename", "ARGUS00073601.nxs");
     TS_ASSERT_THROWS(loadDetInfo.execute(), const std::invalid_argument &);
 
     AnalysisDataService::Instance().remove(m_InoutWS);
@@ -351,7 +349,7 @@ public:
     const auto &pmap = WS->constInstrumentParameters();
     const auto &detInfo = WS->detectorInfo();
 
-    for (int j = 0; j < SmallTestDatFile::NDETECTS; ++j) {
+    for (Mantid::detid_t j = 0; j < SmallTestDatFile::NDETECTS; ++j) {
 
       const size_t detIndex = detInfo.indexOf(j);
       const IComponent *baseComp = detInfo.detector(detIndex).getComponentID();
@@ -418,7 +416,7 @@ public:
   }
 
   void tearDown() override {
-    Poco::File(m_testfile).remove();
+    std::filesystem::remove(m_testfile);
     AnalysisDataService::Instance().remove(m_wsName);
   }
 

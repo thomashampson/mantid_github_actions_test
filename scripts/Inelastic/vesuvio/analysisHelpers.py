@@ -22,12 +22,10 @@ EXPERT VESUVIO INSTRUMENT SCIENTIST.
 ####        TECHNICAL SECTION - NOT FOR USERS
 ##########################################################
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
-
 import numpy as np
 import mantid.simpleapi as sapi
 from scipy import optimize
+from ast import literal_eval
 
 #
 #   INITIALISING FUNCTIONS AND USEFUL FUNCTIONS
@@ -655,4 +653,4 @@ def generate_constraints(table):
 def evaluate(input):
     if input.isdigit():
         return float(input)
-    return eval(input)
+    return literal_eval(input)

@@ -19,6 +19,8 @@ add_definitions(-D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING)
 # Suppress warnings about std::iterator as a base. TBB emits this warning and it is not yet fixed.
 add_definitions(-D_SILENCE_CXX17_ITERATOR_BASE_CLASS_DEPRECATION_WARNING)
 add_definitions(-D_SILENCE_CXX17_SHARED_PTR_UNIQUE_DEPRECATION_WARNING)
+# Suppress warnings about stdext::checked_array_iterator in VS2022
+add_definitions(-D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
 
 # ######################################################################################################################
 # Additional compiler flags
@@ -30,8 +32,22 @@ add_definitions(-D_SILENCE_CXX17_SHARED_PTR_UNIQUE_DEPRECATION_WARNING)
 set(CMAKE_CXX_FLAGS
     "${CMAKE_CXX_FLAGS} \
   /MP /W3 /bigobj \
+  /wd4251 /wd4275 /wd4373 /EHsc \
   /experimental:external /external:W0 "
 )
+# the warnings suppressed are:
+#
+# 4251 'identifier' : class 'type' needs to have dll-interface to be used by clients of class 'type2' Things from the
+# std library give these warnings and we can't do anything about them.
+#
+# 4275 Given that we are compiling everything with msvc under Windows and linking all with the same runtime we can
+# disable the warning about inheriting from a non-exported interface, e.g. std::runtime_error
+#
+# 4373 previous versions of the compiler did not override when parameters only differed by const/volatile qualifiers.
+# This is basically saying that it now follows the C++ standard and doesn't seem useful
+#
+# /EHsc Full compiler support for the Standard C++ exception handling model
+# https://learn.microsoft.com/en-us/cpp/build/reference/eh-exception-handling-model?view=msvc-170
 
 # Set PCH heap limit, the default does not work when running msbuild from the commandline for some reason Any other
 # value lower or higher seems to work but not the default. It is fine without this when compiling in the GUI though...
@@ -45,7 +61,7 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Zm${VISUALSTUDIO_COMPILERHEAPLIMIT}")
 endif()
 
-# Define a new configuration for debugging with Conda. Crucially it must link to the MSVC release runtime but we switch
+# Define a new configuration for debugging with conda. Crucially it must link to the MSVC release runtime but we switch
 # off all optimzations
 set(_conda_debug_cfg_name DebugWithRelRuntime)
 string(TOUPPER ${_conda_debug_cfg_name} _conda_debug_cfg_name_upper)
@@ -80,7 +96,7 @@ set(CMAKE_CONFIGURATION_TYPES
 )
 message(
   STATUS
-    "Detected a build with Conda on Windows. Resetting available build configurations to ${CMAKE_CONFIGURATION_TYPES}"
+    "Detected a build with conda on Windows. Resetting available build configurations to ${CMAKE_CONFIGURATION_TYPES}"
 )
 
 # HDF5 uses threads::threads target
@@ -147,12 +163,20 @@ if(MANTID_FRAMEWORK_LIB STREQUAL "BUILD")
   add_custom_target(SystemTests)
   add_dependencies(SystemTests Framework)
   add_dependencies(SystemTests StandardTestData SystemTestData)
+
+  # create a launchable VS project purely for Debugging properties
+  set(_stub "${CMAKE_CURRENT_BINARY_DIR}/systemtests_stub.cpp")
+  file(WRITE "${_stub}" "int main(){return 0;}\n")
+
+  add_executable(SystemTestsDebug EXCLUDE_FROM_ALL "${_stub}")
+  add_dependencies(SystemTestsDebug SystemTests)
+
   set_target_properties(
-    SystemTests
+    SystemTestsDebug
     PROPERTIES VS_DEBUGGER_COMMAND "${Python_EXECUTABLE}"
-               VS_DEBUGGER_COMMAND_ARGUMENTS VS_DEBUGGER_ENVIRONMENT
+               VS_DEBUGGER_COMMAND_ARGUMENTS
                "${CMAKE_SOURCE_DIR}/Testing/SystemTests/scripts/runSystemTests.py --executable python3"
-               "${MSVC_IDE_ENV}"
+               VS_DEBUGGER_ENVIRONMENT "${MSVC_IDE_ENV}"
   )
 endif()
 

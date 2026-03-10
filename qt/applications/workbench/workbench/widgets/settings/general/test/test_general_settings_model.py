@@ -4,6 +4,7 @@
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
+import unittest
 from unittest.mock import MagicMock, patch, call
 
 from workbench.widgets.settings.general.general_settings_model import GeneralSettingsModel, GeneralProperties, GeneralUserConfigProperties
@@ -390,7 +391,7 @@ class GeneralSettingsModelTest(BaseSettingsModelTest):
     @patch(ADD_CHANGE_PATCH_PATH)
     def test_set_show_invisible_workspaces(self, add_change_mock: MagicMock):
         self._assert_setter_with_different_values(
-            add_change_mock, self.model.set_show_invisible_workspaces, ["Off", "On"], GeneralProperties.SHOW_INVISIBLE_WORKSPACES.value
+            add_change_mock, self.model.set_show_invisible_workspaces, ["0", "1"], GeneralProperties.SHOW_INVISIBLE_WORKSPACES.value
         )
 
     @patch(ADD_CHANGE_PATCH_PATH)
@@ -405,3 +406,7 @@ class GeneralSettingsModelTest(BaseSettingsModelTest):
             [{"a test": "dictionary"}, {"another": "one"}],
             GeneralUserConfigProperties.USER_LAYOUT.value,
         )
+
+
+if __name__ == "__main__":
+    unittest.main()

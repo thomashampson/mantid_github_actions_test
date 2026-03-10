@@ -15,16 +15,14 @@
 
 #include "MantidDataHandling/FindDetectorsPar.h"
 #include "MantidGeometry/Instrument.h"
+#include "MantidNexus/NexusFile.h"
 
 #include "MantidKernel/CompositeValidator.h"
 #include "MantidKernel/MantidVersion.h"
 #include "MantidKernel/Unit.h"
 
-#include <Poco/File.h>
-#include <Poco/Path.h>
 #include <boost/scoped_array.hpp>
 #include <limits>
-#include <nexus/NeXusFile.hpp>
 
 namespace Mantid::DataHandling {
 
@@ -74,6 +72,15 @@ void SaveNXSPE::init() {
         See [[FindDetectorsPar]] description for the details.");
 }
 
+std::map<std::string, std::string> SaveNXSPE::validateInputs() {
+  std::map<std::string, std::string> issues;
+  std::string inputWS = getPropertyValue("InputWorkspace");
+  if (inputWS.find("/") != std::string::npos) {
+    issues["InputWorkspace"] = "The input workspace name cannot contain a '/' character.";
+  }
+  return issues;
+}
+
 /**
  * Execute the algorithm
  */
@@ -82,15 +89,15 @@ void SaveNXSPE::exec() {
   MatrixWorkspace_sptr inputWS = getProperty("InputWorkspace");
 
   // Number of spectra
-  const auto nHist = static_cast<int64_t>(inputWS->getNumberHistograms());
+  const auto nHist = inputWS->getNumberHistograms();
   // Number of energy bins
-  const auto nBins = static_cast<int64_t>(inputWS->blocksize());
+  const auto nBins = inputWS->blocksize();
 
   // Retrieve the filename from the properties
   std::string filename = getPropertyValue("Filename");
 
   // Create the file.
-  ::NeXus::File nxFile(filename, NXACC_CREATE5);
+  Nexus::File nxFile(filename, NXaccess::CREATE5);
 
   // Make the top level entry (and open it)
   std::string entryName = getPropertyValue("InputWorkspace");
@@ -231,12 +238,10 @@ void SaveNXSPE::exec() {
   nxFile.closeData();
 
   // let's create some blank arrays in the nexus file
-  using Dimensions = std::vector<int64_t>;
-  Dimensions arrayDims(2);
-  arrayDims[0] = nHist;
-  arrayDims[1] = nBins;
-  nxFile.makeData("data", ::NeXus::FLOAT64, arrayDims, false);
-  nxFile.makeData("error", ::NeXus::FLOAT64, arrayDims, false);
+  using Dimensions = Nexus::DimVector;
+  Dimensions arrayDims{nHist, nBins};
+  nxFile.makeData("data", NXnumtype::FLOAT64, arrayDims, false);
+  nxFile.makeData("error", NXnumtype::FLOAT64, arrayDims, false);
 
   // Add the axes attributes to the data
   nxFile.openData("data");
@@ -264,9 +269,9 @@ void SaveNXSPE::exec() {
 
   // Write the data
   Progress progress(this, 0.0, 1.0, nHist);
-  int64_t bufferCounter(0);
+  uint64_t bufferCounter(0);
   const auto &spectrumInfo = inputWS->spectrumInfo();
-  for (int64_t i = 0; i < nHist; ++i) {
+  for (std::size_t i = 0; i < nHist; ++i) {
     progress.report();
 
     double *signalBufferStart = signalBuffer.get() + bufferCounter * nBins;
@@ -321,7 +326,7 @@ void SaveNXSPE::exec() {
   spCalcDetPar->execute();
 
   //
-  auto *pCalcDetPar = dynamic_cast<FindDetectorsPar *>(spCalcDetPar.get());
+  auto const *pCalcDetPar = dynamic_cast<FindDetectorsPar *>(spCalcDetPar.get());
   if (!pCalcDetPar) { // "can not get pointer to FindDetectorsPar algorithm"
     throw(std::bad_cast());
   }

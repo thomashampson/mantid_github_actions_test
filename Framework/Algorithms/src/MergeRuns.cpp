@@ -289,7 +289,7 @@ void MergeRuns::execEvent() {
     const auto &table = m_tables[workspaceNum - 1];
 
     // Add all the event lists together as the table says to do
-    for (auto &WI : table) {
+    for (auto const &WI : table) {
       int64_t inWI = WI.first;
       int64_t outWI = WI.second;
       if (outWI >= 0) {
@@ -447,7 +447,7 @@ std::optional<std::vector<double>> MergeRuns::checkRebinning() {
   std::optional<std::vector<double>> rebinParams{std::nullopt};
   std::vector<double> bins{(*it)->x(0).rawData()};
   for (++it; it != inputsSortedByX.cend(); ++it) {
-    if (!WorkspaceHelpers::matchingBins(*inputsSortedByX.front(), **it, true)) {
+    if (!WorkspaceHelpers::matchingBins(inputsSortedByX.front(), *it, true)) {
       if (rebinBehaviour != REBIN_BEHAVIOUR) {
         if (sampleLogsFailBehaviour == SKIP_BEHAVIOUR) {
           g_log.error() << "Could not merge run: " << (*it)->getName()
@@ -676,7 +676,7 @@ std::vector<SpectrumDefinition> MergeRuns::buildScanIntervals(const std::vector<
 
   PARALLEL_FOR_NO_WSP_CHECK()
   for (int64_t i = 0; i < int64_t(addeeSpecDefs.size()); ++i) {
-    for (auto &index : addeeSpecDefs[i]) {
+    for (auto const &index : addeeSpecDefs[i]) {
       SpectrumDefinition newSpecDef;
       for (size_t time_index = 0; time_index < newOutDetInfo.scanCount(); time_index++) {
         if (addeeScanIntervals[index.second] == newOutScanIntervals[time_index]) {

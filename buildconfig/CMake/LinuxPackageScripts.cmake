@@ -18,7 +18,7 @@ set(WORKBENCH_PLUGINS_DIR ${PLUGINS_DIR})
 # ######################################################################################################################
 # Launcher scripts. We provide a wrapper script to launch workbench to:
 #
-# * enable a custom memory allocator (jemalloc)
+# * enable a custom memory allocator (tbbmalloc)
 # * enable VirtualGL configuration if required for remote access
 # * adds debug flags to start gdb for developers
 # ######################################################################################################################
@@ -55,26 +55,19 @@ elif [ -n \"\${TLSESSIONDATA}\" ]; then  # running in thin-linc
 fi"
 )
 
-# The scripts need jemalloc to be resolved to the runtime library as the plain .so symlink is only present when a
-# -dev/-devel package is presentz
-if(JEMALLOCLIB_FOUND)
-  get_filename_component(JEMALLOC_RUNTIME_LIB ${JEMALLOC_LIBRARIES} REALPATH)
-  # We only want to use the major version number
-  string(REGEX REPLACE "([0-9]+)\.[0-9]+\.[0-9]+$" "\\1" JEMALLOC_RUNTIME_LIB ${JEMALLOC_RUNTIME_LIB})
-endif()
-
-# definitions to preload jemalloc but not if we are using address sanitizer as this confuses things
-if(WITH_ASAN)
-  set(JEMALLOC_DEFINITIONS
+# definitions to preload tbbmalloc but not if we are using address sanitizer as this confuses things
+string(TOLOWER "${USE_SANITIZER}" USE_SANITIZERS_LOWER)
+if(${USE_SANITIZERS_LOWER} MATCHES "address")
+  set(TBBMALLOC_DEFINITIONS
       "
-LOCAL_PRELOAD=\${LD_PRELOAD}
+LOCAL_PRELOAD=${ASAN_LIB}
 "
   )
 else()
   # Do not indent the string below as it messes up the formatting in the final script
-  set(JEMALLOC_DEFINITIONS
-      "# Define parameters for jemalloc
-LOCAL_PRELOAD=${JEMALLOC_RUNTIME_LIB}
+  set(TBBMALLOC_DEFINITIONS
+      "# Define parameters for oneTBB malloc
+LOCAL_PRELOAD=${TBBMALLOC_RUNTIME_LIB}
 if [ -n \"\${LD_PRELOAD}\" ]; then
     LOCAL_PRELOAD=\${LOCAL_PRELOAD}:\${LD_PRELOAD}
 fi
@@ -92,15 +85,6 @@ if [ -n \"\$1\" ] && [ \"\$1\" = \"--debug\" ]; then
 fi"
 )
 
-# Without specifying these schema files, the standalone can fail to launch on Linux. Inside a conda environment this
-# environment variable is set by something else.
-set(GSETTINGS_SCHEMA_DEFINITIONS
-    "# Specify path to schema files
-if [ -z \"\${GSETTINGS_SCHEMA_DIR}\" ]; then
-    GSETTINGS_MANTID_PATH=\${INSTALLDIR}/share/glib-2.0/schemas
-fi"
-)
-
 set(ERROR_CMD "-m mantidqt.dialogs.errorreports.main --exitcode=\$?")
 
 # Local dev version
@@ -109,10 +93,11 @@ set(PYTHON_ARGS " -Wdefault::DeprecationWarning -Werror:::mantid -Werror:::manti
 set(PYTHON_EXEC_LOCAL "\${CONDA_PREFIX}/bin/python")
 set(PREAMBLE "${CONDA_PREAMBLE_TEXT}")
 set(LOCAL_PYPATH "${CMAKE_CURRENT_BINARY_DIR}/bin/")
+# The python command to start workbench
+set(MANTIDWORKBENCH_EXEC "-c \"from workbench.app.main import main; main()\"")
 
 # used by mantidworkbench
 if(ENABLE_WORKBENCH)
-  set(MANTIDWORKBENCH_EXEC "-m workbench") # what the actual thing is called
   configure_file(
     ${CMAKE_MODULE_PATH}/Packaging/launch_mantidworkbench.sh.in
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/launch_mantidworkbench.sh @ONLY
@@ -133,23 +118,34 @@ unset(PYTHON_ARGS)
 
 if(ENABLE_WORKBENCH)
   foreach(install_type conda;standalone)
-    # used by mantidworkbench
     if(${install_type} STREQUAL "conda")
-      set(LOCAL_PYPATH "\${CONDA_PREFIX}/bin:\${CONDA_PREFIX}/lib:\${CONDA_PREFIX}/plugins")
-      set(PYTHON_EXEC_LOCAL "\${CONDA_PREFIX}/bin/python")
+      set(ROOT_DIR "\${CONDA_PREFIX}")
       set(PREAMBLE "${CONDA_PREAMBLE_TEXT}")
-      set(MANTIDWORKBENCH_EXEC "-m workbench") # what the actual thing is called
       set(DEST_FILENAME_SUFFIX "")
+      # Don't need to set this for a conda environment
+      set(XKB_CONFIG_ROOT_COMMAND "")
     elseif(${install_type} STREQUAL "standalone")
-      set(LOCAL_PYPATH "\${INSTALLDIR}/bin:\${INSTALLDIR}/lib:\${INSTALLDIR}/plugins")
-      set(PYTHON_EXEC_LOCAL "\${INSTALLDIR}/bin/python")
+      set(ROOT_DIR "\${INSTALLDIR}")
       set(PREAMBLE "${SYS_PREAMBLE_TEXT}")
-      set(MANTIDWORKBENCH_EXEC "-m workbench")
       set(DEST_FILENAME_SUFFIX ".standalone")
+      # Need to set this, otherwise stanalone won't launch on some linux distributions
+      set(XKB_CONFIG_ROOT_COMMAND "XKB_CONFIG_ROOT=\${INSTALLDIR}/share/X11/xkb")
     else()
       message(FATAL_ERROR "Unknown installation type '${install_type}' for workbench startup scripts")
     endif()
-    # workbench launcher for jemalloc
+
+    set(LOCAL_PYPATH "${ROOT_DIR}/bin:${ROOT_DIR}/lib:${ROOT_DIR}/plugins")
+    set(PYTHON_EXEC_LOCAL "${ROOT_DIR}/bin/python")
+    # Without specifying these schema files, the standalone can fail to launch on Linux. Inside a conda environment this
+    # environment variable is set by something else.
+    set(GSETTINGS_SCHEMA_DEFINITIONS
+        "# Specify path to schema files
+if [ -z \"\${GSETTINGS_SCHEMA_DIR}\" ]; then
+  GSETTINGS_MANTID_PATH=${ROOT_DIR}/share/glib-2.0/schemas
+fi"
+    )
+
+    # workbench launcher for tbbmalloc
     configure_file(
       ${CMAKE_MODULE_PATH}/Packaging/launch_mantidworkbench.sh.in
       ${CMAKE_CURRENT_BINARY_DIR}/launch_mantidworkbench.sh.install${DEST_FILENAME_SUFFIX} @ONLY
@@ -157,7 +153,7 @@ if(ENABLE_WORKBENCH)
     install(
       PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/launch_mantidworkbench.sh.install${DEST_FILENAME_SUFFIX}
       DESTINATION ${BIN_DIR}
-      RENAME mantidworkbench${DEST_FILENAME_SUFFIX}
+      RENAME launch_mantidworkbench${DEST_FILENAME_SUFFIX}
     )
   endforeach()
 endif()

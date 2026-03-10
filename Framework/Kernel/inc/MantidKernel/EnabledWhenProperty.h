@@ -6,8 +6,8 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
+#include "MantidKernel/DllConfig.h"
 #include "MantidKernel/IPropertySettings.h"
-#include "MantidKernel/System.h"
 #include <memory>
 #include <string>
 
@@ -94,8 +94,8 @@ public:
   /// Return true always
   bool isVisible(const IPropertyManager *algo) const override;
 
-  /// Stub function to satisfy the interface.
-  void modify_allowed_values(Property *const);
+  /// Other properties that this property depends on.
+  std::vector<std::string> dependsOn(const std::string &thisProp) const override;
 
   /// Make a copy of the present type of validator
   IPropertySettings *clone() const override;

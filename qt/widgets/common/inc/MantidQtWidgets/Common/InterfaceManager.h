@@ -124,6 +124,9 @@ public:
   /// Destructor
   virtual ~InterfaceManager();
 
+  void showHomeHelpPage();
+  void cleanup();
+
 private:
   void notifyExistingInterfaces(UserSubWindow *newWindow);
 
@@ -138,6 +141,6 @@ private:
   namespace {                                                                                                          \
   Mantid::Kernel::RegistrationHelper                                                                                   \
       register_helpviewer(((MantidQt::API::InterfaceManager::registerHelpWindowFactory(                                \
-                               new Mantid::Kernel::Instantiator<TYPE, MantidHelpInterface>())),                        \
+                               new Mantid::Kernel::Instantiator<TYPE, MantidQt::API::MantidHelpInterface>())),         \
                            0));                                                                                        \
   }

@@ -4,18 +4,15 @@
 #   NScD Oak Ridge National Laboratory, European Spallation Source,
 #   Institut Laue - Langevin & CSNS, Institute of High Energy Physics, CAS
 # SPDX - License - Identifier: GPL - 3.0 +
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, Mapping
 from unittest import TestCase
 
 import numpy as np
 from numpy.testing import assert_allclose
-from pydantic import validate_call
 
-from abins.atomsdata import _AtomData
+from abins.atomsdata import AtomData
 from abins.kpointsdata import KpointData
-import abins.io
 
 
 # Module with helper functions used to create tests.
@@ -40,31 +37,6 @@ def find_file(filename: str, try_upcase_suffix: bool = True) -> str:
         raise ValueError(f"Could not find file '{filename}'")
 
 
-@validate_call
-def remove_output_files(list_of_names: List[str]) -> None:
-    """Removes output files created during a test."""
-
-    # import ConfigService here to avoid:
-    # RuntimeError: Pickling of "mantid.kernel._kernel.ConfigServiceImpl"
-    # instances is not enabled (http://www.boost.org/libs/python/doc/v2/pickle.html)
-
-    from mantid.kernel import ConfigService
-
-    save_dir_path = ConfigService.getString("defaultsave.directory")
-    if save_dir_path != "":  # default save directory set
-        all_files = os.listdir(save_dir_path)
-    else:
-        all_files = os.listdir(os.getcwd())
-
-    for filename in all_files:
-        for name in list_of_names:
-            if name in filename:
-                full_path = os.path.join(abins.io.IO.get_save_dir_path(), filename)
-                if os.path.isfile(full_path):
-                    os.remove(full_path)
-                break
-
-
 def dict_arrays_to_lists(mydict: Mapping[str, Any]) -> Dict[str, Any]:
     """Recursively convert numpy arrays in a nested dict to lists (i.e. valid JSON)
 
@@ -84,7 +56,7 @@ def dict_arrays_to_lists(mydict: Mapping[str, Any]) -> Dict[str, Any]:
     return clean_dict
 
 
-def assert_atom_almost_equal(ref_atom: _AtomData, atom: _AtomData, tester: TestCase = None) -> None:
+def assert_atom_almost_equal(ref_atom: AtomData, atom: AtomData, tester: TestCase = None) -> None:
     """Compare two items from AtomsData, raise AssertionError if different"""
 
     if tester is None:

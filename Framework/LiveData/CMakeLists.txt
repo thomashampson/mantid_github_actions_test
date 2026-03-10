@@ -1,3 +1,5 @@
+set(LIVEDATA_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 set(SRC_FILES
     src/ADARA/ADARAPackets.cpp
     src/ADARA/ADARAParser.cpp
@@ -68,7 +70,7 @@ if(LIBRDKAFKA_FOUND)
       inc/MantidLiveData/Kafka/IKafkaStreamSubscriber.h
       inc/MantidLiveData/Kafka/IKafkaBroker.h
       inc/MantidLiveData/Kafka/IKafkaStreamDecoder.h
-      inc/MantidLiveData/Kafka/IKafkaStreamDecoder.tcc
+      inc/MantidLiveData/Kafka/IKafkaStreamDecoder.hxx
       inc/MantidLiveData/Kafka/KafkaBroker.h
       inc/MantidLiveData/Kafka/KafkaHistoListener.h
       inc/MantidLiveData/Kafka/KafkaHistoStreamDecoder.h
@@ -96,11 +98,12 @@ if(COVERAGE)
   endforeach(loop_var)
 endif()
 
-# Use a precompiled header where they are supported
-enable_precompiled_headers(inc/MantidLiveData/PrecompiledHeader.h SRC_FILES)
 # Add the target for this directory
 add_library(LiveData ${SRC_FILES} ${INC_FILES})
 add_library(Mantid::LiveData ALIAS LiveData)
+
+# Use a precompiled header
+target_precompile_headers(LiveData PRIVATE <MantidAPI/Algorithm.h>)
 
 target_include_directories(
   LiveData PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc> $<INSTALL_INTERFACE:include/Mantid>

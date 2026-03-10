@@ -63,9 +63,10 @@ public:
   std::string debugStrPrint(const std::size_t type = 0) const;
   size_t getMemorySize() const;
   Types::Core::DateAndTime timeAtIndex(unsigned long index) const;
+  std::vector<std::pair<size_t, size_t>> calculate_indices(const std::vector<Types::Core::DateAndTime> &times) const;
 
   // nexus items
-  void saveNexus(::NeXus::File *file) const;
+  void saveNexus(Nexus::File *file) const;
 
 private:
   std::vector<Types::Core::DateAndTime> getAllTimes(const TimeROI &other);

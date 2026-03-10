@@ -6,8 +6,8 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
+#include "MantidKernel/DllConfig.h"
 #include "MantidKernel/FreeBlock.h"
-#include "MantidKernel/System.h"
 #ifndef Q_MOC_RUN
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/mem_fun.hpp>
@@ -75,7 +75,7 @@ public:
 
   // For reporting and saving
   void getFreeSpaceVector(std::vector<uint64_t> &free) const;
-  void setFreeSpaceVector(std::vector<uint64_t> &free);
+  void setFreeSpaceVector(std::vector<uint64_t> const &free);
   std::string getMemoryStr() const;
 
   //-------------------------------------------------------------------------------------------

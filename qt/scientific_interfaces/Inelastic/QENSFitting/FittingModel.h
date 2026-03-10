@@ -44,7 +44,7 @@ static const std::string MULTI_STRING = "Multi";
 class MANTIDQT_INELASTIC_DLL FittingModel : public IFittingModel {
 public:
   FittingModel();
-  virtual ~FittingModel() = default;
+  virtual ~FittingModel() override = default;
 
   void validate(IUserInputValidator *validator) const override;
 
@@ -96,7 +96,7 @@ public:
   IFitPlotModel *getFitPlotModel() const override;
 
   // Used for testing purposes
-  [[nodiscard]] inline std::string getFitString() const noexcept { return m_fitString; }
+  [[nodiscard]] const inline std::string &getFitString() const noexcept { return m_fitString; }
 
 protected:
   std::string createOutputName(const std::string &fitMode, const std::string &workspaceName,
@@ -112,6 +112,7 @@ protected:
 
 private:
   void removeWorkspaceFromFittingData(WorkspaceID const &workspaceIndex);
+  std::string getResultsSuffix() const;
 
   Mantid::API::IAlgorithm_sptr createSequentialFit(Mantid::API::IFunction_sptr function) const;
   Mantid::API::IAlgorithm_sptr createSequentialFit(const Mantid::API::IFunction_sptr function,

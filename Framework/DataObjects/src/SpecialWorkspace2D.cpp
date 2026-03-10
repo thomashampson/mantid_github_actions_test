@@ -91,11 +91,16 @@ const std::string SpecialWorkspace2D::toString() const {
 void SpecialWorkspace2D::buildDetectorIDMapping() {
   detID_to_WI.clear();
   for (size_t wi = 0; wi < getNumberHistograms(); wi++) {
-    auto &dets = getSpectrum(wi).getDetectorIDs();
+    set<detid_t> dets = this->getDetectorIDs(wi);
     for (auto det : dets) {
       detID_to_WI[det] = wi;
     }
   }
+}
+
+bool SpecialWorkspace2D::contains(const detid_t detectorID) const {
+  auto it = detID_to_WI.find(detectorID);
+  return it != detID_to_WI.end();
 }
 
 //----------------------------------------------------------------------------------------------
@@ -412,7 +417,7 @@ IPropertyManager::getValue<Mantid::DataObjects::SpecialWorkspace2D_sptr>(const s
 template <>
 DLLExport Mantid::DataObjects::SpecialWorkspace2D_const_sptr
 IPropertyManager::getValue<Mantid::DataObjects::SpecialWorkspace2D_const_sptr>(const std::string &name) const {
-  auto *prop =
+  auto const *prop =
       dynamic_cast<PropertyWithValue<Mantid::DataObjects::SpecialWorkspace2D_sptr> *>(getPointerToProperty(name));
   if (prop) {
     return prop->operator()();

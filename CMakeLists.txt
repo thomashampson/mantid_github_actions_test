@@ -12,6 +12,10 @@ endif()
 if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
+# install() DESTINATION paths are normalized. https://cmake.org/cmake/help/latest/policy/CMP0177.html
+if(POLICY CMP0177)
+  cmake_policy(SET CMP0177 NEW)
+endif()
 
 # Add the path to our custom 'find' modules
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/buildconfig/CMake")
@@ -50,7 +54,8 @@ if(NOT
    (ENABLE_WORKBENCH
     OR MANTID_QT_LIB STREQUAL "BUILD"
     OR MANTID_FRAMEWORK_LIB STREQUAL "BUILD"
-    OR ENABLE_DOCS)
+    OR ENABLE_DOCS
+    OR MPI_BUILD)
 )
   message(FATAL_ERROR "Must select at least one component to build")
 endif()
@@ -130,6 +135,8 @@ if(ENABLE_WORKBENCH OR BUILD_MANTIDQT)
   find_package(PyQt5 REQUIRED)
   find_package(SIP REQUIRED)
   separate_arguments(PYQT5_SIP_FLAGS)
+  # Disable use of C++ API deprecated in Qt 5.15
+  add_compile_definitions(QT_DISABLE_DEPRECATED_UP_TO=0x050F00)
 endif()
 
 # Now add in all the components
@@ -148,6 +155,10 @@ include(TargetFunctions)
 if(MANTID_FRAMEWORK_LIB STREQUAL "SYSTEM")
   if(BUILD_MANTIDQT)
     find_package(MantidFramework REQUIRED)
+  endif()
+  if(MPI_BUILD)
+    find_package(MantidFramework REQUIRED)
+    add_subdirectory(Framework/MPIAlgorithms)
   endif()
 else()
   add_subdirectory(Framework)
@@ -187,16 +198,16 @@ if(ENABLE_DOCS)
   find_package(Sphinx REQUIRED)
   # run python to see if the theme is installed
   execute_process(
-    COMMAND ${Python_EXECUTABLE} -c "import sphinx_bootstrap_theme"
-    OUTPUT_VARIABLE SPHINX_BOOTSTRAP_THEME_OUT
-    ERROR_VARIABLE SPHINX_BOOTSTRAP_THEME_ERR
+    COMMAND ${Python_EXECUTABLE} -c "import mantid_sphinx_theme"
+    OUTPUT_VARIABLE MANTID_SPHINX_THEME_OUT
+    ERROR_VARIABLE MANTID_SPHINX_THEME_ERR
     OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_STRIP_TRAILING_WHITESPACE
   )
-  if(SPHINX_BOOTSTRAP_THEME_ERR)
-    message(ERROR " Did not find sphinx_bootstrap_theme")
-    message(STATUS "${Python_EXECUTABLE} -c \"import sphinx_bootstrap_theme\"")
-    message(STATUS "${SPHINX_BOOTSTRAP_THEME_ERR}")
-    message(FATAL_ERROR " Install instructions at https://pypi.python.org/pypi/sphinx-bootstrap-theme/")
+  if(MANTID_SPHINX_THEME_ERR)
+    message(ERROR " Did not find mantid_sphinx_theme")
+    message(STATUS "${Python_EXECUTABLE} -c \"import mantid_sphinx_theme\"")
+    message(STATUS "${MANTID_SPHINX_THEME_ERR}")
+    message(FATAL_ERROR " Install instructions at https://pypi.python.org/pypi/mantid-sphinx-theme/")
   endif()
 
   add_subdirectory(dev-docs)
@@ -204,7 +215,13 @@ if(ENABLE_DOCS)
 endif()
 
 # System test data target
-add_subdirectory(Testing/SystemTests/scripts)
+if(BUILD_MANTIDFRAMEWORK
+   OR BUILD_MANTIDQT
+   OR ENABLE_WORKBENCH
+)
+  add_subdirectory(Testing/SystemTests/scripts)
+  add_subdirectory(Testing/SystemTests/tests)
+endif()
 
 if(COVERAGE)
   get_property(ALL_SRCS GLOBAL PROPERTY COVERAGE_SRCS)

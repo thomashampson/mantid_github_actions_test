@@ -6,9 +6,9 @@
 // SPDX - License - Identifier: GPL - 3.0 +
 #pragma once
 
-#include "MantidAPI/NexusFileLoader.h"
+#include "MantidAPI/Algorithm.h"
 #include "MantidDataHandling/DllConfig.h"
-#include <nexus/NeXusFile.hpp>
+#include "MantidNexus/NexusFile.h"
 #include <vector>
 
 namespace Mantid {
@@ -34,7 +34,7 @@ data.</LI>
 
 @author Martyn Gigg, Tessella plc
 */
-class MANTID_DATAHANDLING_DLL LoadNexusLogs : public API::NexusFileLoader {
+class MANTID_DATAHANDLING_DLL LoadNexusLogs : public API::Algorithm {
 public:
   /// Default constructor
   LoadNexusLogs();
@@ -52,21 +52,19 @@ public:
   /// Algorithm's category for identification overriding a virtual method
   const std::string category() const override { return "DataHandling\\Logs;DataHandling\\Nexus"; }
 
-  int confidence(Kernel::NexusHDF5Descriptor & /*descriptor*/) const override { return 0; }
-
 private:
   /// Overwrites Algorithm method.
   void init() override;
   /// Overwrites Algorithm method
-  void execLoader() override;
+  void exec() override;
 
   /// Load log data from a group
-  void loadLogs(::NeXus::File &file, const std::string &absolute_entry_name, const std::string &entry_class,
+  void loadLogs(Nexus::File &file, const std::string &absolute_entry_name, const std::string &entry_class,
                 const std::shared_ptr<API::MatrixWorkspace> &workspace, const std::vector<std::string> &allow_list,
                 const std::vector<std::string> &block_list) const;
 
   /// Load an NXlog entry
-  void loadNXLog(::NeXus::File &file, const std::string &absolute_entry_name, const std::string &entry_class,
+  void loadNXLog(Nexus::File &file, const std::string &absolute_entry_name, const std::string &entry_class,
                  const std::shared_ptr<API::MatrixWorkspace> &workspace) const;
 
   /**
@@ -75,11 +73,11 @@ private:
    * @param absolute_entry_name full entry name in Nexus
    * @param workspace input workspace
    */
-  void loadSELog(::NeXus::File &file, const std::string &absolute_entry_name,
+  void loadSELog(Nexus::File &file, const std::string &absolute_entry_name,
                  const std::shared_ptr<API::MatrixWorkspace> &workspace) const;
-  void loadVetoPulses(::NeXus::File &file, const std::shared_ptr<API::MatrixWorkspace> &workspace) const;
+  void loadVetoPulses(Nexus::File &file, const std::shared_ptr<API::MatrixWorkspace> &workspace) const;
   /// For ISIS logs containing periods, retrieve the total proton charge for each period if stored in the logs.
-  void loadNPeriods(::NeXus::File &file, const std::shared_ptr<API::MatrixWorkspace> &workspace) const;
+  void loadNPeriods(Nexus::File &file, const std::shared_ptr<API::MatrixWorkspace> &workspace) const;
 
   /// Progress reporting object
   std::shared_ptr<API::Progress> m_progress;

@@ -7,6 +7,7 @@
 
 #include "ADARA.h"
 #include "ADARAPackets.h"
+#include "MantidLiveData/DllConfig.h"
 
 namespace ADARA {
 
@@ -19,7 +20,7 @@ namespace ADARA {
 
     Copyright &copy; 2012 Oak Ridge National Laboratory
  **/
-class DLLExport Parser {
+class MANTID_LIVEDATA_DLL Parser {
 public:
   /// Constructor
   Parser(uint32_t initial_buffer_size = 1024 * 1024, uint32_t max_pkt_size = 8 * 1024 * 1024);
@@ -27,8 +28,16 @@ public:
   /// Destructor
   virtual ~Parser();
 
+  struct timespec last_start_read_time;
+  struct timespec last_last_start_read_time;
+
+  struct timespec last_end_read_time;
+  struct timespec last_last_end_read_time;
+
   int64_t last_bytes_read;
   int64_t last_last_bytes_read;
+  int64_t last_read_errno;
+  int64_t last_last_read_errno;
   int64_t last_pkts_parsed;
   int64_t last_last_pkts_parsed;
   uint64_t last_total_bytes;
@@ -146,8 +155,10 @@ protected:
   virtual bool rxPacket(const RTDLPkt &pkt);
   virtual bool rxPacket(const SourceListPkt &pkt);
   virtual bool rxPacket(const BankedEventPkt &pkt);
+  virtual bool rxPacket(const BankedEventStatePkt &pkt);
   virtual bool rxPacket(const BeamMonitorPkt &pkt);
   virtual bool rxPacket(const PixelMappingPkt &pkt);
+  virtual bool rxPacket(const PixelMappingAltPkt &pkt);
   virtual bool rxPacket(const RunStatusPkt &pkt);
   virtual bool rxPacket(const RunInfoPkt &pkt);
   virtual bool rxPacket(const TransCompletePkt &pkt);
@@ -164,6 +175,13 @@ protected:
   virtual bool rxPacket(const VariableU32Pkt &pkt);
   virtual bool rxPacket(const VariableDoublePkt &pkt);
   virtual bool rxPacket(const VariableStringPkt &pkt);
+  virtual bool rxPacket(const VariableU32ArrayPkt &pkt);
+  virtual bool rxPacket(const VariableDoubleArrayPkt &pkt);
+  virtual bool rxPacket(const MultVariableU32Pkt &pkt);
+  virtual bool rxPacket(const MultVariableDoublePkt &pkt);
+  virtual bool rxPacket(const MultVariableStringPkt &pkt);
+  virtual bool rxPacket(const MultVariableU32ArrayPkt &pkt);
+  virtual bool rxPacket(const MultVariableDoubleArrayPkt &pkt);
   /**@}*/
 
   /* Collect a log string with statistics on "discarded" packet types,

@@ -10,10 +10,10 @@ function usage() {
   local exitcode=$1
   echo "Usage: $0 [options] package_name"
   echo
-  echo "Create a standalone installable package out of a mantidworkbench Conda package."
+  echo "Create a standalone installable package out of a mantidworkbench conda package."
   echo "Requires mamba to be installed in the running environment, and on the path."
   echo "Options:"
-  echo "  -c Optional Conda channel overriding the default mantid"
+  echo "  -c Optional conda channel overriding the default mantid"
   echo "  -s Optional Add a suffix to the output mantid file, has to be Unstable, or Nightly or not used"
   echo
   echo "Positional Arguments"
@@ -72,10 +72,20 @@ rm -rf $CONDA_ENV_PATH
 
 mkdir $COPY_DIR
 
+# The mantid channel is required as the source for installing mslice
+MANTID_CHANNEL=mantid
+# If it's a Nightly or Unstable package, use the mantid/label/nightly label so it picks up
+# the nightly version of mslice
+if [[ "$SUFFIX" == "Unstable" ]] || [[ "$SUFFIX" == "Nightly" ]]; then
+  MANTID_CHANNEL=mantid/label/nightly
+fi
+
 echo "Creating conda env from mantidworkbench and jq"
 "$CONDA_EXE" create --prefix $CONDA_ENV_PATH \
-  --copy --channel $CONDA_CHANNEL --channel conda-forge --channel mantid -y \
+  --copy --channel $CONDA_CHANNEL --channel conda-forge --channel $MANTID_CHANNEL -y \
   mantidworkbench \
+  mantiddocs \
+  mslice \
   m2w64-jq
 echo "Conda env created"
 
@@ -85,10 +95,6 @@ echo "Version number: $VERSION"
 echo "Removing jq from conda env"
 "$CONDA_EXE" remove --prefix $CONDA_ENV_PATH --yes m2w64-jq
 echo "jq removed from conda env"
-
-# Pip install quickBayes until there's a conda package
-$CONDA_ENV_PATH/python.exe -m pip install quickBayes==1.0.0b15
-
 
 echo "Copying root packages of env files (Python, DLLs, Lib, Scripts, ucrt, and msvc files) to package/bin"
 mkdir $COPY_DIR/bin
@@ -101,10 +107,15 @@ mv $CONDA_ENV_PATH/ucrt*.* $COPY_DIR/bin/
 
 echo "Copy all DLLs from env/Library/bin to package/bin"
 mv $CONDA_ENV_PATH/Library/bin/*.dll $COPY_DIR/bin/
+# DLLs required for quasielasticbayes
+mv $CONDA_ENV_PATH/Library/mingw-w64/bin/libgfortran*.dll $COPY_DIR/bin/
+mv $CONDA_ENV_PATH/Library/mingw-w64/bin/libquadmath*.dll $COPY_DIR/bin/
+mv $CONDA_ENV_PATH/Library/mingw-w64/bin/libwinpthread*.dll $COPY_DIR/bin/
+mv $CONDA_ENV_PATH/Library/mingw-w64/bin/libgcc_s_seh*.dll $COPY_DIR/bin/
+
 
 echo "Copy Mantid specific files from env/Library/bin to package/bin"
 mv $CONDA_ENV_PATH/Library/bin/Mantid.properties $COPY_DIR/bin/
-mv $CONDA_ENV_PATH/Library/bin/MantidNexusParallelLoader.exe $COPY_DIR/bin/
 mv $CONDA_ENV_PATH/Library/bin/mantid-scripts.pth $COPY_DIR/bin/
 
 echo "Copy Mantid icon files from source to package/bin"
@@ -138,7 +149,7 @@ mv $CONDA_ENV_PATH/Library/scripts $COPY_DIR/
 
 echo "Copy share files (includes mantid docs) to the package"
 mkdir $COPY_DIR/share
-mv $CONDA_ENV_PATH/share/doc/* $COPY_DIR/share/
+mv $CONDA_ENV_PATH/share/* $COPY_DIR/share/
 
 echo "Copy executable launcher"
 # MantidWorkbench-script.pyw is created by project.nsi on creation of the package
@@ -211,7 +222,7 @@ OUTFILE_NAME=$PWD/$VERSION_NAME
 OUTFILE_NAME=${OUTFILE_NAME////\\}
 OUTFILE_NAME="$SCRIPT_DRIVE_LETTER:${OUTFILE_NAME:2}"
 
-# Run the makensis command from our nsis Conda environment
+# Run the makensis command from our nsis conda environment
 echo makensis /V4 /O\"$NSIS_OUTPUT_LOG\" /DVERSION=$VERSION /DPACKAGE_DIR=\"$COPY_DIR\" /DPACKAGE_SUFFIX=$SUFFIX /DOUTFILE_NAME=$OUTFILE_NAME /DMANTID_ICON=$MANTID_ICON /DMUI_PAGE_LICENSE_PATH=$LICENSE_PATH \"$NSIS_SCRIPT\"
 cmd.exe //C "START /wait "" $MAKENSIS_COMMAND /V4 /DVERSION=$VERSION /O"$NSIS_OUTPUT_LOG" /DPACKAGE_DIR="$COPY_DIR" /DPACKAGE_SUFFIX=$SUFFIX /DOUTFILE_NAME=$OUTFILE_NAME /DMANTID_ICON=$MANTID_ICON /DMUI_PAGE_LICENSE_PATH=$LICENSE_PATH "$NSIS_SCRIPT""
 

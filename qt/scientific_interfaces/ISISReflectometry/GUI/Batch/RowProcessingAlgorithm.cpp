@@ -109,6 +109,8 @@ void updatePolarizationCorrectionProperties(AlgorithmRuntimeProps &properties,
   // Use the supplied workspace.
   if (corrections.correctionType() == PolarizationCorrectionType::Workspace) {
     AlgorithmProperties::update("PolarizationEfficiencies", corrections.workspace(), properties);
+    AlgorithmProperties::update("FredrikzePolarizationSpinStateOrder", corrections.fredrikzeSpinStateOrder(),
+                                properties);
   }
 }
 
@@ -122,6 +124,7 @@ void updateFloodCorrectionProperties(AlgorithmRuntimeProps &properties, FloodCor
 void updateExperimentProperties(AlgorithmRuntimeProps &properties, Experiment const &experiment) {
   AlgorithmProperties::update("AnalysisMode", analysisModeToString(experiment.analysisMode()), properties);
   AlgorithmProperties::update("Debug", experiment.debug(), properties);
+  AlgorithmProperties::update("Diagnostics", experiment.diagnostics(), properties);
   SummationType summationType = experiment.summationType();
   AlgorithmProperties::update("SummationType", summationTypeToString(summationType), properties);
   // The ReductionType value is only relevant when the SummationType is SumInQ
@@ -148,7 +151,7 @@ void updateLookupRowProperties(AlgorithmRuntimeProps &properties, LookupRow cons
 }
 
 void updateWavelengthRangeProperties(AlgorithmRuntimeProps &properties,
-                                     boost::optional<RangeInLambda> const &rangeInLambda) {
+                                     std::optional<RangeInLambda> const &rangeInLambda) {
   if (!rangeInLambda)
     return;
 
@@ -229,7 +232,7 @@ void updateEventProperties(AlgorithmRuntimeProps &properties, Slicing const &sli
   boost::apply_visitor(UpdateEventPropertiesVisitor(properties), slicing);
 }
 
-boost::optional<double> getDouble(const IAlgorithm_sptr &algorithm, std::string const &property) {
+std::optional<double> getDouble(const IAlgorithm_sptr &algorithm, std::string const &property) {
   double result = algorithm->getProperty(property);
   return result;
 }
@@ -249,7 +252,7 @@ void updateRowFromOutputProperties(const IAlgorithm_sptr &algorithm, Item &item)
 
 // Get the lookup row from the model. Because using a wildcard row or algorithm defaults
 // can be confusing this function also logs warnings about what is happening.
-boost::optional<LookupRow> findLookupRow(Row const &row, IBatch const &model) {
+std::optional<LookupRow> findLookupRow(Row const &row, IBatch const &model) {
   auto lookupRow = model.findLookupRow(row);
   if (!lookupRow) {
     g_log.warning(
@@ -267,7 +270,7 @@ boost::optional<LookupRow> findLookupRow(Row const &row, IBatch const &model) {
 
 // Get the wildcard lookup row from the model. Because using a wildcard row or algorithm defaults
 // can be confusing this function also logs warnings about what is happening.
-boost::optional<LookupRow> findWildcardLookupRow(IBatch const &model) {
+std::optional<LookupRow> findWildcardLookupRow(IBatch const &model) {
   auto lookupRow = model.findWildcardLookupRow();
   if (lookupRow) {
     g_log.warning("Using experiment settings from the wildcard row.");
@@ -342,7 +345,7 @@ std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps> createAlgorithmRuntimeProps
   properties->setProperty("InputRunList", previewRow.runNumbers());
   properties->setProperty("ThetaIn", previewRow.theta());
   if (previewRow.getSelectedBanks().has_value()) {
-    properties->setProperty("ROIDetectorIDs", previewRow.getSelectedBanks().get());
+    properties->setProperty("ROIDetectorIDs", previewRow.getSelectedBanks().value());
   }
   updateProcessingInstructionsProperties(*properties, previewRow);
 
@@ -387,8 +390,8 @@ IConfiguredAlgorithm_sptr createConfiguredAlgorithm(IBatch const &model, Row &ro
  * @param row : optional run details from the Runs table
  * @returns : a custom PropertyManager class with all of the algorithm properties set
  */
-std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps> createAlgorithmRuntimeProps(IBatch const &model,
-                                                                                 boost::optional<Row const &> row) {
+std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps>
+createAlgorithmRuntimeProps(IBatch const &model, std::optional<std::reference_wrapper<Row const>> row) {
   auto properties = std::make_unique<Mantid::API::AlgorithmRuntimeProps>();
   // Update properties from settings in the event, experiment and instrument tabs
   updatePropertiesFromBatchModel(*properties, model);
@@ -403,4 +406,17 @@ std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps> createAlgorithmRuntimeProps
   }
   return properties;
 }
+
+/** This function gets the canonical set of properties for performing the reduction, using defaults
+ *
+ * @param model : the Batch model containing all of the default settings and the lookup table
+ * @returns : a custom PropertyManager class with all of the algorithm properties set
+ */
+std::unique_ptr<Mantid::API::IAlgorithmRuntimeProps> createAlgorithmRuntimePropsDefault(IBatch const &model) {
+  auto properties = std::make_unique<Mantid::API::AlgorithmRuntimeProps>();
+  // Update properties from settings in the event, experiment and instrument tabs
+  updatePropertiesFromBatchModel(*properties, model);
+  return properties;
+}
+
 } // namespace MantidQt::CustomInterfaces::ISISReflectometry::RowProcessing

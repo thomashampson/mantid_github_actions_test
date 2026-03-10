@@ -21,6 +21,9 @@ void Divide::init() {
                   "division by 0 occurs. Set this "
                   "value to false if one does not "
                   "want this message appearing ");
+  declareProperty(std::make_unique<PropertyWithValue<OptionalBool>>("IsDistribution", OptionalBool::Unset),
+                  "Set the IsDistribution property of the output workspace,"
+                  "or leave empty for the default algorithm behavior.");
 }
 
 void Divide::exec() {
@@ -76,12 +79,18 @@ void Divide::performBinaryOperation(const HistogramData::Histogram &lhs, const d
 
 void Divide::setOutputUnits(const API::MatrixWorkspace_const_sptr lhs, const API::MatrixWorkspace_const_sptr rhs,
                             API::MatrixWorkspace_sptr out) {
-  if (rhs->YUnit().empty() || !WorkspaceHelpers::matchingBins(*lhs, *rhs, true)) {
+
+  if (lhs->isRaggedWorkspace() && rhs->isRaggedWorkspace()) {
+    // if both workspaces are ragged, output workspace `isDistribution` flag will be true
+    out->setDistribution(true);
+  }
+  if (rhs->YUnit().empty() || !WorkspaceHelpers::matchingBins(lhs, rhs, true)) {
     // Do nothing
   }
+
   // If the Y units match, then the output will be a distribution and will be
   // dimensionless
-  else if (lhs->YUnit() == rhs->YUnit() && m_rhsBlocksize > 1) {
+  else if (lhs->YUnit() == rhs->YUnit() && m_rhsBlocksize != 1) {
     out->setYUnit("");
     out->setDistribution(true);
   }
@@ -92,6 +101,13 @@ void Divide::setOutputUnits(const API::MatrixWorkspace_const_sptr lhs, const API
     else
       out->setYUnit("1/" + rhs->YUnit());
   }
+
+  // override `isDistribution` if user provided
+  OptionalBool isDistribution = this->getProperty("IsDistribution");
+  if (isDistribution == OptionalBool::Value::True)
+    out->setDistribution(true);
+  else if (isDistribution == OptionalBool::Value::False)
+    out->setDistribution(false);
 }
 
 // ===================================== EVENT LIST BINARY OPERATIONS
@@ -201,7 +217,7 @@ std::string Divide::checkSizeCompatibility(const API::MatrixWorkspace_const_sptr
   if (m_matchXSize) {
     // Past this point, for a 2D WS operation, we require the X arrays to match.
     // Note this only checks the first spectrum except for ragged workspaces
-    if (!WorkspaceHelpers::matchingBins(*lhs, *rhs, !m_lhsRagged && !m_rhsRagged)) {
+    if (!WorkspaceHelpers::matchingBins(lhs, rhs, !m_lhsRagged && !m_rhsRagged)) {
       return "X arrays must match when dividing 2D workspaces.";
     }
   }

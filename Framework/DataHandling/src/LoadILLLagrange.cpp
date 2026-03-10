@@ -15,25 +15,27 @@
 #include "MantidKernel/Unit.h"
 #include "MantidKernel/UnitFactory.h"
 #include "MantidKernel/UnitLabelTypes.h"
-
-#include <Poco/Path.h>
+#include "MantidNexus/H5Util.h"
+#include "MantidNexus/NexusClasses.h"
+#include "MantidNexus/NexusException.h"
+#include "MantidNexus/NexusFile.h"
 
 namespace Mantid::DataHandling {
 
 using namespace API;
 using namespace Geometry;
 using namespace Kernel;
-using namespace NeXus;
+using namespace Nexus;
 using Types::Core::DateAndTime;
 
 // Register the algorithm into the AlgorithmFactory
 DECLARE_NEXUS_FILELOADER_ALGORITHM(LoadILLLagrange)
 
 /// Returns confidence. @see IFileLoader::confidence
-int LoadILLLagrange::confidence(NexusDescriptor &descriptor) const {
+int LoadILLLagrange::confidence(Nexus::NexusDescriptorLazy &descriptor) const {
 
   // fields existent only at the ILL Diffraction
-  if (descriptor.pathExists("/entry0/IN1")) {
+  if (descriptor.isEntry("/entry0/IN1")) {
     return 80;
   } else {
     return 0;
@@ -55,7 +57,7 @@ const std::string LoadILLLagrange::summary() const { return "Loads ILL Lagrange 
 /**
  * Constructor
  */
-LoadILLLagrange::LoadILLLagrange() : IFileLoader<NexusDescriptor>() {}
+LoadILLLagrange::LoadILLLagrange() : IFileLoader<Nexus::NexusDescriptorLazy>() {}
 
 /**
  * Initialize the algorithm's properties.
@@ -91,7 +93,7 @@ void LoadILLLagrange::exec() {
 void LoadILLLagrange::loadData() {
 
   // open the H5 file
-  H5::H5File h5file(getPropertyValue("Filename"), H5F_ACC_RDONLY);
+  H5::H5File h5file(getPropertyValue("Filename"), H5F_ACC_RDONLY, Nexus::H5Util::defaultFileAcc());
 
   H5::DataSet dataset = h5file.openDataSet("entry0/data_scan/detector_data/data");
 
@@ -132,18 +134,25 @@ void LoadILLLagrange::loadData() {
   H5::DataSpace scanVarSpace = scanVar.getSpace();
 
   nDims = scanVarSpace.getSimpleExtentNdims();
-  dimsSize = std::vector<hsize_t>(nDims);
-  scanVarSpace.getSimpleExtentDims(dimsSize.data(), nullptr);
-  if ((nDims != 2) || (dimsSize[1] != m_nScans))
+  std::vector<double> monitorData;
+  std::vector<double> scanVariableData;
+  dimsSize.resize(nDims);
+  if (dimsSize.size() != 2) {
     throw std::runtime_error("Scanned variables are not formatted properly. Check you nexus file.");
+  } else {
+    scanVarSpace.getSimpleExtentDims(dimsSize.data(), nullptr);
 
-  std::vector<double> scanVarData(dimsSize[0] * dimsSize[1]);
-  scanVar.read(scanVarData.data(), scanVar.getDataType());
-  std::vector<double> monitorData(dimsSize[1]);
-  std::vector<double> scanVariableData(dimsSize[1]);
-  for (size_t i = 0; i < monitorData.size(); i++) {
-    monitorData[i] = scanVarData[monitorIndex * dimsSize[1] + i];
-    scanVariableData[i] = scanVarData[i];
+    if (dimsSize[1] != m_nScans)
+      throw std::runtime_error("Scanned variables are not formatted properly. Check you nexus file.");
+
+    std::vector<double> scanVarData(dimsSize[0] * dimsSize[1]);
+    scanVar.read(scanVarData.data(), scanVar.getDataType());
+    monitorData.resize(dimsSize[1]);
+    scanVariableData.resize(dimsSize[1]);
+    for (size_t i = 0; i < monitorData.size(); i++) {
+      monitorData[i] = scanVarData[monitorIndex * dimsSize[1] + i];
+      scanVariableData[i] = scanVarData[i];
+    }
   }
   scanVar.close();
 
@@ -168,13 +177,14 @@ void LoadILLLagrange::loadData() {
 void LoadILLLagrange::loadMetaData() {
 
   // Open NeXus file
-  NXhandle nxHandle;
-  NXstatus nxStat = NXopen((getPropertyValue("Filename")).c_str(), NXACC_READ, &nxHandle);
-
-  if (nxStat != NX_ERROR) {
+  try {
+    Nexus::File nxHandle(getPropertyValue("Filename"), NXaccess::READ);
     LoadHelper::addNexusFieldsToWsRun(nxHandle, m_outputWorkspace->mutableRun(), "entry0");
-    NXclose(&nxHandle);
+  } catch (Nexus::Exception const &e) {
+    g_log.debug() << "Failed to open nexus file \"" << getPropertyValue("Filename") << "\" in read mode: " << e.what()
+                  << "\n";
   }
+
   // Add scanned variable: energy to the sample logs so it can be used for merging workspaces as X axis
   TimeSeriesProperty<double> *prop = new TimeSeriesProperty<double>("Ei");
   int index = 0;

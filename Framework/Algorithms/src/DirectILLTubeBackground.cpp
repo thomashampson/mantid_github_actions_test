@@ -27,6 +27,8 @@ const std::string INPUT_WS{"InputWorkspace"};
 const std::string OUTPUT_WS{"OutputWorkspace"};
 const std::string POLYNOMIAL_DEGREE{"Degree"};
 const std::string SIGMA_MULTIPLIER{"NonBkgRegionInSigmas"};
+const std::string IGNORE_INVALID_DATA{"IgnoreInvalidData"};
+
 } // namespace Prop
 
 /**
@@ -234,6 +236,7 @@ void DirectILLTubeBackground::init() {
   declareProperty(std::make_unique<API::WorkspaceProperty<API::MatrixWorkspace>>(
                       Prop::DIAGNOSTICS_WS, "", Kernel::Direction::Input, API::PropertyMode::Optional),
                   "Detector diagnostics workspace for masking.");
+  declareProperty(Prop::IGNORE_INVALID_DATA, false, "Flag to ignore infinities, NaNs and data with zero errors.");
 }
 
 /// Validate input properties.
@@ -345,7 +348,7 @@ std::vector<std::string> DirectILLTubeBackground::components(Geometry::Instrumen
  * @param componentName name of the component to crop
  * @return a component workspace
  */
-API::MatrixWorkspace_sptr DirectILLTubeBackground::cropToComponent(API::MatrixWorkspace_sptr &ws,
+API::MatrixWorkspace_sptr DirectILLTubeBackground::cropToComponent(API::MatrixWorkspace_sptr const &ws,
                                                                    std::string const &componentName) {
   auto crop = createChildAlgorithm("CropToComponent");
   crop->setProperty("InputWorkspace", ws);
@@ -361,7 +364,7 @@ API::MatrixWorkspace_sptr DirectILLTubeBackground::cropToComponent(API::MatrixWo
  * @param xRanges fitting ranges
  * @return the fitted backgrounds
  */
-API::MatrixWorkspace_sptr DirectILLTubeBackground::fitComponentBackground(API::MatrixWorkspace_sptr &ws,
+API::MatrixWorkspace_sptr DirectILLTubeBackground::fitComponentBackground(API::MatrixWorkspace_sptr const &ws,
                                                                           std::vector<double> const &xRanges) {
   int const degree = getProperty(Prop::POLYNOMIAL_DEGREE);
   auto calculateBkg = createChildAlgorithm("CalculatePolynomialBackground");
@@ -370,6 +373,8 @@ API::MatrixWorkspace_sptr DirectILLTubeBackground::fitComponentBackground(API::M
   calculateBkg->setProperty("Degree", degree);
   calculateBkg->setProperty("XRanges", xRanges);
   calculateBkg->setProperty("CostFunction", "Unweighted least squares");
+  calculateBkg->setProperty("IgnoreInvalidData", getPropertyValue(Prop::IGNORE_INVALID_DATA));
+
   calculateBkg->execute();
   return calculateBkg->getProperty("OutputWorkspace");
 }

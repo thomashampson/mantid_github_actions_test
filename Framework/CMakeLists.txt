@@ -12,8 +12,8 @@ add_dependencies(FrameworkTests Framework)
 
 add_subdirectory(Types)
 add_subdirectory(Json)
+add_subdirectory(LegacyNexus)
 add_subdirectory(Kernel)
-add_subdirectory(Parallel)
 # HistogramData has header-only dependency on Kernel, so Kernel comes after.
 add_subdirectory(Algorithms)
 add_subdirectory(API)
@@ -39,6 +39,12 @@ add_subdirectory(WorkflowAlgorithms)
 add_subdirectory(MDAlgorithms)
 add_subdirectory(Doxygen)
 add_subdirectory(ScriptRepository)
+
+# Build with MPI (Linux only)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  message(STATUS "CMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}; MPI_BUILD=${MPI_BUILD}")
+  add_subdirectory(MPIAlgorithms)
+endif()
 
 # Add a custom target to build all of the Framework
 
@@ -140,6 +146,7 @@ if(NOT FULL_PACKAGE_BUILD)
   add_subdirectory(PostInstall)
 endif()
 
+include(CMakePackageConfigHelpers)
 configure_package_config_file(
   ${CMAKE_SOURCE_DIR}/buildconfig/CMake/MantidFrameworkConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/MantidFrameworkConfig.cmake
@@ -160,8 +167,7 @@ install(
 )
 
 install(
-  FILES ${CMAKE_SOURCE_DIR}/buildconfig/CMake/FindNexus.cmake ${CMAKE_SOURCE_DIR}/buildconfig/CMake/FindJsonCPP.cmake
-        ${CMAKE_SOURCE_DIR}/buildconfig/CMake/FindMuParser.cmake
+  FILES ${CMAKE_SOURCE_DIR}/buildconfig/CMake/FindJsonCPP.cmake ${CMAKE_SOURCE_DIR}/buildconfig/CMake/FindMuParser.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MantidFramework/find_modules
   COMPONENT Devel
 )

@@ -12,6 +12,7 @@
 #include "MantidAPI/MatrixWorkspace_fwd.h"
 #include "MantidAlgorithms/DllConfig.h"
 #include "MantidKernel/IndexSet.h"
+#include "MantidKernel/MultiThreaded.h"
 
 namespace Mantid {
 
@@ -94,7 +95,7 @@ private:
   std::string m_indexRangePropertyName;
 
 protected:
-  ~SpectrumAlgorithm() = default;
+  ~SpectrumAlgorithm() override = default;
 
   /// Dummy struct holding compile-time flags to for_each().
   // A strongly typed enum used in non-type variadic template arguments would

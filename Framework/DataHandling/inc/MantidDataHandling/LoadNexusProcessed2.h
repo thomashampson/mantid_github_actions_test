@@ -11,7 +11,7 @@
 #include "MantidDataHandling/LoadNexusProcessed.h"
 #include "MantidGeometry/IDTypes.h"
 #include "MantidIndexing/SpectrumNumber.h"
-#include "MantidKernel/NexusDescriptor.h"
+#include "MantidNexus/NexusDescriptorLazy.h"
 #include <string>
 #include <unordered_map>
 
@@ -20,7 +20,7 @@ namespace API {
 class Workspace;
 class MatrixWorkspace;
 } // namespace API
-namespace NeXus {
+namespace Nexus {
 class NXEntry;
 }
 namespace DataHandling {
@@ -41,17 +41,17 @@ public:
   // const std::string name() const override;
 
   int version() const override;
-  int confidence(Kernel::NexusHDF5Descriptor &descriptor) const override;
+  int confidence(Nexus::NexusDescriptorLazy &descriptor) const override;
 
 private:
-  void readSpectraToDetectorMapping(Mantid::NeXus::NXEntry &mtd_entry, Mantid::API::MatrixWorkspace &ws) override;
+  void readSpectraToDetectorMapping(Mantid::Nexus::NXEntry &mtd_entry, Mantid::API::MatrixWorkspace &ws) override;
 
   /// Load nexus geometry and apply to workspace
   bool loadNexusGeometry(Mantid::API::Workspace &ws, size_t entryNumber, Kernel::Logger &logger,
                          const std::string &filePath) override;
 
   /// Extract mapping information where it is build across NXDetectors
-  void extractMappingInfoNew(const Mantid::NeXus::NXEntry &mtd_entry);
+  void extractMappingInfoNew(const Mantid::Nexus::NXEntry &mtd_entry);
 
   InstrumentLayout m_instrumentLayout = InstrumentLayout::Mantid;
 

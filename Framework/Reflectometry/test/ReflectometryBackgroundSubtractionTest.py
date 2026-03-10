@@ -69,15 +69,16 @@ class ReflectometryBackgroundSubtractionTest(unittest.TestCase):
             "BackgroundCalculationMethod": "Polynomial",
             "DegreeOfPolynomial": "0",
             "OutputWorkspace": "output",
+            "IgnoreInvalidData": True,
         }
         output = self._assert_run_algorithm_succeeds(args)
         for i in range(0, output.getNumberHistograms()):
             if i == 3 or i == 4:
                 for itr in range(0, output.blocksize()):
-                    self.assertEqual(3.0, output.dataY(i)[itr])
+                    self.assertEqual(4.9, output.dataY(i)[itr])
             else:
                 for itr in range(0, output.blocksize()):
-                    self.assertEqual(0.0, output.dataY(i)[itr])
+                    self.assertEqual(1.9, output.dataY(i)[itr])
 
     def test_output_AveragePixelFit(self):
         """
@@ -166,7 +167,7 @@ class ReflectometryBackgroundSubtractionTest(unittest.TestCase):
         error_map = alg.validateInputs()
         self.assertEqual(len(error_map), 1)
         self.assertEqual(
-            error_map["InputWorkspace"], "Invalid workspace type provided to IndexProperty. " "Must be convertible to MatrixWorkspace."
+            error_map["InputWorkspace"], "Invalid workspace type provided to IndexProperty. Must be convertible to MatrixWorkspace."
         )
 
     def _assert_run_algorithm_succeeds(self, args):
