@@ -35,7 +35,7 @@ if [[ -z "$BUILD_THREADS_SYSTEM_TESTS" ]]; then
   fi
 fi
 
-UNIT_TEST_THREADS=16
+UNIT_TEST_THREADS=1
 # Jenkins nodes may specify the maximum number of unit tests to run in parallel.
 # This is useful to prevent test timeouts for machines with limited RAM.
 if [[ -z "$UNIT_TEST_THREADS" ]]; then
