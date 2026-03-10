@@ -16,7 +16,7 @@ ENABLE_SYSTEM_TESTS=$2
 ENABLE_UNIT_TESTS=$3
 ENABLE_DOCS=$4
 ENABLE_DOC_TESTS=$5
-BUILD_THREADS=10
+BUILD_THREADS=$6
 
 XVFB_SERVER_NUM=101
 
@@ -108,7 +108,7 @@ cd $WORKSPACE/build
 # mkdir for test logs
 mkdir -p test_logs
 if [[ $ENABLE_UNIT_TESTS == true ]]; then
-    run_with_xvfb ctest -L UnitTest -j$UNIT_TEST_THREADS --no-compress-output -T Test -O test_logs/ctest_$OSTYPE.log --schedule-random --output-on-failure --repeat until-pass:3 $WINDOWS_TEST_OPTIONS $WINDOWS_UNITTEST_TIMEOUT_OPTIONS --output-junit Testing/junit-unittest.xml -R MPIAlgorithmsTest
+    run_with_xvfb ctest -L UnitTest -j$UNIT_TEST_THREADS --no-compress-output -T Test -O test_logs/ctest_$OSTYPE.log --schedule-random --output-on-failure --repeat until-pass:3 $WINDOWS_TEST_OPTIONS $WINDOWS_UNITTEST_TIMEOUT_OPTIONS --output-junit Testing/junit-unittest.xml -E MPIAlgorithmsTest
 fi
 
 if [[ $ENABLE_DOCS == true && $ENABLE_DOC_TESTS == true ]]; then
