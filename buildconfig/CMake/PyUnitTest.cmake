@@ -25,9 +25,9 @@ function(PYSYSTEMTEST_ADD_TEST _test_src_dir _testname_prefix)
   endif()
   # Check if this is a PR build.
   if(PR_JOB)
-    set(_pr_flag "True")
+    set(_pr_flag "--pr")
   else()
-    set(_pr_flag "False")
+    set(_pr_flag "")
   endif()
   py_add_test("SystemTest" ${_systest_runner} ${_pr_flag} ${ARGV})
 
