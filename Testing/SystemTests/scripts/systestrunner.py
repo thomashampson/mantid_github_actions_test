@@ -36,7 +36,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("test_path", type=str, help="path to the test file that should be run")
-    parser.add_argument("--pr", action="store_true", help="is this being run as a pr job?")
+    parser.add_argument("pr", type=bool, help="is this being run as a pr job?")
     args = parser.parse_args()
 
 
