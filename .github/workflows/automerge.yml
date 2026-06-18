@@ -1,5 +1,3 @@
-# this uses the action to merge special branches on push
-# https://github.com/marketplace/actions/merge-branch
 name: Merge protected branches
 
 on:
