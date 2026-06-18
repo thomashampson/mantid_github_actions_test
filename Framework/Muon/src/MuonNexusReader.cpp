@@ -157,7 +157,7 @@ void MuonNexusReader::readFromFile(const string &filename) {
 }
 
 /**
- * Try to read in vairous peices of period information.
+ * Try to read in various pieces of period information.
  * Period info includes:
  * - Period sequences
  * - Period Names
