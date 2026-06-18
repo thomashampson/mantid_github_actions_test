@@ -23,7 +23,7 @@ jobs:
           git fetch origin main "${{ github.ref_name }}"
 
           git checkout main
-          git merge --no-ff "origin/${{ github.ref_name }}"
+          git merge --no-ff "origin/${{ github.ref_name }}" \
             -m "Merge ${{ github.ref_name }} into main"
 
           git push origin main
