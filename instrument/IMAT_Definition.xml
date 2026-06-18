@@ -132,9 +132,9 @@ see http://www.mantidproject.org/IDF -->
       <location z="0.0" name="CalMon"/> <!-- 56 - 56 -->
       <location z="4.0" name="He_in"/>  <!-- 60 - 56-->
       <location z="4.0" name="He_out"/>
-      <location z="0"/> <!-- dummy monitor (off) -->
-      <location z="0"/> <!-- dummy monitor (off) -->
-      <location z="0"/> <!-- dummy monitor (off) -->
+      <location z="0" name="dummy_monitor1"/> <!-- dummy monitor (off) -->
+      <location z="0" name="dummy_monitor2"/> <!-- dummy monitor (off) -->
+      <location z="0" name="dummy_monitor3"/> <!-- dummy monitor (off) -->
     </component>
   </type>
 
