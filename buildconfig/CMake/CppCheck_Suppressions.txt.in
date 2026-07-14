@@ -109,5 +109,4 @@ operatorEqVarError:${CMAKE_SOURCE_DIR}/Framework/API/inc/MantidAPI/WorkspaceProp
 
 // constVariablePointer / constParameterPointer: these pointers are passed to QList/QMap methods that require
 // non-const pointer arguments (indexOf, find); making them pointer-to-const would not compile
-constVariablePointer:${CMAKE_SOURCE_DIR}/qt/widgets/common/src/QtPropertyBrowser/qtgroupboxpropertybrowser.cpp
 constParameterPointer:${CMAKE_SOURCE_DIR}/qt/widgets/common/src/QtPropertyBrowser/qtpropertybrowser.cpp
