@@ -171,11 +171,17 @@ if(MANTID_FRAMEWORK_LIB STREQUAL "BUILD")
   add_executable(SystemTestsDebug EXCLUDE_FROM_ALL "${_stub}")
   add_dependencies(SystemTestsDebug SystemTests)
 
+  if(_is_multi_config)
+    set(_system_test_args "-C $(Configuration) -L SystemTest")
+  else()
+    set(_system_test_args "-L SystemTest")
+  endif()
+
   set_target_properties(
     SystemTestsDebug
-    PROPERTIES VS_DEBUGGER_COMMAND "${Python_EXECUTABLE}"
-               VS_DEBUGGER_COMMAND_ARGUMENTS
-               "${CMAKE_SOURCE_DIR}/Testing/SystemTests/scripts/runSystemTests.py --executable python3"
+    PROPERTIES VS_DEBUGGER_COMMAND "${CMAKE_CTEST_COMMAND}"
+               VS_DEBUGGER_COMMAND_ARGUMENTS "${_system_test_args}"
+               VS_DEBUGGER_WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
                VS_DEBUGGER_ENVIRONMENT "${MSVC_IDE_ENV}"
   )
 endif()

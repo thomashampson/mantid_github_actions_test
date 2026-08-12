@@ -36,7 +36,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("test_path", type=str, help="path to the test file that should be run")
-    parser.add_argument("pr", type=bool, help="is this being run as a pr job?")
+    parser.add_argument("pr", type=lambda x: x.lower() == "true", help="is this being run as a pr job?")
     args = parser.parse_args()
 
 
@@ -97,7 +97,10 @@ def main():
     results = OrderedDict()
     for test_class_name in test_class_names:
         script_obj = systemtesting.TestScript(test_dir_name, test_module_name, test_class_name, bool(args.pr))
+
+        print(f"Running test: {test_class_name}")
         results[test_class_name] = runner.start_in_current_process(script_obj)
+        print("-----------\n")
 
     #########################################################################
     # Process Results
@@ -114,7 +117,7 @@ def main():
     #########################################################################
 
     # Put the configuration back to its original state
-    mtdconf.restoreconfig()
+    # mtdconf.restoreconfig()
 
     if failure:
         results_string = f"FAILURE REPORT FOR TESTS IN {test_file_name}:\n"

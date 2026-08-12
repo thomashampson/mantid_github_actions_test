@@ -775,8 +775,6 @@ import sys
 for p in ('{TESTING_FRAMEWORK_DIR}', '{FRAMEWORK_PYTHONINTERFACE_TEST_DIR}', '{self._test_dir}'):
     sys.path.append(p)
 
-# Ensure sys path matches current to avoid weird import errors
-sys.path.extend({sys.path})
 from {self._modname} import {self._test_cls_name}
 systest = {self._test_cls_name}()
 if {self._exclude_in_pr_builds}:
@@ -1276,10 +1274,10 @@ class MantidFrameworkConfig:
 
     def config(self):
         # backup the existing user properties so we can step all over it
-        self.__userPropsFile = config.getUserFilename()
-        self.__userPropsFileBackup = self.__userPropsFile + ".bak"
-        self.__userPropsFileSystest = self.__userPropsFile + ".systest"
-        self.__moveFile(self.__userPropsFile, self.__userPropsFileBackup)
+        # self.__userPropsFile = config.getUserFilename()
+        # self.__userPropsFileBackup = self.__userPropsFile + ".bak"
+        # self.__userPropsFileSystest = self.__userPropsFile + ".systest"
+        # self.__moveFile(self.__userPropsFile, self.__userPropsFileBackup)
 
         # Make sure we only save these keys here
         config.reset()
@@ -1318,7 +1316,7 @@ class MantidFrameworkConfig:
             config["network.default.timeout"] = "5"
 
         # Save this configuration
-        config.saveConfig(self.__userPropsFile)
+        # config.saveConfig(self.__userPropsFile)
 
     def restoreconfig(self):
         self.__moveFile(self.__userPropsFile, self.__userPropsFileSystest)
