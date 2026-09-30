@@ -99,7 +99,7 @@ void BaseConvertToDiffractionMDWorkspace::init() {
  * @param  TargFrame -- the string, describing target transformation frame in
  *the form accepted by convertToDiffractionWorksapce
  * @param  TargFrameName -- the string describing target transformation frame
- *in the form acepted by convertToMD
+ *in the form accepted by convertToMD
  * @param  ScalingName    -- default coordinate scaling name accepted by
  *convertToMD;
  */
